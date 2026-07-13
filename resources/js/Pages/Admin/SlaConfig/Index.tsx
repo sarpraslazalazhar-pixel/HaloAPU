@@ -29,7 +29,7 @@ interface SlaConfigItem {
 }
 
 export default function SlaConfigIndex({ globalConfigs, subUnits }: any) {
-    const { data, setData, put, processing, errors } = useForm({
+    const { data, setData, put, processing, errors, transform } = useForm({
         configs: buildInitialConfigs(globalConfigs || [], subUnits || []),
     });
 
@@ -75,6 +75,13 @@ export default function SlaConfigIndex({ globalConfigs, subUnits }: any) {
             ));
         }
     };
+
+    transform((data) => ({
+        ...data,
+        configs: data.configs.filter(c => 
+            c.sub_unit_id === null || overrides[`${c.sub_unit_id}_${c.tier}_${c.jenis}`]
+        )
+    }));
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();

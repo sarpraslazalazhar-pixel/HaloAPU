@@ -1,7 +1,8 @@
-import { Head, Link, useForm } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import React, { FormEventHandler, useState } from 'react';
 
 export default function UserLogin() {
+    const { appConfig } = usePage<any>().props;
     const { data, setData, post, processing, errors } = useForm({
         username: '',
         password: '',
@@ -50,7 +51,11 @@ export default function UserLogin() {
                     <section className="bg-white p-8 md:p-10 rounded-2xl shadow-2xl w-full max-w-md">
                         {/* Logo and Heading */}
                         <div className="flex flex-col items-center mb-8">
-                            <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuABorF6Z-kfxPybny-hrgcEUGX2NFFouw0fb6XNnNaWEfuQ_j6gmBM-c-x0soYLgS4uVHRXJ36GRTVi018M0sAdUUa2HxzK6uWkIutYFaTLmGZgKeg97B59xTodfUcGqFBK1SmjJUOzbEUhu4n3_bVQHjN8_DLeV4xxFP1WkjWxPzfwZ_RoU6lcFJnU2zyiRaf24p94qwTx3cm0Ut1QL9sqx6JSumjmndGHLKl1MLW2FaLUDjeSe1ot3WzpJysK9M2bxEKktm91J333" alt="Halo APU Logo" className="w-full max-w-[240px] object-contain" />
+                            {appConfig?.logo_path ? (
+                                <img src={`/storage/${appConfig.logo_path}`} alt="Halo APU Logo" className="w-full max-w-[240px] h-24 object-contain" />
+                            ) : (
+                                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuABorF6Z-kfxPybny-hrgcEUGX2NFFouw0fb6XNnNaWEfuQ_j6gmBM-c-x0soYLgS4uVHRXJ36GRTVi018M0sAdUUa2HxzK6uWkIutYFaTLmGZgKeg97B59xTodfUcGqFBK1SmjJUOzbEUhu4n3_bVQHjN8_DLeV4xxFP1WkjWxPzfwZ_RoU6lcFJnU2zyiRaf24p94qwTx3cm0Ut1QL9sqx6JSumjmndGHLKl1MLW2FaLUDjeSe1ot3WzpJysK9M2bxEKktm91J333" alt="Halo APU Logo" className="w-full max-w-[240px] object-contain" />
+                            )}
                         </div>
 
                         {/* Login Form */}

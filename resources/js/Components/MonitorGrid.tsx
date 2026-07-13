@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { usePoll } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Badge } from '@/Components/ui/badge';
-import { Car, DoorOpen, User, Clock } from 'lucide-react';
+import { Button } from '@/Components/ui/button';
+import { Car, DoorOpen, User, Clock, Grid3X3, CalendarDays } from 'lucide-react';
+import MonitorCalendar from '@/Components/MonitorCalendar';
 
 interface AssetData {
     nama_aset: string;
@@ -14,8 +16,22 @@ interface AssetData {
     booking_id: number | null;
 }
 
+interface CalendarDay {
+    date: string;
+    tanggal: string;
+    bookings: {
+        nama_aset: string;
+        tipe: string;
+        jam_mulai: string;
+        jam_selesai: string;
+        user: string;
+        status: string;
+    }[];
+}
+
 interface MonitorGridProps {
     assets: AssetData[];
+    calendarData: CalendarDay[];
     lastUpdated: string;
 }
 
@@ -31,11 +47,39 @@ const STATUS_BADGE_COLORS = {
     'Sedang Dipakai': 'bg-red-500 text-white hover:bg-red-600',
 };
 
-export default function MonitorGrid({ assets = [], lastUpdated }: MonitorGridProps) {
-    // Auto-refresh setiap 10 detik
+export default function MonitorGrid({ assets = [], calendarData = [], lastUpdated }: MonitorGridProps) {
+    const [view, setView] = useState<'grid' | 'calendar'>('grid');
+
     usePoll(10000);
 
-    // Kelompokkan aset berdasarkan tipe
+    if (view === 'calendar') {
+        return (
+            <div className="space-y-8">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold">Live Monitor</h1>
+                        <p className="text-sm text-muted-foreground">
+                            Status aset diperbarui otomatis setiap 10 detik
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <Button variant="outline" size="sm" onClick={() => setView('grid')}>
+                            <Grid3X3 className="h-4 w-4 mr-1" /> Grid
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => setView('calendar')}>
+                            <CalendarDays className="h-4 w-4 mr-1" /> Kalender
+                        </Button>
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
+                            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                            Terakhir: {lastUpdated}
+                        </div>
+                    </div>
+                </div>
+                <MonitorCalendar calendarData={calendarData} />
+            </div>
+        );
+    }
+
     const groupedAssets = assets.reduce((groups, asset) => {
         const type = asset.tipe || 'Lainnya';
         if (!groups[type]) {
@@ -53,6 +97,10 @@ export default function MonitorGrid({ assets = [], lastUpdated }: MonitorGridPro
             <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
+                        {asset.tipe === 'kendaraan'
+                            ? <Car className="h-5 w-5 text-muted-foreground" />
+                            : <DoorOpen className="h-5 w-5 text-muted-foreground" />
+                        }
                         <CardTitle className="text-base font-semibold">{asset.nama_aset}</CardTitle>
                     </div>
                     <Badge className={STATUS_BADGE_COLORS[asset.status]}>
@@ -83,7 +131,6 @@ export default function MonitorGrid({ assets = [], lastUpdated }: MonitorGridPro
 
     return (
         <div className="space-y-8">
-            {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-bold">Live Monitor</h1>
@@ -91,9 +138,17 @@ export default function MonitorGrid({ assets = [], lastUpdated }: MonitorGridPro
                         Status aset diperbarui otomatis setiap 10 detik
                     </p>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                    Terakhir diperbarui: {lastUpdated}
+                <div className="flex items-center gap-2">
+                    <Button variant="secondary" size="sm" onClick={() => setView('grid')}>
+                        <Grid3X3 className="h-4 w-4 mr-1" /> Grid
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setView('calendar')}>
+                        <CalendarDays className="h-4 w-4 mr-1" /> Kalender
+                    </Button>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Terakhir: {lastUpdated}
+                    </div>
                 </div>
             </div>
 
@@ -113,7 +168,6 @@ export default function MonitorGrid({ assets = [], lastUpdated }: MonitorGridPro
                 </div>
             </div>
 
-            {/* Section Dinamis */}
             {Object.keys(groupedAssets).length > 0 ? (
                 Object.entries(groupedAssets).map(([tipe, items]) => (
                     <section key={tipe}>

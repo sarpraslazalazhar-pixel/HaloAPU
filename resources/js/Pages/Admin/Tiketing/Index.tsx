@@ -15,6 +15,7 @@ const STATUS_LIST = [
     { value: 'pending', label: 'Pending' },
     { value: 'solve', label: 'Selesai' },
     { value: 'reject', label: 'Ditolak' },
+    { value: 'dibatalkan', label: 'Dibatalkan' },
 ];
 
 interface Ticket {

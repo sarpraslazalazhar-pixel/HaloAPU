@@ -65,6 +65,16 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
                         required={field.wajib}
                     />
                 );
+            case 'datetime':
+                return (
+                    <input
+                        type="datetime-local"
+                        className={`w-full border rounded-md p-2 ${errorClass}`}
+                        value={value || ''}
+                        onChange={e => onChange(field.id, e.target.value)}
+                        required={field.wajib}
+                    />
+                );
             case 'dropdown':
                 return (
                     <select

@@ -49,16 +49,18 @@ class UserManagementController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
+            'name' => 'required|string|max:100',
             'username' => 'required|string|max:50|unique:users,username',
             'email' => 'required|email|max:100|unique:users,email',
             'password' => 'required|string|min:8|confirmed',
             'no_wa' => 'nullable|string|max:20',
             'divisi_id' => 'nullable|exists:org_divisi,id',
-            'org_unit_id' => 'nullable|exists:org_units,id',
-            'jabatan_id' => 'nullable|exists:org_jabatans,id',
+            'org_unit_id' => 'nullable|exists:org_unit,id',
+            'jabatan_id' => 'nullable|exists:org_jabatan,id',
         ]);
 
         User::create([
+            'name' => $validated['name'],
             'username' => $validated['username'],
             'email' => $validated['email'],
             'password' => Hash::make($validated['password']),
@@ -76,16 +78,18 @@ class UserManagementController extends Controller
         $user = $manajemen_user;
 
         $validated = $request->validate([
+            'name' => 'required|string|max:100',
             'username' => ['required', 'string', 'max:50', Rule::unique('users')->ignore($user->id)],
             'email' => ['required', 'email', 'max:100', Rule::unique('users')->ignore($user->id)],
             'password' => 'nullable|string|min:8|confirmed',
             'no_wa' => 'nullable|string|max:20',
             'divisi_id' => 'nullable|exists:org_divisi,id',
-            'org_unit_id' => 'nullable|exists:org_units,id',
-            'jabatan_id' => 'nullable|exists:org_jabatans,id',
+            'org_unit_id' => 'nullable|exists:org_unit,id',
+            'jabatan_id' => 'nullable|exists:org_jabatan,id',
         ]);
 
         $user->update([
+            'name' => $validated['name'],
             'username' => $validated['username'],
             'email' => $validated['email'],
             'no_wa' => $validated['no_wa'],

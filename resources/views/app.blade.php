@@ -4,14 +4,20 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title inertia>{{ config('app.name', 'Halo APU') }}</title>
-    <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=inter:400,500,600,700" rel="stylesheet" />
+    <script>
+        (function() {
+            var theme = localStorage.getItem('halo-apu-theme');
+            if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     @viteReactRefresh
     @vite(['resources/js/app.tsx'])
     @routes
     @inertiaHead
 </head>
-<body class="font-sans antialiased text-gray-900 bg-gray-50">
+<body class="font-sans antialiased bg-background text-foreground">
     @inertia
 </body>
 </html>

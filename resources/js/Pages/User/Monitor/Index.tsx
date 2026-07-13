@@ -13,17 +13,31 @@ interface AssetData {
     booking_id: number | null;
 }
 
+interface CalendarDay {
+    date: string;
+    tanggal: string;
+    bookings: {
+        nama_aset: string;
+        tipe: string;
+        jam_mulai: string;
+        jam_selesai: string;
+        user: string;
+        status: string;
+    }[];
+}
+
 interface UserMonitorProps {
     assets: AssetData[];
+    calendarData: CalendarDay[];
     lastUpdated: string;
 }
 
-export default function UserMonitor({ assets, lastUpdated }: UserMonitorProps) {
+export default function UserMonitor({ assets, calendarData, lastUpdated }: UserMonitorProps) {
     return (
         <UserLayout title="Live Monitor">
             <Head title="Live Monitor" />
             <div className="container mx-auto py-6">
-                <MonitorGrid assets={assets} lastUpdated={lastUpdated} />
+                <MonitorGrid assets={assets} calendarData={calendarData || []} lastUpdated={lastUpdated} />
             </div>
         </UserLayout>
     );

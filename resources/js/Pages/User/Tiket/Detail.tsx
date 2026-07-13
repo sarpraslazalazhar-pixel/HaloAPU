@@ -1,11 +1,12 @@
-import React from 'react';
-import { Head, Link } from '@inertiajs/react';
+import React, { useState } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
-import { FileText, Download, Clock, User, Star } from 'lucide-react';
+import { FileText, Download, Clock, User, XCircle } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
+import { ConfirmDialog } from '@/Components/ConfirmDialog';
 
 interface DetailProps {
     ticket: any;
@@ -13,7 +14,13 @@ interface DetailProps {
 }
 
 export default function Detail({ ticket, formFields }: DetailProps) {
+    const [showConfirm, setShowConfirm] = useState(false);
     const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
+    const canCancel = ticket.status === 'open';
+
+    const handleCancel = () => {
+        router.patch(route('tiket.batal', ticket.id));
+    };
 
     return (
         <UserLayout title={`Tiket #TKT-${ticket.id}`}>
@@ -32,11 +39,26 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                     {showCsat && (
                         <CsatDialog ticketId={ticket.id} existingRating={ticket.csat?.rating} />
                     )}
+                    {canCancel && (
+                        <Button variant="destructive" onClick={() => setShowConfirm(true)}>
+                            <XCircle className="h-4 w-4 mr-1" /> Batalkan
+                        </Button>
+                    )}
                     <Link href={route('tiket.riwayat')}>
                         <Button variant="outline">Kembali ke Riwayat</Button>
                     </Link>
                 </div>
             </div>
+
+            <ConfirmDialog
+                open={showConfirm}
+                onOpenChange={setShowConfirm}
+                title="Batalkan Tiket?"
+                message="Tiket yang dibatalkan tidak bisa dikembalikan lagi. Yakin ingin membatalkan?"
+                confirmText="Ya, Batalkan"
+                cancelText="Tidak"
+                onConfirm={handleCancel}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>

@@ -52,8 +52,9 @@ class SlaConfigController extends Controller
             }
         }
 
+        $keepIds = [];
         foreach ($validated['configs'] as $config) {
-            SlaConfig::updateOrCreate(
+            $record = SlaConfig::updateOrCreate(
                 [
                     'sub_unit_id' => $config['sub_unit_id'],
                     'tier' => $config['tier'],
@@ -63,7 +64,11 @@ class SlaConfigController extends Controller
                     'threshold_minutes' => $config['threshold_minutes'],
                 ]
             );
+            $keepIds[] = $record->id;
         }
+
+        // Hapus konfigurasi yang tidak ada di payload (misalnya karena override dihapus)
+        SlaConfig::whereNotIn('id', $keepIds)->delete();
 
         return back()->with('success', 'Konfigurasi SLA berhasil disimpan.');
     }

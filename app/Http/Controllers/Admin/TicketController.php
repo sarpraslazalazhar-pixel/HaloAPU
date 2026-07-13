@@ -13,6 +13,7 @@ use App\Models\Unit;
 use App\Services\SlaCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Notifications\TicketStatusUpdatedNotification;
 use Inertia\Inertia;
 
 class TicketController extends Controller
@@ -136,6 +137,10 @@ class TicketController extends Controller
             'aksi' => $newStatus,
             'catatan' => $request->catatan,
         ]);
+
+        // Notifikasi WA (User)
+        $ticket->load('user', 'subUnit');
+        $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
 
         return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
     }

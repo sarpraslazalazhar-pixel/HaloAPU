@@ -7,6 +7,7 @@ const statusStyles: Record<string, string> = {
     pending: 'bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800 dark:text-gray-400',
     solve: 'bg-green-100 text-green-700 border-green-200 dark:bg-green-900/30 dark:text-green-400',
     reject: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400',
+    dibatalkan: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400',
 };
 
 const statusLabels: Record<string, string> = {
@@ -15,6 +16,7 @@ const statusLabels: Record<string, string> = {
     pending: 'Pending',
     solve: 'Selesai',
     reject: 'Ditolak',
+    dibatalkan: 'Dibatalkan',
 };
 
 interface StatusBadgeProps {

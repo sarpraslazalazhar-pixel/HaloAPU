@@ -44,7 +44,12 @@ Route::middleware('auth')->group(function () {
     // Ticket History
     Route::get('/tiket/riwayat', [\App\Http\Controllers\User\TicketHistoryController::class, 'index'])->name('tiket.riwayat');
     Route::get('/tiket/{ticket}', [\App\Http\Controllers\User\TicketHistoryController::class, 'show'])->name('tiket.show');
+    Route::patch('/tiket/{ticket}/batal', [\App\Http\Controllers\User\TicketHistoryController::class, 'cancel'])->name('tiket.batal');
     Route::get('/tiket/download/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'download'])->name('tiket.download');
+
+    // Profil User
+    Route::put('/profil', [\App\Http\Controllers\User\ProfileController::class, 'update'])->name('profil.update');
+    Route::post('/profil/avatar', [\App\Http\Controllers\User\ProfileController::class, 'uploadAvatar'])->name('profil.upload-avatar');
 
     // CSAT
     Route::post('/csat/{ticket}', [CsatController::class, 'store'])->name('csat.store');
@@ -79,6 +84,10 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('auth:admin')->group(function () {
         Route::post('logout', [AdminLoginController::class, 'logout'])->name('logout');
         Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
+
+        // Profil Admin
+        Route::put('/profil', [\App\Http\Controllers\Admin\ProfileController::class, 'update'])->name('profil.update');
+        Route::post('/profil/avatar', [\App\Http\Controllers\Admin\ProfileController::class, 'uploadAvatar'])->name('profil.upload-avatar');
 
         // CSAT Admin
         Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');

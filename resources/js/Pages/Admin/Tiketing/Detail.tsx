@@ -13,7 +13,7 @@ const validTransitions: Record<string, string[]> = {
 };
 
 const statusLabels: Record<string, string> = {
-    open: 'Open', on_proses: 'On Proses', pending: 'Pending', solve: 'Selesai', reject: 'Ditolak',
+    open: 'Open', on_proses: 'On Proses', pending: 'Pending', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan',
 };
 
 export default function TicketDetail({ ticket, formFields }: any) {

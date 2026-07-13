@@ -47,6 +47,11 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
+            'appConfig' => fn () => [
+                'nama_sistem' => \App\Models\SystemConfig::getValue('nama_sistem', 'Halo APU'),
+                'logo_path' => \App\Models\SystemConfig::getValue('logo_path'),
+                'banner_path' => \App\Models\SystemConfig::getValue('banner_path'),
+            ],
         ]);
     }
 }

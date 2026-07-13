@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FormField;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
+use App\Models\TicketLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -41,7 +42,7 @@ class TicketHistoryController extends Controller
         return Inertia::render('User/Tiket/Riwayat', [
             'tickets' => $tickets,
             'filters' => $request->only('status', 'date_from', 'date_to'),
-            'statuses' => ['open', 'on_proses', 'pending', 'solve', 'reject'],
+            'statuses' => ['open', 'on_proses', 'pending', 'solve', 'reject', 'dibatalkan'],
         ]);
     }
 
@@ -89,5 +90,30 @@ class TicketHistoryController extends Controller
             'ticket' => $ticket,
             'formFields' => $formFields,
         ]);
+    }
+
+    public function cancel(Ticket $ticket)
+    {
+        if ($ticket->user_id !== auth()->id()) {
+            abort(403);
+        }
+        if ($ticket->status !== 'open') {
+            return redirect()->back()->with('error', 'Hanya tiket dengan status Open yang bisa dibatalkan.');
+        }
+
+        $ticket->update(['status' => 'dibatalkan']);
+
+        if ($ticket->booking) {
+            $ticket->booking->update(['status' => 'dibatalkan']);
+        }
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => null,
+            'aksi' => 'dibatalkan',
+            'catatan' => 'Tiket dibatalkan oleh ' . auth()->user()->username,
+        ]);
+
+        return redirect()->route('tiket.riwayat')->with('success', 'Tiket berhasil dibatalkan.');
     }
 }

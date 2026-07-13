@@ -1,33 +1,101 @@
 import React, { useState } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
+import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Users, Trash2 } from 'lucide-react';
+import { Users, Pencil, Trash2, Plus, Search, UserX, Phone } from 'lucide-react';
 import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
 import {
     AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/Components/ui/alert-dialog';
+import { Badge } from '@/Components/ui/badge';
 
-export default function ManajemenUserIndex({ users, filters, divisiList, unitOrgList, jabatanList }: any) {
+interface Divisi {
+    id: number;
+    nama_divisi: string;
+}
+
+interface OrgUnit {
+    id: number;
+    nama_unit_organisasi: string;
+    divisi_id: number;
+}
+
+interface Jabatan {
+    id: number;
+    nama_jabatan: string;
+}
+
+interface UserData {
+    id: number;
+    name: string | null;
+    username: string;
+    email: string;
+    no_wa: string | null;
+    divisi_id: number | null;
+    org_unit_id: number | null;
+    jabatan_id: number | null;
+    created_at: string;
+    divisi: Divisi | null;
+    org_unit: OrgUnit | null;
+    jabatan: Jabatan | null;
+}
+
+interface PaginatedData {
+    data: UserData[];
+    total: number;
+    per_page: number;
+    from: number;
+    to: number;
+    current_page: number;
+    last_page: number;
+    links: { url: string | null; label: string; active: boolean }[];
+}
+
+interface Props {
+    users: PaginatedData;
+    filters: {
+        search?: string;
+        divisi_id?: string;
+        org_unit_id?: string;
+    };
+    divisiList: Divisi[];
+    unitOrgList: OrgUnit[];
+    jabatanList: Jabatan[];
+}
+
+export default function ManajemenUserIndex({ users, filters, divisiList, unitOrgList, jabatanList }: Props) {
     const [open, setOpen] = useState(false);
-    const [editing, setEditing] = useState<any>(null);
+    const [editing, setEditing] = useState<UserData | null>(null);
     const [search, setSearch] = useState(filters?.search || '');
+    const [divisiFilter, setDivisiFilter] = useState(filters?.divisi_id || '');
+    const [unitOrgFilter, setUnitOrgFilter] = useState(filters?.org_unit_id || '');
 
     const { data, setData, post, put, processing, errors, reset } = useForm({
+        name: '',
         username: '',
         email: '',
         password: '',
         password_confirmation: '',
         no_wa: '',
-        divisi_id: '',
-        org_unit_id: '',
-        jabatan_id: '',
+        divisi_id: '' as string | number,
+        org_unit_id: '' as string | number,
+        jabatan_id: '' as string | number,
     });
+
+    // Filter unit organisasi berdasarkan divisi yang dipilih di form
+    const filteredUnitOrgList = data.divisi_id
+        ? unitOrgList?.filter((u) => u.divisi_id === Number(data.divisi_id))
+        : unitOrgList;
+
+    // Filter unit organisasi berdasarkan divisi yang dipilih di filter
+    const filteredUnitOrgFilter = divisiFilter
+        ? unitOrgList?.filter((u) => u.divisi_id === Number(divisiFilter))
+        : unitOrgList;
 
     const openCreate = () => {
         setEditing(null);
@@ -35,9 +103,10 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
         setOpen(true);
     };
 
-    const openEdit = (user: any) => {
+    const openEdit = (user: UserData) => {
         setEditing(user);
         setData({
+            name: user.name || '',
             username: user.username,
             email: user.email,
             password: '',
@@ -52,167 +121,210 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        const method = editing ? put : post;
-        const routeName = editing ? route('admin.manajemen-user.update', editing.id) : route('admin.manajemen-user.store');
-        method(routeName, {
-            onSuccess: () => { setOpen(false); reset(); setEditing(null); },
-        });
+        if (editing) {
+            put(route('admin.manajemen-user.update', editing.id), {
+                onSuccess: () => { setOpen(false); reset(); setEditing(null); },
+            });
+        } else {
+            post(route('admin.manajemen-user.store'), {
+                onSuccess: () => { setOpen(false); reset(); setEditing(null); },
+            });
+        }
     };
 
-    const handleDelete = (user: any) => {
+    const handleDelete = (user: UserData) => {
         router.delete(route('admin.manajemen-user.destroy', user.id), { preserveScroll: true });
     };
 
-    const applySearch = () => {
-        router.get(route('admin.manajemen-user.index'), { search }, { });
+    const applyFilters = () => {
+        router.get(route('admin.manajemen-user.index'), {
+            search: search || undefined,
+            divisi_id: divisiFilter || undefined,
+            org_unit_id: unitOrgFilter || undefined,
+        }, { preserveState: true });
     };
 
-    const applyFilter = (key: string, value: string) => {
-        const params = { ...filters, [key]: value || undefined };
-        router.get(route('admin.manajemen-user.index'), params, { });
+    const handleDivisiFilter = (value: string) => {
+        setDivisiFilter(value);
+        setUnitOrgFilter('');
+        router.get(route('admin.manajemen-user.index'), {
+            search: search || undefined,
+            divisi_id: value || undefined,
+        }, { preserveState: true });
+    };
+
+    const handleUnitOrgFilter = (value: string) => {
+        setUnitOrgFilter(value);
+        router.get(route('admin.manajemen-user.index'), {
+            search: search || undefined,
+            divisi_id: divisiFilter || undefined,
+            org_unit_id: value || undefined,
+        }, { preserveState: true });
+    };
+
+    const resetFilters = () => {
+        setSearch('');
+        setDivisiFilter('');
+        setUnitOrgFilter('');
+        router.get(route('admin.manajemen-user.index'), {}, { preserveState: true });
+    };
+
+    // Reset org_unit_id ketika divisi berubah di form
+    const handleFormDivisiChange = (value: string) => {
+        setData((prev) => ({
+            ...prev,
+            divisi_id: value,
+            org_unit_id: '', // reset unit organisasi
+        }));
     };
 
     return (
         <AdminLayout title="Manajemen User">
             <Head title="Manajemen User" />
             <div className="space-y-6">
+                {/* Header */}
                 <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold">Manajemen User</h1>
-                    <Dialog open={open} onOpenChange={setOpen}>
-                        <DialogTrigger asChild>
-                            <Button onClick={openCreate}>
-                                <Users className="h-4 w-4 mr-2" />
-                                Tambah User
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-lg">
-                            <DialogHeader>
-                                <DialogTitle>{editing ? 'Edit User' : 'Tambah User Baru'}</DialogTitle>
-                            </DialogHeader>
-                            <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
-                                <div className="col-span-2">
-                                    <Label>Nama Lengkap</Label>
-                                    <Input value={data.username} onChange={(e) => setData('username', e.target.value)} />
-                                    {errors.username && <p className="text-xs text-destructive mt-1">{errors.username}</p>}
-                                </div>
-                                <div>
-                                    <Label>Username</Label>
-                                    <Input value={data.username} onChange={(e) => setData('username', e.target.value)} />
-                                </div>
-                                <div>
-                                    <Label>Email</Label>
-                                    <Input type="email" value={data.email} onChange={(e) => setData('email', e.target.value)} />
-                                    {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
-                                </div>
-                                <div>
-                                    <Label>No. WhatsApp</Label>
-                                    <Input value={data.no_wa} onChange={(e) => setData('no_wa', e.target.value)} />
-                                </div>
-                                <div>
-                                    <Label>Password {editing && '(kosongkan jika tidak diubah)'}</Label>
-                                    <Input type="password" value={data.password} onChange={(e) => setData('password', e.target.value)} />
-                                    {errors.password && <p className="text-xs text-destructive mt-1">{errors.password}</p>}
-                                </div>
-                                <div>
-                                    <Label>Konfirmasi Password</Label>
-                                    <Input type="password" value={data.password_confirmation} onChange={(e) => setData('password_confirmation', e.target.value)} />
-                                </div>
-                                <div>
-                                    <Label>Divisi</Label>
-                                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={data.divisi_id} onChange={(e) => setData('divisi_id', e.target.value)}>
-                                        <option value="">Pilih Divisi</option>
-                                        {divisiList?.map((d: any) => (
-                                            <option key={d.id} value={d.id}>{d.nama_divisi}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <Label>Unit Organisasi</Label>
-                                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={data.org_unit_id} onChange={(e) => setData('org_unit_id', e.target.value)}>
-                                        <option value="">Pilih Unit</option>
-                                        {unitOrgList?.map((u: any) => (
-                                            <option key={u.id} value={u.id}>{u.nama_unit_organisasi}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="col-span-2">
-                                    <Label>Jabatan</Label>
-                                    <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={data.jabatan_id} onChange={(e) => setData('jabatan_id', e.target.value)}>
-                                        <option value="">Pilih Jabatan</option>
-                                        {jabatanList?.map((j: any) => (
-                                            <option key={j.id} value={j.id}>{j.nama_jabatan}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <DialogFooter className="col-span-2">
-                                    <Button type="button" variant="ghost" onClick={() => { setOpen(false); setEditing(null); }}>Batal</Button>
-                                    <Button type="submit" disabled={processing}>{editing ? 'Update' : 'Simpan'}</Button>
-                                </DialogFooter>
-                            </form>
-                        </DialogContent>
-                    </Dialog>
+                    <div>
+                        <h1 className="text-2xl font-bold tracking-tight">Manajemen User</h1>
+                        <p className="text-sm text-muted-foreground mt-1">
+                            Kelola akun pengguna (karyawan) sistem
+                        </p>
+                    </div>
+                    <Button onClick={openCreate} className="gap-2">
+                        <Plus className="h-4 w-4" />
+                        Tambah User
+                    </Button>
                 </div>
 
-                <div className="flex flex-wrap gap-2">
-                    <Input
-                        placeholder="Cari nama, email, atau username..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && applySearch()}
-                        className="max-w-xs"
-                    />
-                    <select className="rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={filters?.divisi_id || ''} onChange={(e) => applyFilter('divisi_id', e.target.value)}>
+                {/* Filters */}
+                <div className="flex flex-wrap gap-2 items-center">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Cari nama, email, atau username..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && applyFilters()}
+                            className="pl-9 max-w-xs"
+                        />
+                    </div>
+                    <select
+                        className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        value={divisiFilter}
+                        onChange={(e) => handleDivisiFilter(e.target.value)}
+                    >
                         <option value="">Semua Divisi</option>
-                        {divisiList?.map((d: any) => (
+                        {divisiList?.map((d) => (
                             <option key={d.id} value={d.id}>{d.nama_divisi}</option>
                         ))}
                     </select>
-                    <Button variant="outline" onClick={() => router.get(route('admin.manajemen-user.index'), {}, { })}>Reset</Button>
+                    <select
+                        className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                        value={unitOrgFilter}
+                        onChange={(e) => handleUnitOrgFilter(e.target.value)}
+                    >
+                        <option value="">Semua Unit Organisasi</option>
+                        {filteredUnitOrgFilter?.map((u) => (
+                            <option key={u.id} value={u.id}>{u.nama_unit_organisasi}</option>
+                        ))}
+                    </select>
+                    <Button variant="outline" size="sm" onClick={applyFilters}>
+                        Cari
+                    </Button>
+                    {(search || divisiFilter || unitOrgFilter) && (
+                        <Button variant="ghost" size="sm" onClick={resetFilters}>
+                            Reset
+                        </Button>
+                    )}
                 </div>
 
+                {/* Table */}
                 <Card>
                     <CardContent className="p-0">
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="border-b text-left text-muted-foreground">
-                                        <th className="p-3 font-medium">#</th>
+                                    <tr className="border-b bg-muted/30 text-left text-muted-foreground">
+                                        <th className="p-3 font-medium w-12">#</th>
                                         <th className="p-3 font-medium">Nama</th>
+                                        <th className="p-3 font-medium">Username</th>
                                         <th className="p-3 font-medium">Email</th>
                                         <th className="p-3 font-medium">No. WA</th>
                                         <th className="p-3 font-medium">Divisi</th>
                                         <th className="p-3 font-medium">Unit</th>
-                                        <th className="p-3 font-medium">Aksi</th>
+                                        <th className="p-3 font-medium">Jabatan</th>
+                                        <th className="p-3 font-medium w-24">Aksi</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {users?.data?.map((user: any, i: number) => (
-                                        <tr key={user.id} className="border-b last:border-0 hover:bg-muted/50">
-                                            <td className="p-3">{user.id}</td>
-                                            <td className="p-3 font-medium">{user.username}</td>
+                                    {users?.data?.length === 0 && (
+                                        <tr>
+                                            <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                                                <div className="flex flex-col items-center gap-2">
+                                                    <UserX className="h-10 w-10 text-muted-foreground/50" />
+                                                    <p className="font-medium">Tidak ada user ditemukan</p>
+                                                    <p className="text-xs">Coba ubah filter pencarian atau tambah user baru</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )}
+                                    {users?.data?.map((user: UserData, i: number) => (
+                                        <tr key={user.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                                            <td className="p-3 text-muted-foreground">
+                                                {(users.current_page - 1) * users.per_page + i + 1}
+                                            </td>
+                                            <td className="p-3 font-medium">{user.name || user.username}</td>
+                                            <td className="p-3 text-muted-foreground">{user.username}</td>
                                             <td className="p-3">{user.email}</td>
-                                            <td className="p-3">{user.no_wa || '-'}</td>
-                                            <td className="p-3">{user.divisi?.nama_divisi || '-'}</td>
-                                            <td className="p-3">{user.org_unit?.nama_unit_organisasi || '-'}</td>
+                                            <td className="p-3">
+                                                {user.no_wa ? (
+                                                    <span className="flex items-center gap-1.5 text-muted-foreground">
+                                                        <Phone className="h-3.5 w-3.5" />
+                                                        {user.no_wa}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-muted-foreground/50">-</span>
+                                                )}
+                                            </td>
+                                            <td className="p-3">
+                                                {user.divisi ? (
+                                                    <Badge variant="outline" className="font-normal">
+                                                        {user.divisi.nama_divisi}
+                                                    </Badge>
+                                                ) : (
+                                                    <span className="text-muted-foreground/50">-</span>
+                                                )}
+                                            </td>
+                                            <td className="p-3 text-sm">
+                                                {user.org_unit?.nama_unit_organisasi || <span className="text-muted-foreground/50">-</span>}
+                                            </td>
+                                            <td className="p-3 text-sm">
+                                                {user.jabatan?.nama_jabatan || <span className="text-muted-foreground/50">-</span>}
+                                            </td>
                                             <td className="p-3">
                                                 <div className="flex gap-1">
-                                                    <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>Edit</Button>
+                                                    <Button variant="outline" size="icon" onClick={() => openEdit(user)} className="h-8 w-8">
+                                                        <Pencil className="w-3.5 h-3.5" />
+                                                    </Button>
                                                     <AlertDialog>
                                                         <AlertDialogTrigger asChild>
-                                                            <Button variant="ghost" size="sm" className="text-destructive">
-                                                                <Trash2 className="h-4 w-4" />
+                                                            <Button variant="outline" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">
+                                                                <Trash2 className="w-3.5 h-3.5" />
                                                             </Button>
                                                         </AlertDialogTrigger>
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader>
                                                                 <AlertDialogTitle>Hapus User?</AlertDialogTitle>
                                                                 <AlertDialogDescription>
-                                                                    Apakah Anda yakin ingin menghapus user "{user.username}"? Tindakan ini tidak dapat dibatalkan.
+                                                                    Apakah Anda yakin ingin menghapus user <strong>"{user.name || user.username}"</strong>?
+                                                                    {' '}Tindakan ini tidak dapat dibatalkan. User yang memiliki tiket aktif tidak bisa dihapus.
                                                                 </AlertDialogDescription>
                                                             </AlertDialogHeader>
                                                             <AlertDialogFooter>
                                                                 <AlertDialogCancel>Batal</AlertDialogCancel>
-                                                                <AlertDialogAction onClick={() => handleDelete(user)} className="bg-destructive text-destructive-foreground">Hapus</AlertDialogAction>
+                                                                <AlertDialogAction onClick={() => handleDelete(user)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                                    Hapus
+                                                                </AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
                                                     </AlertDialog>
@@ -226,13 +338,22 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                     </CardContent>
                 </Card>
 
-                {users?.total > users?.per_page && (
+                {/* Pagination */}
+                {users?.last_page > 1 && (
                     <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">{users.from}-{users.to} dari {users.total}</span>
+                        <span className="text-sm text-muted-foreground">
+                            Menampilkan {users.from}–{users.to} dari {users.total} user
+                        </span>
                         <div className="flex gap-1">
-                            {users.links?.filter((l: any) => l.url).map((link: any, i: number) => (
-                                <button key={i} onClick={() => router.get(link.url, {}, { })}
-                                    className={`px-2 py-1 rounded text-xs border ${link.active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                            {users.links?.filter((l) => l.url).map((link, i: number) => (
+                                <button
+                                    key={i}
+                                    onClick={() => router.get(link.url!, {}, { preserveState: true })}
+                                    className={`px-3 py-1.5 rounded-md text-xs border transition-colors ${
+                                        link.active
+                                            ? 'bg-primary text-primary-foreground border-primary'
+                                            : 'hover:bg-muted border-input'
+                                    }`}
                                     dangerouslySetInnerHTML={{ __html: link.label }}
                                 />
                             ))}
@@ -240,6 +361,161 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                     </div>
                 )}
             </div>
+
+            {/* Create/Edit Dialog */}
+            <Dialog open={open} onOpenChange={(isOpen) => {
+                setOpen(isOpen);
+                if (!isOpen) { setEditing(null); reset(); }
+            }}>
+                <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Users className="h-5 w-5" />
+                            {editing ? 'Edit User' : 'Tambah User Baru'}
+                        </DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
+                        <div className="grid grid-cols-2 gap-4">
+                            {/* Nama Lengkap */}
+                            <div className="col-span-2">
+                                <Label htmlFor="name">Nama Lengkap <span className="text-destructive">*</span></Label>
+                                <Input
+                                    id="name"
+                                    value={data.name}
+                                    onChange={(e) => setData('name', e.target.value)}
+                                    placeholder="Masukkan nama lengkap"
+                                />
+                                {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
+                            </div>
+
+                            {/* Username */}
+                            <div>
+                                <Label htmlFor="username">Username <span className="text-destructive">*</span></Label>
+                                <Input
+                                    id="username"
+                                    value={data.username}
+                                    onChange={(e) => setData('username', e.target.value)}
+                                    placeholder="Masukkan username"
+                                />
+                                {errors.username && <p className="text-xs text-destructive mt-1">{errors.username}</p>}
+                            </div>
+
+                            {/* Email */}
+                            <div>
+                                <Label htmlFor="email">Email <span className="text-destructive">*</span></Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    value={data.email}
+                                    onChange={(e) => setData('email', e.target.value)}
+                                    placeholder="user@example.com"
+                                />
+                                {errors.email && <p className="text-xs text-destructive mt-1">{errors.email}</p>}
+                            </div>
+
+                            {/* No. WhatsApp */}
+                            <div>
+                                <Label htmlFor="no_wa">No. WhatsApp</Label>
+                                <Input
+                                    id="no_wa"
+                                    value={data.no_wa}
+                                    onChange={(e) => setData('no_wa', e.target.value)}
+                                    placeholder="628xxxxxxxxxx"
+                                />
+                                {errors.no_wa && <p className="text-xs text-destructive mt-1">{errors.no_wa}</p>}
+                            </div>
+
+                            {/* Password */}
+                            <div>
+                                <Label htmlFor="password">
+                                    Password {editing ? <span className="text-muted-foreground font-normal">(kosongkan jika tidak diubah)</span> : <span className="text-destructive">*</span>}
+                                </Label>
+                                <Input
+                                    id="password"
+                                    type="password"
+                                    value={data.password}
+                                    onChange={(e) => setData('password', e.target.value)}
+                                    placeholder={editing ? '••••••••' : 'Min. 8 karakter'}
+                                    autoComplete="new-password"
+                                />
+                                {errors.password && <p className="text-xs text-destructive mt-1">{errors.password}</p>}
+                            </div>
+
+                            {/* Konfirmasi Password */}
+                            <div>
+                                <Label htmlFor="password_confirmation">Konfirmasi Password</Label>
+                                <Input
+                                    id="password_confirmation"
+                                    type="password"
+                                    value={data.password_confirmation}
+                                    onChange={(e) => setData('password_confirmation', e.target.value)}
+                                    placeholder="Ulangi password"
+                                    autoComplete="new-password"
+                                />
+                            </div>
+
+                            {/* Divisi */}
+                            <div>
+                                <Label htmlFor="divisi_id">Divisi</Label>
+                                <select
+                                    id="divisi_id"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    value={data.divisi_id}
+                                    onChange={(e) => handleFormDivisiChange(e.target.value)}
+                                >
+                                    <option value="">Pilih Divisi</option>
+                                    {divisiList?.map((d) => (
+                                        <option key={d.id} value={d.id}>{d.nama_divisi}</option>
+                                    ))}
+                                </select>
+                                {errors.divisi_id && <p className="text-xs text-destructive mt-1">{errors.divisi_id}</p>}
+                            </div>
+
+                            {/* Unit Organisasi */}
+                            <div>
+                                <Label htmlFor="org_unit_id">Unit Organisasi</Label>
+                                <select
+                                    id="org_unit_id"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    value={data.org_unit_id}
+                                    onChange={(e) => setData('org_unit_id', e.target.value)}
+                                >
+                                    <option value="">Pilih Unit Organisasi</option>
+                                    {filteredUnitOrgList?.map((u) => (
+                                        <option key={u.id} value={u.id}>{u.nama_unit_organisasi}</option>
+                                    ))}
+                                </select>
+                                {errors.org_unit_id && <p className="text-xs text-destructive mt-1">{errors.org_unit_id}</p>}
+                            </div>
+
+                            {/* Jabatan */}
+                            <div className="col-span-2">
+                                <Label htmlFor="jabatan_id">Jabatan</Label>
+                                <select
+                                    id="jabatan_id"
+                                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                                    value={data.jabatan_id}
+                                    onChange={(e) => setData('jabatan_id', e.target.value)}
+                                >
+                                    <option value="">Pilih Jabatan</option>
+                                    {jabatanList?.map((j) => (
+                                        <option key={j.id} value={j.id}>{j.nama_jabatan}</option>
+                                    ))}
+                                </select>
+                                {errors.jabatan_id && <p className="text-xs text-destructive mt-1">{errors.jabatan_id}</p>}
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setEditing(null); reset(); }}>
+                                Batal
+                            </Button>
+                            <Button type="submit" disabled={processing}>
+                                {processing ? 'Menyimpan...' : (editing ? 'Update' : 'Simpan')}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
         </AdminLayout>
     );
 }

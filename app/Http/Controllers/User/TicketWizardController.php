@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\FormField;
 use App\Models\OrgDivisi;
 use App\Models\OrgJabatan;
+use App\Models\RoomVehicleBooking;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
@@ -13,7 +14,11 @@ use App\Models\TicketSlaTracking;
 use App\Models\Unit;
 use App\Services\SlaCalculator;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use App\Notifications\TicketCreatedUserNotification;
+use App\Notifications\TicketCreatedAdminNotification;
 use Inertia\Inertia;
 
 class TicketWizardController extends Controller
@@ -120,18 +125,39 @@ class TicketWizardController extends Controller
             $subUnit = \App\Models\SubUnit::find($request->sub_unit_id);
             if ($subUnit && $subUnit->is_monitored) {
                 $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
-                $startTime = $request->form_data[(string) $subUnit->monitor_start_field_id] ?? now();
-                $endTime = $request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
+                $startDT = \Carbon\Carbon::parse($request->form_data[(string) $subUnit->monitor_start_field_id] ?? now());
+                $endDT = \Carbon\Carbon::parse($request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour());
 
-                \App\Models\RoomVehicleBooking::create([
+                // Cek bentrok aset
+                $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)
+                    ->whereNotIn('status', ['reject', 'dibatalkan', 'solve', 'selesai'])
+                    ->where('tanggal_mulai', '<', $endDT)
+                    ->where('tanggal_selesai', '>', $startDT)
+                    ->exists();
+
+                if ($bentrok) {
+                    throw ValidationException::withMessages([
+                        'form_data.' . $subUnit->monitor_asset_field_id => 'Aset ini sudah dipesan pada jam tersebut.',
+                    ]);
+                }
+
+                RoomVehicleBooking::create([
                     'ticket_id' => $ticket->id,
                     'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
                     'nama_aset' => $assetName,
-                    'tanggal_mulai' => \Carbon\Carbon::parse($startTime),
-                    'tanggal_selesai' => \Carbon\Carbon::parse($endTime),
-                    'status' => 'open', // Mengikuti status tiket
+                    'tanggal_mulai' => $startDT,
+                    'tanggal_selesai' => $endDT,
+                    'status' => 'open',
                 ]);
             }
+            // 6. Notifikasi WA (User & Admin)
+            $ticket->load('user', 'subUnit'); // ensure relations loaded for notification templates
+            $ticket->user->notify(new TicketCreatedUserNotification($ticket));
+            // Gunakan AnonymousNotifiable untuk Admin (receiver WA akan di-set dari dalam Notification)
+            Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
+            // Kirim in-app notification (database) ke semua Admin untuk icon lonceng
+            $admins = \App\Models\Admin::all();
+            Notification::send($admins, new TicketCreatedAdminNotification($ticket));
         });
 
         return redirect()->route('tiket.riwayat')->with('success', 'Tiket berhasil diajukan!');

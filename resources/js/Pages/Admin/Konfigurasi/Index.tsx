@@ -19,9 +19,11 @@ export default function KonfigurasiIndex({ configs }: any) {
         nama_sistem: configs.nama_sistem || 'Halo APU',
         email_admin: configs.email_admin || '',
         wa_api_key: configs.wa_api_key || '',
+        wa_number_key: configs.wa_number_key || '',
         wa_gateway_url: configs.wa_gateway_url || '',
         nomor_wa_utama: configs.nomor_wa_utama || '',
         nomor_wa_fallback: configs.nomor_wa_fallback || '',
+        app_timezone: configs.app_timezone || 'Asia/Jakarta',
         jam_kerja: configs.jam_kerja || {},
     });
 
@@ -77,6 +79,7 @@ export default function KonfigurasiIndex({ configs }: any) {
                                     <div>
                                         <Label htmlFor="nama_sistem">Nama Sistem</Label>
                                         <Input id="nama_sistem" value={data.nama_sistem} onChange={(e) => setData('nama_sistem', e.target.value)} />
+                                        {errors.nama_sistem && <div className="text-destructive text-xs mt-1">{errors.nama_sistem}</div>}
                                     </div>
                                     <div>
                                         <Label>Logo</Label>
@@ -105,28 +108,59 @@ export default function KonfigurasiIndex({ configs }: any) {
                                     <div>
                                         <Label htmlFor="email_admin">Email Admin</Label>
                                         <Input id="email_admin" type="email" value={data.email_admin} onChange={(e) => setData('email_admin', e.target.value)} />
+                                        {errors.email_admin && <div className="text-destructive text-xs mt-1">{errors.email_admin}</div>}
                                     </div>
                                     <div>
                                         <Label htmlFor="wa_api_key">API Key WhatsApp</Label>
                                         <Input id="wa_api_key" type="password" value={data.wa_api_key} onChange={(e) => setData('wa_api_key', e.target.value)} />
+                                        {errors.wa_api_key && <div className="text-destructive text-xs mt-1">{errors.wa_api_key}</div>}
+                                    </div>
+                                    <div>
+                                        <Label htmlFor="wa_number_key">Number Key WhatsApp (Watzap)</Label>
+                                        <Input id="wa_number_key" type="password" value={data.wa_number_key} onChange={(e) => setData('wa_number_key', e.target.value)} />
+                                        {errors.wa_number_key && <div className="text-destructive text-xs mt-1">{errors.wa_number_key}</div>}
                                     </div>
                                     <div>
                                         <Label htmlFor="wa_gateway_url">URL Gateway WhatsApp</Label>
                                         <Input id="wa_gateway_url" value={data.wa_gateway_url} onChange={(e) => setData('wa_gateway_url', e.target.value)} />
+                                        {errors.wa_gateway_url && <div className="text-destructive text-xs mt-1">{errors.wa_gateway_url}</div>}
                                     </div>
                                     <div>
                                         <Label htmlFor="nomor_wa_utama">Nomor WA Utama</Label>
                                         <Input id="nomor_wa_utama" value={data.nomor_wa_utama} onChange={(e) => setData('nomor_wa_utama', e.target.value)} />
+                                        {errors.nomor_wa_utama && <div className="text-destructive text-xs mt-1">{errors.nomor_wa_utama}</div>}
                                     </div>
                                     <div>
                                         <Label htmlFor="nomor_wa_fallback">Nomor WA Fallback</Label>
                                         <Input id="nomor_wa_fallback" value={data.nomor_wa_fallback} onChange={(e) => setData('nomor_wa_fallback', e.target.value)} />
+                                        {errors.nomor_wa_fallback && <div className="text-destructive text-xs mt-1">{errors.nomor_wa_fallback}</div>}
                                     </div>
                                 </CardContent>
                             </Card>
                         </TabsContent>
 
                         <TabsContent value="operasional" className="space-y-4 mt-4">
+                            <Card>
+                                <CardHeader><CardTitle>Wilayah Waktu</CardTitle></CardHeader>
+                                <CardContent className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="app_timezone">Zona Waktu</Label>
+                                        <select
+                                            id="app_timezone"
+                                            className="w-full border rounded-md p-2"
+                                            value={data.app_timezone}
+                                            onChange={(e) => setData('app_timezone', e.target.value)}
+                                        >
+                                            <option value="Asia/Jakarta">WIB (Asia/Jakarta, UTC+7)</option>
+                                            <option value="Asia/Pontianak">WIB (Asia/Pontianak, UTC+7)</option>
+                                            <option value="Asia/Makassar">WITA (Asia/Makassar, UTC+8)</option>
+                                            <option value="Asia/Jayapura">WIT (Asia/Jayapura, UTC+9)</option>
+                                        </select>
+                                        {errors.app_timezone && <div className="text-red-500 text-xs mt-1">{errors.app_timezone}</div>}
+                                    </div>
+                                </CardContent>
+                            </Card>
+
                             <Card>
                                 <CardHeader><CardTitle>Jam Kerja</CardTitle></CardHeader>
                                 <CardContent className="space-y-3">

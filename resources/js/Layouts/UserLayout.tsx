@@ -6,22 +6,23 @@ import {
     PlusCircle, 
     History, 
     Star, 
-    Monitor, 
     Menu,
     LogOut,
-    User
+    User,
+    ChevronRight
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/Components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/Components/ui/dropdown-menu";
 import { ThemeToggle } from '@/Components/ThemeToggle';
+import ProfileModal from '@/Components/ProfileModal';
 
 interface UserLayoutProps {
     children: React.ReactNode;
@@ -32,21 +33,36 @@ interface NavItem {
     label: string;
     icon: any;
     route: string;
-    routeName: string;
-    disabled?: boolean;
-    badge?: React.ReactNode;
 }
 
 const userNavItems: NavItem[] = [
-    { label: 'Dashboard', icon: LayoutDashboard, route: '/dashboard', routeName: 'dashboard' },
-    { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat', routeName: 'tiket.create' },
-    { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat', routeName: 'tiket.riwayat' },
-    { label: 'CSAT', icon: Star, route: '/csat/riwayat', routeName: 'csat.riwayat' },
+    { label: 'Dashboard', icon: LayoutDashboard, route: '/dashboard' },
+    { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
+    { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
+    { label: 'CSAT', icon: Star, route: '/csat/riwayat' },
 ];
 
+function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+    const Icon = item.icon;
+    return (
+        <Link
+            href={item.route}
+            className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                active
+                    ? 'bg-primary/10 text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r-full before:bg-primary'
+                    : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+            }`}
+        >
+            <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
+            <span>{item.label}</span>
+        </Link>
+    );
+}
+
 export default function UserLayout({ children, title }: UserLayoutProps) {
-    const { auth, flash } = usePage<any>().props;
+    const { auth, flash, appConfig } = usePage<any>().props;
     const user = auth.user;
+    const [profileOpen, setProfileOpen] = useState(false);
 
     useEffect(() => {
         if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
@@ -55,76 +71,64 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
     }, [flash]);
     
     const url = usePage().url;
-    const isActive = (routePath: string) => url.startsWith(routePath);
+    const systemName = appConfig?.nama_sistem || 'HALO APU';
 
     const SidebarContent = () => (
-        <div className="flex h-full flex-col gap-4">
-            <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
-                <Link href="/" className="flex items-center gap-2 font-semibold">
-                    <div className="w-8 h-8 bg-[#00a2e8] rounded-full flex items-center justify-center relative overflow-hidden">
-                        <div className="absolute top-1/4 left-1/4 w-1.5 h-1.5 bg-white rounded-full"></div>
-                        <div className="absolute top-1/4 right-1/4 w-1.5 h-1.5 bg-[#f39c12] rounded-full"></div>
-                        <div className="absolute bottom-1/4 w-4 h-2 border-b-2 border-white rounded-full"></div>
-                    </div>
-                    <span className="text-[#1a2b4c] dark:text-white">HALO APU</span>
+        <div className="flex h-full flex-col">
+            <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-5 lg:h-[60px]">
+                <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
+                    {appConfig?.logo_path && (
+                        <img src={`/storage/${appConfig.logo_path}`} alt={systemName} className="h-9 w-auto object-contain shrink-0" />
+                    )}
                 </Link>
             </div>
-            <div className="flex-1 overflow-auto py-2">
-                <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-                    {userNavItems.map((item, index) => {
-                        const Icon = item.icon;
-                        const active = isActive(item.route) && item.route !== '#';
-                        
-                        return item.disabled ? (
-                            <div key={index} className="flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all">
-                                <Icon className="h-4 w-4" />
-                                {item.label}
-                                {item.badge && (
-                                    <span className="ml-auto flex h-6 shrink-0 items-center justify-center rounded-full bg-muted px-2 text-xs">
-                                        {item.badge}
-                                    </span>
-                                )}
-                            </div>
-                        ) : (
-                            <Link
-                                key={index}
-                                href={item.route}
-                                className={`flex items-center gap-3 rounded-lg px-3 py-2 transition-all hover:text-primary ${
-                                    active ? 'bg-muted text-primary' : 'text-muted-foreground'
-                                }`}
-                            >
-                                <Icon className="h-4 w-4" />
-                                {item.label}
-                            </Link>
-                        );
-                    })}
+            <div className="flex-1 overflow-y-auto py-4 px-3 sidebar-scroll">
+                <nav className="flex flex-col gap-1">
+                    {userNavItems.map((item) => (
+                        <NavLink
+                            key={item.route}
+                            item={item}
+                            active={url.startsWith(item.route) && item.route !== '#'}
+                        />
+                    ))}
                 </nav>
+            </div>
+
+            <div className="border-t px-3 py-3">
+                <div className="rounded-lg bg-muted/60 px-3 py-3">
+                    <div className="flex items-center gap-2.5">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
+                            {user?.avatar_path ? (
+                                <img src={`/storage/${user.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+                            ) : (
+                                <User className="h-3.5 w-3.5 text-primary" />
+                            )}
+                        </div>
+                        <div className="min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">{user?.name || user?.username || 'User'}</p>
+                            <p className="text-[11px] text-muted-foreground truncate">{user?.email || ''}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     );
 
     return (
-        <div className="grid h-screen w-full overflow-hidden md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
+        <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
             <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
             {title && <Head title={title} />}
             
-            {/* Desktop Sidebar */}
-            <div className="hidden border-r bg-muted/40 md:flex flex-col overflow-y-auto">
+            <div className="hidden border-r bg-white dark:bg-zinc-950 md:flex flex-col overflow-hidden">
                 <SidebarContent />
             </div>
             
-            <div className="flex flex-col min-w-0 overflow-hidden">
-                <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 lg:h-[60px] lg:px-6">
-                    {/* Mobile Sidebar */}
+            <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 dark:bg-zinc-900/50">
+                <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
                     <Sheet>
                         <SheetTrigger asChild>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="shrink-0 md:hidden"
-                            >
+                            <Button variant="ghost" size="icon" className="shrink-0 md:hidden -ml-1">
                                 <Menu className="h-5 w-5" />
-                                <span className="sr-only">Toggle navigation menu</span>
                             </Button>
                         </SheetTrigger>
                         <SheetContent side="left" className="flex flex-col p-0 w-72">
@@ -132,36 +136,49 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
                         </SheetContent>
                     </Sheet>
                     
-                    <div className="w-full flex-1">
-                        {/* Search or breadcrumbs could go here */}
-                    </div>
+                    <div className="flex-1" />
                     
                     <ThemeToggle />
                     
-                    <Link href="/logout" method="post" as="button" className="text-sm font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-md transition-colors flex items-center gap-2">
-                        <LogOut className="h-4 w-4" />
-                        <span className="hidden sm:inline">Keluar</span>
-                    </Link>
-
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="secondary" size="icon" className="rounded-full">
-                                <User className="h-5 w-5" />
-                                <span className="sr-only">Toggle user menu</span>
+                            <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 border overflow-hidden">
+                                {user?.avatar_path ? (
+                                    <img src={`/storage/${user.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+                                ) : (
+                                    <User className="h-4 w-4" />
+                                )}
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>
-                                <div className="flex flex-col">
-                                    <span>{user?.username || 'User'}</span>
-                                    <span className="text-xs font-normal text-muted-foreground">{user?.email || 'user@example.com'}</span>
-                                </div>
-                            </DropdownMenuLabel>
+                        <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuGroup>
+                                <DropdownMenuLabel>
+                                    <div className="flex flex-col gap-0.5">
+                                        <span className="text-sm font-medium">{user?.name || user?.username || 'User'}</span>
+                                        <span className="text-xs font-normal text-muted-foreground">{user?.email || ''}</span>
+                                    </div>
+                                </DropdownMenuLabel>
+                            </DropdownMenuGroup>
+                            <div className="border-t my-1" />
+                            <DropdownMenuItem onClick={() => setProfileOpen(true)} className="cursor-pointer">
+                                <User className="h-4 w-4 mr-2" />
+                                Edit Profil
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="p-0">
+                                <Link href="/logout" method="post" as="button" className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md">
+                                    <LogOut className="h-4 w-4" />
+                                    Keluar
+                                </Link>
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
+
+                    <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={user} isAdmin={false} />
                 </header>
-                <main className="flex flex-1 flex-col gap-4 p-4 lg:gap-6 lg:p-6 overflow-y-auto relative">
-                    {children}
+                <main className="flex-1 overflow-y-auto">
+                    <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8">
+                        {children}
+                    </div>
                 </main>
             </div>
         </div>

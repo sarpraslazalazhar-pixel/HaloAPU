@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use App\Models\RoomVehicleBooking;
 use Carbon\Carbon;
-use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class MonitorController extends Controller
@@ -22,7 +21,7 @@ class MonitorController extends Controller
         $now = Carbon::now();
 
         // Ambil semua booking yang relevan (hari ini dan ke depan)
-        $query = RoomVehicleBooking::where('status', '!=', 'reject')
+        $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan'])
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->with(['ticket.user:id,username']);
 
@@ -87,8 +86,8 @@ class MonitorController extends Controller
                     'tipe' => $asset->tipe,
                     'status' => 'Sedang Dipakai',
                     'user' => $activeBooking->ticket?->user?->username ?? '-',
-                    'waktu_mulai' => Carbon::parse($activeBooking->tanggal_mulai)->format('H:i'),
-                    'waktu_selesai' => Carbon::parse($activeBooking->tanggal_selesai)->format('H:i'),
+                    'waktu_mulai' => Carbon::parse($activeBooking->tanggal_mulai)->format('d M Y H:i'),
+                    'waktu_selesai' => Carbon::parse($activeBooking->tanggal_selesai)->format('d M Y H:i'),
                     'booking_id' => $activeBooking->id,
                 ];
             }
@@ -105,8 +104,8 @@ class MonitorController extends Controller
                     'tipe' => $asset->tipe,
                     'status' => 'Dipesan',
                     'user' => $nextBooking->ticket?->user?->username ?? '-',
-                    'waktu_mulai' => Carbon::parse($nextBooking->tanggal_mulai)->format('H:i'),
-                    'waktu_selesai' => Carbon::parse($nextBooking->tanggal_selesai)->format('H:i'),
+                    'waktu_mulai' => Carbon::parse($nextBooking->tanggal_mulai)->format('d M Y H:i'),
+                    'waktu_selesai' => Carbon::parse($nextBooking->tanggal_selesai)->format('d M Y H:i'),
                     'booking_id' => $nextBooking->id,
                 ];
             }
@@ -123,10 +122,37 @@ class MonitorController extends Controller
         });
     }
 
+    /**
+     * Data kalender: booking dikelompokkan per tanggal (30 hari ke depan).
+     */
+    protected function getCalendarData()
+    {
+        $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan'])
+            ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
+            ->with(['ticket.user:id,username'])
+            ->orderBy('tanggal_mulai')
+            ->get()
+            ->groupBy(fn ($b) => Carbon::parse($b->tanggal_mulai)->format('Y-m-d'));
+
+        return $bookings->map(fn ($items, $date) => [
+            'date' => $date,
+            'tanggal' => Carbon::parse($date)->format('d M Y'),
+            'bookings' => $items->map(fn ($b) => [
+                'nama_aset' => $b->nama_aset,
+                'tipe' => $b->tipe,
+                'jam_mulai' => Carbon::parse($b->tanggal_mulai)->format('H:i'),
+                'jam_selesai' => Carbon::parse($b->tanggal_selesai)->format('H:i'),
+                'user' => $b->ticket?->user?->username ?? '-',
+                'status' => $b->status,
+            ]),
+        ])->values();
+    }
+
     public function userIndex()
     {
         return Inertia::render('User/Monitor/Index', [
             'assets' => $this->getAssetData(),
+            'calendarData' => $this->getCalendarData(),
             'lastUpdated' => now()->format('H:i:s'),
         ]);
     }
@@ -135,6 +161,7 @@ class MonitorController extends Controller
     {
         return Inertia::render('Admin/Monitor/Index', [
             'assets' => $this->getAssetData(),
+            'calendarData' => $this->getCalendarData(),
             'lastUpdated' => now()->format('H:i:s'),
         ]);
     }

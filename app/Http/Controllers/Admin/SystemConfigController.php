@@ -18,9 +18,11 @@ class SystemConfigController extends Controller
             'banner_path' => SystemConfig::getValue('banner_path'),
             'email_admin' => SystemConfig::getValue('email_admin'),
             'wa_api_key' => SystemConfig::getValue('wa_api_key'),
+            'wa_number_key' => SystemConfig::getValue('wa_number_key'),
             'wa_gateway_url' => SystemConfig::getValue('wa_gateway_url'),
             'nomor_wa_utama' => SystemConfig::getValue('nomor_wa_utama'),
             'nomor_wa_fallback' => SystemConfig::getValue('nomor_wa_fallback'),
+            'app_timezone' => SystemConfig::getValue('app_timezone', 'Asia/Jakarta'),
             'jam_kerja' => SystemConfig::getValue('jam_kerja', [
                 'senin' => ['08:00', '16:00'],
                 'selasa' => ['08:00', '16:00'],
@@ -43,9 +45,11 @@ class SystemConfigController extends Controller
             'nama_sistem' => 'required|string|max:100',
             'email_admin' => 'nullable|email|max:100',
             'wa_api_key' => 'nullable|string|max:255',
-            'wa_gateway_url' => 'nullable|url|max:255',
+            'wa_number_key' => 'nullable|string|max:255',
+            'wa_gateway_url' => 'nullable|string|max:255',
             'nomor_wa_utama' => 'nullable|string|max:20',
             'nomor_wa_fallback' => 'nullable|string|max:20',
+            'app_timezone' => 'required|string|max:50|timezone',
             'jam_kerja' => 'required|array',
             'jam_kerja.senin' => 'nullable|array|size:2',
             'jam_kerja.selasa' => 'nullable|array|size:2',
@@ -59,9 +63,11 @@ class SystemConfigController extends Controller
         SystemConfig::setValue('nama_sistem', $validated['nama_sistem']);
         SystemConfig::setValue('email_admin', $validated['email_admin']);
         SystemConfig::setValue('wa_api_key', $validated['wa_api_key']);
+        SystemConfig::setValue('wa_number_key', $validated['wa_number_key']);
         SystemConfig::setValue('wa_gateway_url', $validated['wa_gateway_url']);
         SystemConfig::setValue('nomor_wa_utama', $validated['nomor_wa_utama']);
         SystemConfig::setValue('nomor_wa_fallback', $validated['nomor_wa_fallback']);
+        SystemConfig::setValue('app_timezone', $validated['app_timezone']);
         SystemConfig::setValue('jam_kerja', $validated['jam_kerja']);
 
         return back()->with('success', 'Konfigurasi berhasil disimpan.');
@@ -78,7 +84,11 @@ class SystemConfigController extends Controller
             Storage::disk('public')->delete($oldPath);
         }
 
-        $path = $request->file('logo')->store('branding', 'public');
+        $file = $request->file('logo');
+        $filename = $file->hashName();
+        Storage::disk('public')->put('branding/' . $filename, file_get_contents($file->getPathname()));
+        $path = 'branding/' . $filename;
+        
         SystemConfig::setValue('logo_path', $path);
 
         return back()->with('success', 'Logo berhasil diunggah.');
@@ -95,7 +105,11 @@ class SystemConfigController extends Controller
             Storage::disk('public')->delete($oldPath);
         }
 
-        $path = $request->file('banner')->store('branding', 'public');
+        $file = $request->file('banner');
+        $filename = $file->hashName();
+        Storage::disk('public')->put('branding/' . $filename, file_get_contents($file->getPathname()));
+        $path = 'branding/' . $filename;
+
         SystemConfig::setValue('banner_path', $path);
 
         return back()->with('success', 'Banner berhasil diunggah.');

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Link, router } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/Components/ui/button';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
 
 interface Unit {
     id: number;
@@ -29,7 +29,7 @@ export default function Index({ units, selectedUnitId }: PeraturanFormIndexProps
     const handleUnitChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;
         setSelectedUnit(val ? Number(val) : '');
-        router.get(route('admin.peraturan-form.index'), { unit_id: val }, { preserveState: true, replace: true });
+        router.get(route('admin.peraturan-form.index'), { unit_id: val }, { replace: true });
     };
 
     return (

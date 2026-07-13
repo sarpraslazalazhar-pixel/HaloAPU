@@ -96,6 +96,61 @@ export interface TicketLog {
     timestamp: string;
 }
 
+export interface ReminderConfig {
+    id: number;
+    jenis_reminder: string;
+    lead_time_value: number;
+    channel_aktif: string[];
+    aktif: boolean;
+}
+
+export interface NotificationData {
+    judul: string;
+    pesan: string;
+    icon?: string;
+    aksi_url?: string;
+    prioritas?: string;
+    snoozed?: boolean;
+    done_at?: string;
+    [key: string]: any;
+}
+
+export interface NotificationItem {
+    id: string;
+    type: string;
+    data: NotificationData;
+    read_at: string | null;
+    created_at: string;
+}
+
+export interface Csat {
+    id: number;
+    ticket_id: number;
+    user_id: number;
+    rating: number;
+    komentar: string | null;
+    created_at: string;
+    updated_at: string;
+    ticket?: Ticket;
+    user?: {
+        id: number;
+        username: string;
+        email: string;
+    };
+}
+
+export interface SystemConfig {
+    nama_sistem: string;
+    logo_path: string | null;
+    banner_path: string | null;
+    email_admin: string | null;
+    wa_api_key: string | null;
+    wa_gateway_url: string | null;
+    nomor_wa_utama: string | null;
+    nomor_wa_fallback: string | null;
+    jam_kerja: Record<string, [string, string] | null>;
+}
+
 declare module '@inertiajs/react' {
     interface PageProps {
         auth: {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { GripVertical, Edit, Trash } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/Components/ui/button';
 import { FormField } from '@/types';
 
 interface FieldCardProps {

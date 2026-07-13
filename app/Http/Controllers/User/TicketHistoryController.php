@@ -73,6 +73,7 @@ class TicketHistoryController extends Controller
             'orgUnit',
             'jabatan',
             'attachments',
+            'csat',
             'logs' => function ($q) {
                 $q->orderBy('timestamp', 'desc');
             },

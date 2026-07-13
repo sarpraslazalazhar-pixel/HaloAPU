@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Input } from '@/components/ui/input';
+import { Input } from '@/Components/ui/input';
 import { Search, X } from 'lucide-react';
 import { router } from '@inertiajs/react';
 import { useDebounce } from '@/hooks/useDebounce';
@@ -14,7 +14,7 @@ export function SearchInput({ placeholder = 'Cari...', paramName = 'search' }: S
     const debouncedValue = useDebounce(value, 400);
 
     useEffect(() => {
-        router.reload({ data: { [paramName]: debouncedValue || undefined }, only: [paramName], preserveState: true });
+        router.reload({ data: { [paramName]: debouncedValue || undefined }, only: [paramName], });
     }, [debouncedValue, paramName]);
 
     return (

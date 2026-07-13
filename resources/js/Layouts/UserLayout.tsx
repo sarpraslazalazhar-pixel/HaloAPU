@@ -11,8 +11,8 @@ import {
     LogOut,
     User
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Button } from '@/Components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/Components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,7 +20,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/Components/ui/dropdown-menu";
 import { ThemeToggle } from '@/Components/ThemeToggle';
 
 interface UserLayoutProps {
@@ -28,12 +28,20 @@ interface UserLayoutProps {
     title?: string;
 }
 
-const userNavItems = [
+interface NavItem {
+    label: string;
+    icon: any;
+    route: string;
+    routeName: string;
+    disabled?: boolean;
+    badge?: React.ReactNode;
+}
+
+const userNavItems: NavItem[] = [
     { label: 'Dashboard', icon: LayoutDashboard, route: '/dashboard', routeName: 'dashboard' },
     { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat', routeName: 'tiket.create' },
     { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat', routeName: 'tiket.riwayat' },
-    { label: 'CSAT', icon: Star, route: '#', routeName: 'csat', disabled: true, badge: 'Segera' },
-    { label: 'Live Monitor', icon: Monitor, route: '#', routeName: 'live-monitor', disabled: true, badge: 'Segera' },
+    { label: 'CSAT', icon: Star, route: '/csat/riwayat', routeName: 'csat.riwayat' },
 ];
 
 export default function UserLayout({ children, title }: UserLayoutProps) {

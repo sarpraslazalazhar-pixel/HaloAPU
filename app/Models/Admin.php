@@ -16,6 +16,8 @@ class Admin extends Authenticatable
         'username',
         'email',
         'password',
+        'name',
+        'no_wa',
     ];
 
     protected $hidden = [
@@ -28,5 +30,10 @@ class Admin extends Authenticatable
         return [
             'password' => 'hashed',
         ];
+    }
+
+    public function getNameAttribute(): string
+    {
+        return !empty($this->attributes['name']) ? $this->attributes['name'] : $this->username;
     }
 }

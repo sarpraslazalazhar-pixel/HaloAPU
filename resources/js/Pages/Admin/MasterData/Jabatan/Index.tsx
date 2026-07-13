@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useForm, router } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@/Components/ui/button';
+import { Input } from '@/Components/ui/input';
+import { Label } from '@/Components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
 import { SearchInput } from '@/Components/SearchInput';
 import Swal from 'sweetalert2';
 import { GripVertical, Pencil, Trash2 } from 'lucide-react';
@@ -138,7 +138,7 @@ export default function JabatanIndex({ jabatans, filters }: { jabatans: Jabatan[
 
                 router.post(route('admin.master.jabatan.reorder'), {
                     order: newItems.map((item, i) => ({ id: item.id, urutan: i + 1 })),
-                }, { preserveScroll: true, preserveState: true });
+                }, { preserveScroll: true, });
 
                 return newItems;
             });

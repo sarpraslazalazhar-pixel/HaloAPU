@@ -10,11 +10,8 @@ const appName = import.meta.env.VITE_APP_NAME || 'Halo APU';
 createInertiaApp({
     title: (title) => `${title} - ${appName}`,
     resolve: (name) =>
-        resolvePageComponent(
-            `./Pages/${name}.tsx`,
-            import.meta.glob('./Pages/**/*.tsx')
-        ),
-    setup({ el, App, props }) {
+        resolvePageComponent(`./Pages/${name}.tsx`, import.meta.glob('./Pages/**/*.tsx')) as any,
+    setup({ el, App, props }: any) {
         const root = createRoot(el!);
         root.render(
             <App {...props} />

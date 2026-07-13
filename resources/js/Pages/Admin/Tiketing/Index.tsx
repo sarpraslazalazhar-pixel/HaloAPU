@@ -60,7 +60,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
         if (dateTo) params.date_to = dateTo;
         if (divisiId) params.divisi_id = divisiId;
         if (orgUnitId) params.org_unit_id = orgUnitId;
-        router.get(route('admin.tiket.index'), params, { preserveState: true });
+        router.get(route('admin.tiket.index'), params, { });
     };
 
     const columns = [

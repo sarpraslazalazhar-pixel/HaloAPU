@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Link, router, useForm } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/Components/ui/button';
 import Swal from 'sweetalert2';
 import { GripVertical, Edit, Trash, Plus, ArrowLeft } from 'lucide-react';
 import {
@@ -154,7 +154,7 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
                 // Send to server without waiting
                 router.post(route('admin.peraturan-form.reorder', subUnit.id), {
                     order: newFields.map((f, i) => ({ id: f.id, urutan: i + 1 })),
-                }, { preserveScroll: true, preserveState: true });
+                }, { preserveScroll: true, });
 
                 return newFields;
             });

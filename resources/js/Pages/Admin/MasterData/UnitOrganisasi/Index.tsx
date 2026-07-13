@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useForm, router } from '@inertiajs/react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Button } from '@/Components/ui/button';
+import { Input } from '@/Components/ui/input';
+import { Label } from '@/Components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
 import { SearchInput } from '@/Components/SearchInput';
 import { Pagination } from '@/Components/Pagination';
 import Swal from 'sweetalert2';
@@ -82,7 +82,7 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
     const handleDivisiFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const val = e.target.value;
         setFilterDivisi(val);
-        router.reload({ data: { divisi_id: val || undefined }, only: ['unitOrganisasis', 'filters'], preserveState: true });
+        router.reload({ data: { divisi_id: val || undefined }, only: ['unitOrganisasis', 'filters'], });
     };
 
     return (

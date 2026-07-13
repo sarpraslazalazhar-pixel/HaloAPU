@@ -37,8 +37,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
                 date_to: dateTo || undefined,
             },
             only: ['tickets', 'filters'],
-            preserveState: true,
-        });
+            });
     };
 
     const resetFilter = () => {
@@ -48,8 +47,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
         router.reload({
             data: { status: undefined, date_from: undefined, date_to: undefined },
             only: ['tickets', 'filters'],
-            preserveState: true,
-        });
+            });
     };
 
     return (

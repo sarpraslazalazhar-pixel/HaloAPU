@@ -4,6 +4,12 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Auth\UserLoginController;
 use App\Http\Controllers\Auth\AdminLoginController;
 use App\Http\Controllers\Auth\ForgotPasswordController;
+use App\Http\Controllers\CsatController;
+use App\Http\Controllers\Admin\CsatController as AdminCsatController;
+use App\Http\Controllers\Admin\SystemConfigController;
+use App\Http\Controllers\Admin\AdminManagementController;
+use App\Http\Controllers\Admin\UserManagementController;
+use App\Http\Controllers\MonitorController;
 use Inertia\Inertia;
 
 Route::get('/', function () {
@@ -12,7 +18,7 @@ Route::get('/', function () {
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [UserLoginController::class, 'showLoginForm'])->name('login');
-    Route::post('login', [UserLoginController::class, 'login']);
+    Route::post('login', [UserLoginController::class, 'login'])->middleware('throttle:5,1');
     
     Route::get('register', function () {
         return Inertia::render('Auth/Register');
@@ -40,6 +46,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/tiket/{ticket}', [\App\Http\Controllers\User\TicketHistoryController::class, 'show'])->name('tiket.show');
     Route::get('/tiket/download/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'download'])->name('tiket.download');
 
+    // CSAT
+    Route::post('/csat/{ticket}', [CsatController::class, 'store'])->name('csat.store');
+    Route::get('/csat/riwayat', [CsatController::class, 'riwayat'])->name('csat.riwayat');
+
+    // Monitor
+    Route::get('/monitor', [MonitorController::class, 'userIndex'])->name('monitor');
+
+
     // API dropdown (dependent dropdown & dynamic form)
     Route::prefix('api')->group(function () {
         Route::get('/org-units/{divisiId}', function ($divisiId) {
@@ -59,12 +73,31 @@ Route::middleware('auth')->group(function () {
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('guest:admin')->group(function () {
         Route::get('login', [AdminLoginController::class, 'showLoginForm'])->name('login');
-        Route::post('login', [AdminLoginController::class, 'login']);
+        Route::post('login', [AdminLoginController::class, 'login'])->middleware('throttle:5,1');
     });
 
     Route::middleware('auth:admin')->group(function () {
         Route::post('logout', [AdminLoginController::class, 'logout'])->name('logout');
         Route::get('/dashboard', [\App\Http\Controllers\Admin\DashboardController::class, 'index'])->name('dashboard');
+
+        // CSAT Admin
+        Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');
+
+        // Monitor Admin
+        Route::get('/monitor', [MonitorController::class, 'adminIndex'])->name('monitor.index');
+
+
+        // Konfigurasi Sistem
+        Route::get('/konfigurasi', [SystemConfigController::class, 'index'])->name('konfigurasi.index');
+        Route::put('/konfigurasi', [SystemConfigController::class, 'update'])->name('konfigurasi.update');
+        Route::post('/konfigurasi/upload-logo', [SystemConfigController::class, 'uploadLogo'])->name('konfigurasi.upload-logo');
+        Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
+
+        // Manajemen Admin
+        Route::resource('manajemen-admin', AdminManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-admin');
+
+        // Manajemen User
+        Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-user');
 
         // Master Data
         Route::resource('master/unit', \App\Http\Controllers\Admin\UnitController::class)->except(['create', 'edit', 'show'])->names('master.unit');
@@ -87,6 +120,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // SLA Config
         Route::get('sla-config', [\App\Http\Controllers\Admin\SlaConfigController::class, 'index'])->name('sla-config.index');
         Route::put('sla-config', [\App\Http\Controllers\Admin\SlaConfigController::class, 'update'])->name('sla-config.update');
+
+        // Reminder Config
+        Route::get('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'index'])->name('reminder-config.index');
+        Route::put('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'update'])->name('reminder-config.update');
+
+        // Notifications
+        Route::prefix('notifications')->name('notifications.')->group(function () {
+            Route::get('unread-count', [\App\Http\Controllers\Admin\NotificationController::class, 'unreadCount'])->name('unread-count');
+            Route::get('/', [\App\Http\Controllers\Admin\NotificationController::class, 'index'])->name('index');
+            Route::patch('{id}/read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAsRead'])->name('read');
+            Route::patch('{id}/snooze', [\App\Http\Controllers\Admin\NotificationController::class, 'snooze'])->name('snooze');
+            Route::patch('{id}/done', [\App\Http\Controllers\Admin\NotificationController::class, 'markAsDone'])->name('done');
+            Route::post('mark-all-read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
+        });
 
         // Tiketing Admin
         Route::prefix('tiket')->name('tiket.')->group(function () {

@@ -42,6 +42,11 @@ class User extends Authenticatable
         ];
     }
 
+    public function tickets()
+    {
+        return $this->hasMany(Ticket::class);
+    }
+
     public function divisi()
     {
         return $this->belongsTo(OrgDivisi::class, 'divisi_id');

@@ -12,7 +12,7 @@ class SubUnitController extends Controller
 {
     public function index(Request $request)
     {
-        $query = SubUnit::with('unit')->withCount('formFields');
+        $query = SubUnit::with(['unit', 'formFields'])->withCount('formFields');
 
         if ($request->has('search')) {
             $query->where('nama_layanan', 'like', '%' . $request->search . '%');
@@ -39,11 +39,19 @@ class SubUnitController extends Controller
             'unit_id' => 'required|exists:units,id',
             'nama_layanan' => 'required|string|max:255',
             'deskripsi' => 'nullable|string',
-            'aktif' => 'nullable|boolean'
+            'aktif' => 'nullable|boolean',
+            'is_monitored' => 'nullable|boolean',
+            'monitor_kategori' => 'nullable|string|max:255',
+            'monitor_asset_field_id' => 'nullable|exists:form_fields,id',
+            'monitor_start_field_id' => 'nullable|exists:form_fields,id',
+            'monitor_end_field_id' => 'nullable|exists:form_fields,id',
         ]);
 
         if ($request->has('aktif')) {
             $validated['aktif'] = $request->boolean('aktif');
+        }
+        if ($request->has('is_monitored')) {
+            $validated['is_monitored'] = $request->boolean('is_monitored');
         }
 
         SubUnit::create($validated);
@@ -57,11 +65,19 @@ class SubUnitController extends Controller
             'unit_id' => 'required|exists:units,id',
             'nama_layanan' => 'required|string|max:255',
             'deskripsi' => 'nullable|string',
-            'aktif' => 'nullable|boolean'
+            'aktif' => 'nullable|boolean',
+            'is_monitored' => 'nullable|boolean',
+            'monitor_kategori' => 'nullable|string|max:255',
+            'monitor_asset_field_id' => 'nullable|exists:form_fields,id',
+            'monitor_start_field_id' => 'nullable|exists:form_fields,id',
+            'monitor_end_field_id' => 'nullable|exists:form_fields,id',
         ]);
 
         if ($request->has('aktif')) {
             $validated['aktif'] = $request->boolean('aktif');
+        }
+        if ($request->has('is_monitored')) {
+            $validated['is_monitored'] = $request->boolean('is_monitored');
         }
 
         $subUnit->update($validated);

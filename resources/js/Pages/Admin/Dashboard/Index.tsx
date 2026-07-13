@@ -6,20 +6,19 @@ import { Button } from '@/Components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import MonthlyUnitChart from '@/Components/Charts/MonthlyUnitChart';
 import SubUnitChart from '@/Components/Charts/SubUnitChart';
-import { AlertTriangle, Eye, Clock } from 'lucide-react';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
-
+import { AlertTriangle, Eye, Clock, Folder, Loader2, CheckCircle, XCircle } from 'lucide-react';
+import ReactECharts from 'echarts-for-react';
 const PIE_COLORS = ['#22c55e', '#ef4444', '#f97316'];
 
-const STATUS_META: Record<string, { label: string; color: string }> = {
-    open: { label: 'Open', color: 'text-blue-600' },
-    on_proses: { label: 'On Proses', color: 'text-yellow-600' },
-    pending: { label: 'Pending', color: 'text-gray-600' },
-    solve: { label: 'Selesai', color: 'text-green-600' },
-    reject: { label: 'Ditolak', color: 'text-red-600' },
+const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
+    open: { label: 'Open', bg: 'bg-gradient-to-br from-blue-400 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
+    on_proses: { label: 'On Proses', bg: 'bg-gradient-to-br from-orange-400 to-orange-600', icon: Loader2, anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
+    pending: { label: 'Pending', bg: 'bg-gradient-to-br from-slate-400 to-slate-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
+    solve: { label: 'Selesai', bg: 'bg-gradient-to-br from-green-400 to-green-600', icon: CheckCircle, anim: 'group-hover:scale-125 group-hover:opacity-100' },
+    reject: { label: 'Ditolak', bg: 'bg-gradient-to-br from-red-400 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
 };
 
-export default function DashboardIndex({ totalTickets, statusCounts, topUsers, followUpTickets, monthlyChartData, yearlyChartData, subUnitChartData, units, filters, slaStats, slaPieChartData, slaBarChartData, slaTrendData, slaFilters }: any) {
+export default function DashboardIndex({ totalTickets, statusCounts, topUsers, followUpTickets, monthlyChartData, yearlyChartData, subUnitChartData, units, filters, slaStats, slaPieChartData, slaBarChartData, slaTrendData, slaFilters, topUsersAll, csatTrend, tiketBulanan }: any) {
     const [month, setMonth] = useState(filters?.month !== null && filters?.month !== undefined ? String(filters.month) : '');
     const [year, setYear] = useState(filters?.year !== null && filters?.year !== undefined ? String(filters.year) : '');
     const [selectedUnit, setSelectedUnit] = useState('');
@@ -31,7 +30,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
         const params: any = {};
         if (month) params.month = month;
         if (year) params.year = year;
-        router.get(route('admin.dashboard'), params, { preserveState: true });
+        router.get(route('admin.dashboard'), params, { });
     };
 
     const currentSubUnitData = selectedUnit
@@ -65,13 +64,27 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-6">
-                {Object.entries(STATUS_META).map(([key, meta]) => (
-                    <Card key={key}>
-                        <CardHeader className="py-3"><CardTitle className="text-sm font-medium">{meta.label}</CardTitle></CardHeader>
-                        <CardContent className="py-2"><p className={`text-3xl font-bold ${meta.color}`}>{statusCounts?.[key] ?? 0}</p></CardContent>
-                    </Card>
-                ))}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+                {Object.entries(STATUS_META).map(([key, meta]) => {
+                    const Icon = meta.icon;
+                    return (
+                        <div key={key} className={`${meta.bg} group relative overflow-hidden rounded-xl shadow-md transition-transform duration-300 hover:-translate-y-1`}>
+                            {/* Dekorasi Lingkaran Pudar (Premium Shine Effect) */}
+                            <div className="absolute -top-6 -right-6 w-24 h-24 bg-white/20 rounded-full blur-xl pointer-events-none transition-transform duration-500 group-hover:scale-150" />
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-10 translate-x-10 pointer-events-none transition-transform duration-500 group-hover:-translate-x-4 group-hover:translate-y-4" />
+                            
+                            <div className="relative p-5 text-white flex flex-col h-full justify-between min-h-[110px]">
+                                <div className="flex justify-between items-start">
+                                    <span className="text-sm font-medium opacity-90">{meta.label}</span>
+                                    <Icon className={`w-7 h-7 opacity-70 transition-all duration-500 ${meta.anim}`} />
+                                </div>
+                                <div className="mt-4">
+                                    <span className="text-3xl font-bold">{statusCounts?.[key] ?? 0}</span>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                })}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
@@ -159,6 +172,83 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                 </Card>
             </div>
 
+            {/* Grafik Tambahan Fase 5 */}
+            <section className="mt-8 space-y-6">
+                <h2 className="text-xl font-semibold">Grafik Statistik</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Top 5 User */}
+                    <Card>
+                        <CardHeader><CardTitle className="text-base">Top 5 User (Paling Banyak Tiket)</CardTitle></CardHeader>
+                        <CardContent>
+                            {topUsersAll?.length > 0 ? (
+                                <ReactECharts option={{
+                                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                                    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                                    xAxis: { type: 'value' },
+                                    yAxis: { type: 'category', data: [...topUsersAll].reverse().map((u: any) => u.username) },
+                                    series: [{
+                                        name: 'Total Tiket',
+                                        type: 'bar',
+                                        itemStyle: { color: '#3b82f6', borderRadius: [0, 4, 4, 0] },
+                                        data: [...topUsersAll].reverse().map((u: any) => u.total_tiket)
+                                    }]
+                                }} style={{ height: 250, width: '100%' }} />
+                            ) : (
+                                <p className="text-sm text-slate-400 text-center py-8">Belum ada data.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* CSAT Trend */}
+                    <Card>
+                        <CardHeader><CardTitle className="text-base">Tren CSAT Bulanan</CardTitle></CardHeader>
+                        <CardContent>
+                            {csatTrend?.length > 0 ? (
+                                <ReactECharts option={{
+                                    tooltip: { trigger: 'axis' },
+                                    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                                    xAxis: { type: 'category', data: csatTrend.map((d: any) => d.bulan) },
+                                    yAxis: { type: 'value', min: 1, max: 5 },
+                                    series: [{
+                                        name: 'Rata-rata CSAT',
+                                        type: 'line',
+                                        smooth: true,
+                                        itemStyle: { color: '#eab308' },
+                                        symbolSize: 8,
+                                        data: csatTrend.map((d: any) => d.rata_rata)
+                                    }]
+                                }} style={{ height: 250, width: '100%' }} />
+                            ) : (
+                                <p className="text-sm text-slate-400 text-center py-8">Belum ada data CSAT.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* Tiket Bulanan */}
+                    <Card className="lg:col-span-2">
+                        <CardHeader><CardTitle className="text-base">Tiket Bulanan (12 Bulan)</CardTitle></CardHeader>
+                        <CardContent>
+                            {tiketBulanan?.length > 0 ? (
+                                <ReactECharts option={{
+                                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                                    legend: { bottom: 0 },
+                                    grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+                                    xAxis: { type: 'category', data: tiketBulanan.map((d: any) => d.bulan) },
+                                    yAxis: { type: 'value' },
+                                    series: [
+                                        { name: 'Total Tiket', type: 'bar', itemStyle: { color: '#3b82f6', borderRadius: [4, 4, 0, 0] }, data: tiketBulanan.map((d: any) => d.total) },
+                                        { name: 'Selesai', type: 'bar', itemStyle: { color: '#22c55e', borderRadius: [4, 4, 0, 0] }, data: tiketBulanan.map((d: any) => d.selesai) },
+                                        { name: 'Aktif', type: 'bar', itemStyle: { color: '#f97316', borderRadius: [4, 4, 0, 0] }, data: tiketBulanan.map((d: any) => d.aktif) }
+                                    ]
+                                }} style={{ height: 300, width: '100%' }} />
+                            ) : (
+                                <p className="text-sm text-slate-400 text-center py-8">Belum ada data tiket bulanan.</p>
+                            )}
+                        </CardContent>
+                    </Card>
+                </div>
+            </section>
+
             {/* Kepatuhan SLA */}
             <section className="mt-8 space-y-6">
                 <div className="flex items-center gap-2">
@@ -199,17 +289,30 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-base">Distribusi Kepatuhan SLA</CardTitle></CardHeader>
                         <CardContent>
                             {slaPieChartData?.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <PieChart>
-                                        <Pie data={slaPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
-                                            {(slaPieChartData || []).map((_: any, i: number) => (
-                                                <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip />
-                                        <Legend />
-                                    </PieChart>
-                                </ResponsiveContainer>
+                                <ReactECharts option={{
+                                    tooltip: { trigger: 'item', formatter: '{b} : {c} ({d}%)' },
+                                    legend: { bottom: 0 },
+                                    series: [
+                                        {
+                                            name: 'Kepatuhan SLA',
+                                            type: 'pie',
+                                            radius: [20, 100],
+                                            center: ['50%', '50%'],
+                                            roseType: 'radius',
+                                            itemStyle: {
+                                                borderRadius: 5
+                                            },
+                                            label: {
+                                                show: false
+                                            },
+                                            data: (slaPieChartData || []).map((d: any, i: number) => ({
+                                                value: d.value,
+                                                name: d.name,
+                                                itemStyle: { color: PIE_COLORS[i % PIE_COLORS.length] }
+                                            }))
+                                        }
+                                    ]
+                                }} style={{ height: 300, width: '100%' }} />
                             ) : (
                                 <p className="text-sm text-slate-400 text-center py-8">Belum ada data SLA.</p>
                             )}
@@ -220,15 +323,20 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-base">Tren Kepatuhan SLA (12 Bulan)</CardTitle></CardHeader>
                         <CardContent>
                             {slaTrendData?.length > 0 ? (
-                                <ResponsiveContainer width="100%" height={300}>
-                                    <LineChart data={slaTrendData}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="bulan" />
-                                        <YAxis domain={[0, 100]} unit="%" />
-                                        <RechartsTooltip />
-                                        <Line type="monotone" dataKey="persentase_sla" name="Kepatuhan SLA (%)" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} />
-                                    </LineChart>
-                                </ResponsiveContainer>
+                                <ReactECharts option={{
+                                    tooltip: { trigger: 'axis', formatter: '{b}<br/>Kepatuhan SLA: {c}%' },
+                                    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                                    xAxis: { type: 'category', data: slaTrendData.map((d: any) => d.bulan) },
+                                    yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value} %' } },
+                                    series: [{
+                                        name: 'Kepatuhan SLA (%)',
+                                        type: 'line',
+                                        smooth: true,
+                                        itemStyle: { color: '#22c55e' },
+                                        symbolSize: 8,
+                                        data: slaTrendData.map((d: any) => d.persentase_sla)
+                                    }]
+                                }} style={{ height: 300, width: '100%' }} />
                             ) : (
                                 <p className="text-sm text-slate-400 text-center py-8">Belum ada data tren SLA.</p>
                             )}
@@ -240,17 +348,17 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                     <Card>
                         <CardHeader><CardTitle className="text-base">Kepatuhan SLA per Unit (Bulan Ini)</CardTitle></CardHeader>
                         <CardContent>
-                            <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={slaBarChartData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="unit_nama" />
-                                    <YAxis />
-                                    <RechartsTooltip />
-                                    <Legend />
-                                    <Bar dataKey="dalam_sla" name="Dalam SLA" fill="#22c55e" stackId="a" />
-                                    <Bar dataKey="breach" name="Breach" fill="#ef4444" stackId="a" />
-                                </BarChart>
-                            </ResponsiveContainer>
+                            <ReactECharts option={{
+                                tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                                legend: { bottom: 0 },
+                                grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+                                xAxis: { type: 'category', data: slaBarChartData.map((d: any) => d.unit_nama) },
+                                yAxis: { type: 'value' },
+                                series: [
+                                    { name: 'Dalam SLA', type: 'bar', stack: 'total', itemStyle: { color: '#22c55e' }, data: slaBarChartData.map((d: any) => d.dalam_sla) },
+                                    { name: 'Breach', type: 'bar', stack: 'total', itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] }, data: slaBarChartData.map((d: any) => d.breach) }
+                                ]
+                            }} style={{ height: 300, width: '100%' }} />
                         </CardContent>
                     </Card>
                 )}

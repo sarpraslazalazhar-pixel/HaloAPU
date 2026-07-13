@@ -115,6 +115,23 @@ class TicketWizardController extends Controller
                 'aksi' => 'dibuat',
                 'catatan' => 'Tiket dibuat oleh ' . auth()->user()->username,
             ]);
+
+            // 5. Integrasi Live Monitor (Booking Aset Generik)
+            $subUnit = \App\Models\SubUnit::find($request->sub_unit_id);
+            if ($subUnit && $subUnit->is_monitored) {
+                $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
+                $startTime = $request->form_data[(string) $subUnit->monitor_start_field_id] ?? now();
+                $endTime = $request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
+
+                \App\Models\RoomVehicleBooking::create([
+                    'ticket_id' => $ticket->id,
+                    'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
+                    'nama_aset' => $assetName,
+                    'tanggal_mulai' => \Carbon\Carbon::parse($startTime),
+                    'tanggal_selesai' => \Carbon\Carbon::parse($endTime),
+                    'status' => 'open', // Mengikuti status tiket
+                ]);
+            }
         });
 
         return redirect()->route('tiket.riwayat')->with('success', 'Tiket berhasil diajukan!');

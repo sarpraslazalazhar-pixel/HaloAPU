@@ -110,6 +110,40 @@ class DashboardController extends Controller
                 'value' => $items->sum('total'),
             ])->values();
 
+        // ── Top 5 User (all-time, using tickets table) ──
+        $topUsersAll = DB::table('tickets')
+            ->join('users', 'tickets.user_id', '=', 'users.id')
+            ->select('users.username', DB::raw('COUNT(*) as total_tiket'))
+            ->groupBy('users.id', 'users.username')
+            ->orderByDesc('total_tiket')
+            ->limit(5)
+            ->get();
+
+        // ── CSAT Trend (rata-rata per bulan, 12 bulan terakhir) ──
+        $csatTrend = DB::table('csats')
+            ->select(
+                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
+                DB::raw('ROUND(AVG(rating), 2) as rata_rata'),
+                DB::raw('COUNT(*) as total'),
+            )
+            ->where('created_at', '>=', now()->subYear())
+            ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
+            ->orderBy('bulan')
+            ->get();
+
+        // ── Tiket Bulanan (12 bulan terakhir) ──
+        $tiketBulanan = DB::table('tickets')
+            ->select(
+                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
+                DB::raw('COUNT(*) as total'),
+                DB::raw("SUM(CASE WHEN status = 'Selesai' THEN 1 ELSE 0 END) as selesai"),
+                DB::raw("SUM(CASE WHEN status NOT IN ('Selesai', 'Solve') THEN 1 ELSE 0 END) as aktif"),
+            )
+            ->where('created_at', '>=', now()->subYear())
+            ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
+            ->orderBy('bulan')
+            ->get();
+
         // ── SLA Compliance Data ──
         $slaPeriod = $request->get('sla_period', now()->format('Y-m'));
         $slaUnitId = $request->get('sla_unit_id');
@@ -177,6 +211,9 @@ class DashboardController extends Controller
             'totalTickets' => $totalTickets,
             'statusCounts' => $statusCounts,
             'topUsers' => $topUsers,
+            'topUsersAll' => $topUsersAll,
+            'csatTrend' => $csatTrend,
+            'tiketBulanan' => $tiketBulanan,
             'followUpTickets' => $followUpTickets,
             'monthlyChartData' => $monthlyChartData,
             'yearlyChartData' => $yearlyChartData,

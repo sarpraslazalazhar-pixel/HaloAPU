@@ -1,6 +1,6 @@
 import React from 'react';
 import { FormField } from '@/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 
 interface FormPreviewProps {
     fields: FormField[];

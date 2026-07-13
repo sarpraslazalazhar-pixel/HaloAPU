@@ -17,8 +17,8 @@ import {
     ChevronDown,
     User
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Button } from '@/Components/ui/button';
+import { Sheet, SheetContent, SheetTrigger } from '@/Components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,15 +26,26 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+} from "@/Components/ui/dropdown-menu";
 import { ThemeToggle } from '@/Components/ThemeToggle';
+import NotificationBell from '@/Components/NotificationBell';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
     title?: string;
 }
 
-const adminNavItems = [
+interface NavItem {
+    label: string;
+    icon?: any;
+    route?: string;
+    routeName?: string;
+    disabled?: boolean;
+    badge?: React.ReactNode;
+    children?: NavItem[];
+}
+
+const adminNavItems: NavItem[] = [
     { label: 'Dashboard', icon: LayoutDashboard, route: '/admin/dashboard', routeName: 'admin.dashboard' },
     { label: 'Tiketing', icon: Ticket, route: '/admin/tiket', routeName: 'admin.tiket.index' },
     { 
@@ -50,11 +61,11 @@ const adminNavItems = [
     },
     { label: 'Peraturan Form', icon: FileEdit, route: '/admin/peraturan-form', routeName: 'admin.peraturan-form.index' },
     { label: 'SLA', icon: Clock, route: '/admin/sla-config', routeName: 'admin.sla-config.index' },
-    { label: 'Reminder', icon: Bell, route: '#', disabled: true, badge: 'Fase 4' },
-    { label: 'CSAT', icon: Star, route: '#', disabled: true, badge: 'Fase 5' },
-    { label: 'Konfigurasi', icon: Settings, route: '#', disabled: true, badge: 'Fase 5' },
-    { label: 'User Mgt', icon: Users, route: '#', disabled: true, badge: 'Fase 5' },
-    { label: 'Admin Mgt', icon: Shield, route: '#', disabled: true, badge: 'Fase 5' },
+    { label: 'Reminder', icon: Bell, route: '/admin/reminder-config', routeName: 'admin.reminder-config.index' },
+    { label: 'CSAT', icon: Star, route: '/admin/csat', routeName: 'admin.csat.index' },
+    { label: 'Konfigurasi', icon: Settings, route: '/admin/konfigurasi', routeName: 'admin.konfigurasi.index' },
+    { label: 'Admin Mgt', icon: Shield, route: '/admin/manajemen-admin', routeName: 'admin.manajemen-admin.index' },
+    { label: 'User Mgt', icon: Users, route: '/admin/manajemen-user', routeName: 'admin.manajemen-user.index' },
 ];
 
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
@@ -112,7 +123,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                                     {isOpen && (
                                         <div className="ml-4 mt-1 grid gap-1 border-l pl-2">
                                             {item.children.map((child, cIndex) => {
-                                                const childActive = isActive(child.route);
+                                                const childActive = isActive(child.route || '');
                                                 return (
                                                     <Link
                                                         key={cIndex}
@@ -171,15 +182,17 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             <div className="flex flex-col min-w-0 overflow-hidden">
                 <header className="flex h-14 shrink-0 items-center gap-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 lg:h-[60px] lg:px-6">
                     <Sheet>
-                        <SheetTrigger asChild>
-                            <Button
-                                variant="outline"
-                                size="icon"
-                                className="shrink-0 md:hidden"
-                            >
-                                <Menu className="h-5 w-5" />
-                                <span className="sr-only">Toggle navigation menu</span>
-                            </Button>
+                        <SheetTrigger
+                            render={
+                                <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="shrink-0 md:hidden"
+                                />
+                            }
+                        >
+                            <Menu className="h-5 w-5" />
+                            <span className="sr-only">Toggle navigation menu</span>
                         </SheetTrigger>
                         <SheetContent side="left" className="flex flex-col p-0 w-72">
                             <SidebarContent />
@@ -188,6 +201,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                     
                     <div className="w-full flex-1"></div>
                     
+                    <NotificationBell />
                     <ThemeToggle />
                     
                     <Link href="/admin/logout" method="post" as="button" className="text-sm font-medium text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-md transition-colors flex items-center gap-2">
@@ -196,11 +210,13 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                     </Link>
 
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="secondary" size="icon" className="rounded-full">
-                                <User className="h-5 w-5" />
-                                <span className="sr-only">Toggle admin menu</span>
-                            </Button>
+                        <DropdownMenuTrigger
+                            render={
+                                <Button variant="secondary" size="icon" className="rounded-full" />
+                            }
+                        >
+                            <User className="h-5 w-5" />
+                            <span className="sr-only">Toggle admin menu</span>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuLabel>

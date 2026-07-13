@@ -59,4 +59,15 @@ class Ticket extends Model
     {
         return $this->hasOne(TicketSlaTracking::class);
     }
+
+    public function csat()
+    {
+        return $this->hasOne(Csat::class);
+    }
+
+    public function booking()
+    {
+        return $this->hasOne(RoomVehicleBooking::class);
+    }
 }
+

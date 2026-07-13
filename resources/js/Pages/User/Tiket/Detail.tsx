@@ -4,7 +4,8 @@ import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
-import { FileText, Download, Clock, User } from 'lucide-react';
+import { FileText, Download, Clock, User, Star } from 'lucide-react';
+import { CsatDialog } from '@/Components/CsatDialog';
 
 interface DetailProps {
     ticket: any;
@@ -12,6 +13,8 @@ interface DetailProps {
 }
 
 export default function Detail({ ticket, formFields }: DetailProps) {
+    const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
+
     return (
         <UserLayout title={`Tiket #TKT-${ticket.id}`}>
             <div className="max-w-4xl mx-auto py-8 px-4">
@@ -25,9 +28,14 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                     </h1>
                     <p className="text-slate-500 mt-1">Dibuat pada {new Date(ticket.created_at).toLocaleString()}</p>
                 </div>
-                <Link href={route('tiket.riwayat')}>
-                    <Button variant="outline">Kembali ke Riwayat</Button>
-                </Link>
+                <div className="flex items-center gap-2">
+                    {showCsat && (
+                        <CsatDialog ticketId={ticket.id} existingRating={ticket.csat?.rating} />
+                    )}
+                    <Link href={route('tiket.riwayat')}>
+                        <Button variant="outline">Kembali ke Riwayat</Button>
+                    </Link>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

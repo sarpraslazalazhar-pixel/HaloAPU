@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
+import { Button } from '@/Components/ui/button';
+import { Label } from '@/Components/ui/label';
+import { Input } from '@/Components/ui/input';
 import { useForm } from '@inertiajs/react';
 import { FormField } from '@/types';
 
@@ -24,7 +24,7 @@ export default function FieldConfigDialog({
         tipe_field: 'teks_pendek',
         wajib: false,
         opsi: [] as string[],
-        parent_field_id: '' as string | number,
+        parent_field_id: '' as string | number | null,
         trigger_value: '',
         opsiString: '',
     });
@@ -102,7 +102,7 @@ export default function FieldConfigDialog({
                         <h4 className="text-sm font-semibold mb-2">Logika Kondisional</h4>
                         <div>
                             <Label className="text-xs text-muted-foreground">Tampil jika parent:</Label>
-                            <select className="w-full border rounded-md p-2 text-sm" value={data.parent_field_id}
+                            <select className="w-full border rounded-md p-2 text-sm" value={data.parent_field_id || ''}
                                 onChange={e => setData('parent_field_id', e.target.value)}>
                                 <option value="">-- Selalu Tampil --</option>
                                 {allFields.filter(f => tipeDenganOpsi.includes(f.tipe_field) && f.id !== editField?.id).map(f => (

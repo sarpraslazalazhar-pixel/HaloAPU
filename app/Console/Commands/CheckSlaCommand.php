@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Admin;
 use App\Models\Ticket;
+use App\Notifications\SlaEscalationNotification;
 use App\Services\SlaCalculator;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -34,6 +36,12 @@ class CheckSlaCommand extends Command
 
             if ($currentTier > $previousTier) {
                 Log::info("SLA escalation: Tiket #{$ticket->id} naik ke Tier {$currentTier}");
+
+                $admins = Admin::all();
+                foreach ($admins as $admin) {
+                    $admin->notify(new SlaEscalationNotification($ticket, $sla, $currentTier));
+                }
+
                 $escalated++;
             }
         }

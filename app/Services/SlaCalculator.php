@@ -3,7 +3,7 @@
 namespace App\Services;
 
 use App\Models\SlaConfig;
-use App\Models\SystemConfig;
+// use App\Models\SystemConfig; // Available in Phase 5
 use App\Models\Ticket;
 use App\Models\TicketSlaTracking;
 use Carbon\Carbon;
@@ -30,7 +30,10 @@ class SlaCalculator
 
     protected function loadWorkingHours(): array
     {
-        $config = SystemConfig::where('key', 'jam_kerja')->first();
+        $config = null;
+        if (class_exists('App\Models\SystemConfig')) {
+            $config = \App\Models\SystemConfig::where('key', 'jam_kerja')->first();
+        }
 
         if (!$config) {
             return [
@@ -220,8 +223,10 @@ class SlaCalculator
                 $dayEnd = $end->copy();
             }
 
-            $minutesToday = $current->diffInMinutes($dayEnd);
-            $totalMinutes += $minutesToday;
+            if ($current->lt($dayEnd)) {
+                $minutesToday = $current->diffInMinutes($dayEnd);
+                $totalMinutes += $minutesToday;
+            }
 
             $current = $workEnd->copy()->addDay()->startOfDay();
         }

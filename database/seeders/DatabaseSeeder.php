@@ -24,6 +24,7 @@ class DatabaseSeeder extends Seeder
             AdminSeeder::class,
             UserSeeder::class,
             SlaConfigSeeder::class,
+            ReminderConfigSeeder::class,
         ]);
 
         DB::statement('SET FOREIGN_KEY_CHECKS=1');

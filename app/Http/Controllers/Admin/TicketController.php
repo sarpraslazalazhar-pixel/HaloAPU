@@ -126,6 +126,10 @@ class TicketController extends Controller
 
         $ticket->update(['status' => $newStatus]);
 
+        if ($ticket->booking) {
+            $ticket->booking->update(['status' => $newStatus]);
+        }
+
         TicketLog::create([
             'ticket_id' => $ticket->id,
             'admin_id' => auth('admin')->id(),

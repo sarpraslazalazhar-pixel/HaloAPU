@@ -15,6 +15,7 @@ class SystemConfigController extends Controller
         $configs = [
             'nama_sistem' => SystemConfig::getValue('nama_sistem', 'Halo APU'),
             'logo_path' => SystemConfig::getValue('logo_path'),
+            'favicon_path' => SystemConfig::getValue('favicon_path'),
             'banner_path' => SystemConfig::getValue('banner_path'),
             'email_admin' => SystemConfig::getValue('email_admin'),
             'wa_api_key' => SystemConfig::getValue('wa_api_key'),
@@ -112,6 +113,27 @@ class SystemConfigController extends Controller
 
         SystemConfig::setValue('banner_path', $path);
 
-        return back()->with('success', 'Banner berhasil diunggah.');
+        return back()->with('success', 'Background Login berhasil diunggah.');
+    }
+
+    public function uploadFavicon(Request $request)
+    {
+        $request->validate([
+            'favicon' => 'required|image|mimes:png,jpg,jpeg,ico,svg|max:2048',
+        ]);
+
+        $oldPath = SystemConfig::getValue('favicon_path');
+        if ($oldPath && Storage::disk('public')->exists($oldPath)) {
+            Storage::disk('public')->delete($oldPath);
+        }
+
+        $file = $request->file('favicon');
+        $filename = $file->hashName();
+        Storage::disk('public')->put('branding/' . $filename, file_get_contents($file->getPathname()));
+        $path = 'branding/' . $filename;
+
+        SystemConfig::setValue('favicon_path', $path);
+
+        return back()->with('success', 'Favicon berhasil diunggah.');
     }
 }

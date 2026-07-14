@@ -111,13 +111,10 @@ export default function ForgotPassword({ status }: { status?: string }) {
 
                     {/* HeroText */}
                     <section className="hidden md:flex flex-col text-right max-w-lg text-white">
-                        <h2 className="text-5xl font-bold mb-6 text-[#0088cc] drop-shadow-sm">Back Office System</h2>
+                        <h4 className="text-3xl font-bold mb-6 text-[#0088cc] drop-shadow-sm">PLATFORM LAYANAN TERPADU</h4>
                         <div className="italic text-gray-700 space-y-4">
                             <p className="text-xl">
-                                "Ketahuilah bahwa kemenangan bersama kesabaran, kelapangan bersama kesempitan, dan kesulitan bersama kemudahan".
-                            </p>
-                            <p className="text-lg font-semibold text-[#0088cc]">
-                                (HR Tirmidzi)
+                                Karena pelayanan terbaik kepada sesama amil dan nadzir adalah kunci utama mempercepat dan menyempurnakan pelayanan terbaik kita kepada umat.
                             </p>
                         </div>
                     </section>

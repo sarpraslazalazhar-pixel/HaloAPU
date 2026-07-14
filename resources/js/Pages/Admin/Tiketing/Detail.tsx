@@ -4,7 +4,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
-import { FileText, Download, Clock, User, ArrowLeft } from 'lucide-react';
+import { FileText, Download, Clock, User, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield } from 'lucide-react';
 
 const validTransitions: Record<string, string[]> = {
     open: ['on_proses', 'reject', 'pending'],
@@ -161,6 +161,110 @@ export default function TicketDetail({ ticket, formFields }: any) {
                             )}
                         </CardContent>
                     </Card>
+
+                    {/* SLA Tracking Card */}
+                    {ticket.sla_tracking && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Shield className="w-5 h-5" /> Status SLA
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="space-y-4">
+                                {/* Tier */}
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm text-slate-500">Tier Saat Ini</span>
+                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
+                                        ticket.sla_tracking.current_tier >= 3
+                                            ? 'bg-red-100 text-red-700'
+                                            : ticket.sla_tracking.current_tier >= 2
+                                            ? 'bg-orange-100 text-orange-700'
+                                            : ticket.sla_tracking.current_tier >= 1
+                                            ? 'bg-yellow-100 text-yellow-700'
+                                            : 'bg-green-100 text-green-700'
+                                    }`}>
+                                        <AlertTriangle className="w-3 h-3" />
+                                        {ticket.sla_tracking.current_tier > 0 ? `Tier ${ticket.sla_tracking.current_tier}` : 'Normal'}
+                                    </span>
+                                </div>
+
+                                {/* Respon */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-slate-500">SLA Respon</span>
+                                        {ticket.sla_tracking.responded_at ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                                <CheckCircle2 className="w-3 h-3" /> Tercapai
+                                            </span>
+                                        ) : ticket.sla_tracking.is_response_breached ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                                                <XCircle className="w-3 h-3" /> Terlanggar
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                                                <Timer className="w-3 h-3" /> Berjalan
+                                            </span>
+                                        )}
+                                    </div>
+                                    {ticket.sla_tracking.sla_response_deadline && (
+                                        <p className="text-xs text-slate-400">
+                                            Deadline: {new Date(ticket.sla_tracking.sla_response_deadline).toLocaleString('id-ID')}
+                                        </p>
+                                    )}
+                                    {ticket.sla_tracking.responded_at && (
+                                        <p className="text-xs text-slate-400">
+                                            Direspon: {new Date(ticket.sla_tracking.responded_at).toLocaleString('id-ID')}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Penyelesaian */}
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm text-slate-500">SLA Penyelesaian</span>
+                                        {ticket.sla_tracking.resolved_at ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                                <CheckCircle2 className="w-3 h-3" /> Tercapai
+                                            </span>
+                                        ) : ticket.sla_tracking.is_resolution_breached ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                                                <XCircle className="w-3 h-3" /> Terlanggar
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium">
+                                                <Timer className="w-3 h-3" /> Berjalan
+                                            </span>
+                                        )}
+                                    </div>
+                                    {ticket.sla_tracking.sla_resolution_deadline && (
+                                        <p className="text-xs text-slate-400">
+                                            Deadline: {new Date(ticket.sla_tracking.sla_resolution_deadline).toLocaleString('id-ID')}
+                                        </p>
+                                    )}
+                                    {ticket.sla_tracking.resolved_at && (
+                                        <p className="text-xs text-slate-400">
+                                            Diselesaikan: {new Date(ticket.sla_tracking.resolved_at).toLocaleString('id-ID')}
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Pause Status */}
+                                {ticket.sla_tracking.paused_at && (
+                                    <div className="flex items-center gap-2 p-2 bg-amber-50 rounded-md border border-amber-200">
+                                        <PauseCircle className="w-4 h-4 text-amber-600" />
+                                        <span className="text-xs text-amber-700 font-medium">SLA sedang di-pause</span>
+                                    </div>
+                                )}
+
+                                {/* Total Paused */}
+                                {ticket.sla_tracking.total_paused_minutes > 0 && (
+                                    <div className="text-xs text-slate-400">
+                                        Total waktu di-pause: {ticket.sla_tracking.total_paused_minutes} menit
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             </div>
         </AdminLayout>

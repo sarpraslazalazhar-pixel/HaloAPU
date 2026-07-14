@@ -4,6 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title inertia>{{ config('app.name', 'Halo APU') }}</title>
+    @php
+        $favicon = \App\Models\SystemConfig::getValue('favicon_path');
+    @endphp
+    @if($favicon)
+        <link rel="icon" href="{{ asset('storage/' . $favicon) }}" />
+    @else
+        <link rel="icon" href="{{ asset('favicon.ico') }}" />
+    @endif
     <script>
         (function() {
             var theme = localStorage.getItem('halo-apu-theme');

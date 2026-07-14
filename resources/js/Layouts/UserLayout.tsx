@@ -6,13 +6,10 @@ import {
     PlusCircle, 
     History, 
     Star, 
-    Menu,
     LogOut,
     User,
-    ChevronRight
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/Components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +20,8 @@ import {
 } from "@/Components/ui/dropdown-menu";
 import { ThemeToggle } from '@/Components/ThemeToggle';
 import ProfileModal from '@/Components/ProfileModal';
+import { BottomNav } from '@/Components/BottomNav';
+import type { BottomNavItem } from '@/Components/BottomNav';
 
 interface UserLayoutProps {
     children: React.ReactNode;
@@ -114,6 +113,13 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
         </div>
     );
 
+    const bottomNavItems: BottomNavItem[] = [
+        { label: 'Dashboard', icon: LayoutDashboard, route: '/dashboard' },
+        { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
+        { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
+        { label: 'CSAT', icon: Star, route: '/csat/riwayat' },
+    ];
+
     return (
         <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
             <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
@@ -125,17 +131,6 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
             
             <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 dark:bg-zinc-900/50">
                 <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
-                    <Sheet>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="shrink-0 md:hidden -ml-1">
-                                <Menu className="h-5 w-5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="left" className="flex flex-col p-0 w-72">
-                            <SidebarContent />
-                        </SheetContent>
-                    </Sheet>
-                    
                     <div className="flex-1" />
                     
                     <ThemeToggle />
@@ -176,11 +171,13 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
                     <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={user} isAdmin={false} />
                 </header>
                 <main className="flex-1 overflow-y-auto">
-                    <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8">
+                    <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
                         {children}
                     </div>
                 </main>
             </div>
+
+            <BottomNav items={bottomNavItems} />
         </div>
     );
 }

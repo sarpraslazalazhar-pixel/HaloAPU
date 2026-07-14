@@ -12,13 +12,14 @@ import {
     Settings, 
     Users, 
     Shield,
-    Menu,
     LogOut,
     ChevronDown,
-    User
+    User,
+    MoreHorizontal,
+    Grid3X3,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/Components/ui/sheet';
+import { Sheet, SheetContent } from '@/Components/ui/sheet';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -30,6 +31,8 @@ import {
 import { ThemeToggle } from '@/Components/ThemeToggle';
 import NotificationBell from '@/Components/NotificationBell';
 import ProfileModal from '@/Components/ProfileModal';
+import { BottomNav } from '@/Components/BottomNav';
+import type { BottomNavItem } from '@/Components/BottomNav';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -90,6 +93,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     const admin = auth.admin || auth.user;
     const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({});
     const [profileOpen, setProfileOpen] = useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
 
     useEffect(() => {
         if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
@@ -190,10 +194,24 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
         </div>
     );
 
+    const bottomNavItems: BottomNavItem[] = [
+        { label: 'Dashboard', icon: LayoutDashboard, route: '/admin/dashboard' },
+        { label: 'Tiket', icon: Ticket, route: '/admin/tiket' },
+        { label: 'Monitor', icon: Grid3X3, route: '/admin/monitor' },
+        { label: 'CSAT', icon: Star, route: '/admin/csat' },
+        { label: 'Lainnya', icon: MoreHorizontal, onClick: () => setSidebarOpen(true) },
+    ];
+
     return (
         <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
             <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
             {title && <Head title={title} />}
+            
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+                <SheetContent side="left" className="flex flex-col p-0 w-72">
+                    <SidebarContent />
+                </SheetContent>
+            </Sheet>
             
             <div className="hidden border-r bg-white dark:bg-zinc-950 md:flex flex-col overflow-hidden">
                 <SidebarContent />
@@ -201,17 +219,6 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             
             <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 dark:bg-zinc-900/50">
                 <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 dark:bg-zinc-950/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
-                    <Sheet>
-                        <SheetTrigger asChild>
-                            <Button variant="ghost" size="icon" className="shrink-0 md:hidden -ml-1">
-                                <Menu className="h-5 w-5" />
-                            </Button>
-                        </SheetTrigger>
-                        <SheetContent side="left" className="flex flex-col p-0 w-72">
-                            <SidebarContent />
-                        </SheetContent>
-                    </Sheet>
-                    
                     <div className="flex-1" />
                     
                     <NotificationBell />
@@ -253,11 +260,13 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                     <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={admin} isAdmin={true} />
                 </header>
                 <main className="flex-1 overflow-y-auto">
-                    <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8">
+                    <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
                         {children}
                     </div>
                 </main>
             </div>
+
+            <BottomNav items={bottomNavItems} />
         </div>
     );
 }

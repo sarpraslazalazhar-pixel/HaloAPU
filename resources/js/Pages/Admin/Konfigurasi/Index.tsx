@@ -52,7 +52,10 @@ export default function KonfigurasiIndex({ configs }: any) {
         if (!file) return;
         const formData = new window.FormData();
         formData.append(field, file);
-        const routeName = field === 'logo' ? 'admin.konfigurasi.upload-logo' : 'admin.konfigurasi.upload-banner';
+        let routeName = 'admin.konfigurasi.upload-logo';
+        if (field === 'banner') routeName = 'admin.konfigurasi.upload-banner';
+        if (field === 'favicon') routeName = 'admin.konfigurasi.upload-favicon';
+        
         router.post(route(routeName), formData, {
             preserveScroll: true,
         });
@@ -69,6 +72,7 @@ export default function KonfigurasiIndex({ configs }: any) {
                         <TabsTrigger value="branding">Branding</TabsTrigger>
                         <TabsTrigger value="notifikasi">Notifikasi</TabsTrigger>
                         <TabsTrigger value="operasional">Operasional</TabsTrigger>
+                        <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
                     </TabsList>
 
                     <form onSubmit={handleSubmit}>
@@ -90,11 +94,19 @@ export default function KonfigurasiIndex({ configs }: any) {
                                         )}
                                     </div>
                                     <div>
-                                        <Label>Banner</Label>
+                                        <Label>Favicon</Label>
+                                        <p className="text-xs text-muted-foreground mb-2">Format: PNG, JPG, ICO, SVG. Maks 2MB. (Akan tampil di tab browser)</p>
+                                        <Input type="file" accept="image/png,image/jpg,image/jpeg,image/x-icon,image/svg+xml" onChange={(e) => handleFileUpload('favicon', e)} />
+                                        {configs.favicon_path && (
+                                            <img src={`/storage/${configs.favicon_path}`} alt="Favicon" className="mt-2 h-12 object-contain border rounded p-1" />
+                                        )}
+                                    </div>
+                                    <div>
+                                        <Label>Background Login</Label>
                                         <p className="text-xs text-muted-foreground mb-2">Format: PNG, JPG. Maks 5MB.</p>
                                         <Input type="file" accept="image/png,image/jpg,image/jpeg" onChange={(e) => handleFileUpload('banner', e)} />
                                         {configs.banner_path && (
-                                            <img src={`/storage/${configs.banner_path}`} alt="Banner" className="mt-2 h-24 object-contain" />
+                                            <img src={`/storage/${configs.banner_path}`} alt="Background Login" className="mt-2 h-24 object-contain" />
                                         )}
                                     </div>
                                 </CardContent>
@@ -189,6 +201,56 @@ export default function KonfigurasiIndex({ configs }: any) {
                             <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
                         </div>
                     </form>
+
+                    <TabsContent value="scheduler" className="space-y-4 mt-4">
+                        <Card>
+                            <CardHeader><CardTitle>Jalankan Scheduler Manual</CardTitle></CardHeader>
+                            <CardContent className="space-y-4">
+                                <p className="text-sm text-muted-foreground">
+                                    Gunakan tombol di bawah untuk menjalankan pengecekan SLA dan reminder secara manual.
+                                    Ini berguna untuk testing atau jika cron job di server belum aktif.
+                                </p>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => router.post(route('admin.scheduler.sla-check'))}
+                                        className="justify-start"
+                                    >
+                                        🔍 Cek SLA Sekarang
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => router.post(route('admin.scheduler.booking-reminder'))}
+                                        className="justify-start"
+                                    >
+                                        📅 Kirim Reminder Booking
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => router.post(route('admin.scheduler.pending-reminder'))}
+                                        className="justify-start"
+                                    >
+                                        ⏳ Kirim Reminder Tiket Pending
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => router.post(route('admin.scheduler.csat-reminder'))}
+                                        className="justify-start"
+                                    >
+                                        ⭐ Kirim Reminder CSAT
+                                    </Button>
+                                </div>
+                                <div className="pt-3 border-t">
+                                    <Button
+                                        onClick={() => router.post(route('admin.scheduler.run-all'))}
+                                        className="w-full"
+                                    >
+                                        🚀 Jalankan Semua Scheduler
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </TabsContent>
                 </Tabs>
             </div>
         </AdminLayout>

@@ -101,6 +101,16 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::put('/konfigurasi', [SystemConfigController::class, 'update'])->name('konfigurasi.update');
         Route::post('/konfigurasi/upload-logo', [SystemConfigController::class, 'uploadLogo'])->name('konfigurasi.upload-logo');
         Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
+        Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
+
+        // Manual Scheduler
+        Route::prefix('scheduler')->name('scheduler.')->group(function () {
+            Route::post('/sla-check', [\App\Http\Controllers\Admin\SchedulerController::class, 'runSlaCheck'])->name('sla-check');
+            Route::post('/booking-reminder', [\App\Http\Controllers\Admin\SchedulerController::class, 'runBookingReminder'])->name('booking-reminder');
+            Route::post('/pending-reminder', [\App\Http\Controllers\Admin\SchedulerController::class, 'runPendingReminder'])->name('pending-reminder');
+            Route::post('/csat-reminder', [\App\Http\Controllers\Admin\SchedulerController::class, 'runCsatReminder'])->name('csat-reminder');
+            Route::post('/run-all', [\App\Http\Controllers\Admin\SchedulerController::class, 'runAll'])->name('run-all');
+        });
 
         // Manajemen Admin
         Route::resource('manajemen-admin', AdminManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-admin');

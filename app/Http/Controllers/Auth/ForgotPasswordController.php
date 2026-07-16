@@ -13,7 +13,9 @@ class ForgotPasswordController extends Controller
 {
     public function showForm()
     {
-        return Inertia::render('Auth/ForgotPassword');
+        return Inertia::render('Auth/ForgotPassword', [
+            'status' => session('status'),
+        ]);
     }
 
     public function sendResetLink(Request $request)
@@ -25,7 +27,7 @@ class ForgotPasswordController extends Controller
         );
 
         return $status === Password::RESET_LINK_SENT
-            ? back()->with('success', 'Link reset password telah dikirim ke email Anda.')
+            ? back()->with('status', 'Link reset password telah dikirim ke email Anda.')
             : back()->withErrors(['email' => __($status)]);
     }
 

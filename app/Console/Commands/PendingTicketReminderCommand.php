@@ -24,7 +24,7 @@ class PendingTicketReminderCommand extends Command
         $thresholdDays = $config->lead_time_value;
         $cutoff = now()->subDays($thresholdDays);
 
-        $tickets = Ticket::whereIn('status', ['pending', 'Pending'])
+        $tickets = Ticket::whereRaw('LOWER(status) = ?', ['pending'])
             ->where('updated_at', '<', $cutoff)
             ->with(['subUnit.unit', 'assignedAdmin'])
             ->get();

@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "2026-07-15.md",
+                "file": "PLAN-FASE-5.md",
                 "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "2026-07-15"
+              "title": "PLAN-FASE-5"
             }
           }
         ]
@@ -185,8 +185,8 @@
   },
   "active": "fa3f238c64c23a94",
   "lastOpenFiles": [
-    "DEPLOY-cPanel.md",
     "2026-07-15.md",
+    "DEPLOY-cPanel.md",
     "laporan/Login admin dan user.md",
     "Untitled 1.canvas",
     "Untitled.canvas",

@@ -21,7 +21,7 @@ class MonitorController extends Controller
         $now = Carbon::now();
 
         // Ambil semua booking yang relevan (hari ini dan ke depan)
-        $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan'])
+        $query = RoomVehicleBooking::whereNotIn('status', ['Ditolak', 'dibatalkan', 'selesai', 'solve'])
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->with(['ticket.user:id,username']);
 
@@ -35,6 +35,7 @@ class MonitorController extends Controller
         $monitoredSubUnits = \App\Models\SubUnit::where('is_monitored', true)->get();
         $configuredAssets = collect();
         foreach ($monitoredSubUnits as $su) {
+            $hasOptions = false;
             if ($su->monitor_asset_field_id) {
                 $field = \App\Models\FormField::find($su->monitor_asset_field_id);
                 if ($field && is_array($field->opsi)) {
@@ -45,7 +46,14 @@ class MonitorController extends Controller
                             'tipe' => $su->monitor_kategori ?? 'Lainnya'
                         ]);
                     }
+                    $hasOptions = true;
                 }
+            }
+            if (!$hasOptions) {
+                $configuredAssets->push((object)[
+                    'nama_aset' => $su->nama_layanan,
+                    'tipe' => $su->monitor_kategori ?? 'Lainnya'
+                ]);
             }
         }
 
@@ -127,7 +135,7 @@ class MonitorController extends Controller
      */
     protected function getCalendarData()
     {
-        $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan'])
+        $bookings = RoomVehicleBooking::whereNotIn('status', ['Ditolak', 'dibatalkan', 'selesai', 'solve'])
             ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
             ->with(['ticket.user:id,username'])
             ->orderBy('tanggal_mulai')

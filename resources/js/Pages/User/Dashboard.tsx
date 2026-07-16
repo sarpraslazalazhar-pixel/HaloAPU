@@ -19,7 +19,7 @@ const QUICK_ACTIONS = [
     { label: 'Monitor', desc: 'Pantau status ruangan & kendaraan', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/30' },
 ];
 
-export default function Dashboard() {
+export default function Dashboard({ recentTickets = [] }: { recentTickets?: any[] }) {
     const { auth } = usePage<any>().props;
     const user = auth?.user;
 
@@ -94,25 +94,53 @@ export default function Dashboard() {
                     </div>
                 </div>
 
-                <Card className="border-dashed border-border/50">
-                    <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
-                            <Ticket className="h-8 w-8 text-muted-foreground/60" />
+                {recentTickets && recentTickets.length > 0 ? (
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold">Tiket Terbaru Anda</h2>
+                            <Link href="/tiket/riwayat" className="text-sm font-medium text-primary hover:underline">Lihat Semua</Link>
                         </div>
-                        <div className="text-center max-w-sm">
-                            <h3 className="text-base font-semibold text-foreground">Belum ada tiket</h3>
-                            <p className="text-sm text-muted-foreground mt-1">
-                                Ajukan tiket pertama Anda untuk memulai layanan.
-                            </p>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {recentTickets.map((tiket) => (
+                                <Link key={tiket.id} href={`/tiket/${tiket.id}`}>
+                                    <Card className="hover:shadow-md transition-shadow">
+                                        <CardContent className="p-4">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <span className="text-xs font-semibold px-2 py-1 bg-primary/10 text-primary rounded-md">{tiket.ticket_number}</span>
+                                                <span className="text-xs text-muted-foreground">{new Date(tiket.created_at).toLocaleDateString('id-ID')}</span>
+                                            </div>
+                                            <h3 className="font-medium text-sm line-clamp-2">{tiket.sub_unit?.nama_layanan || 'Layanan Umum'}</h3>
+                                            <div className="mt-4 flex items-center justify-between">
+                                                <span className="text-xs font-medium text-muted-foreground">{tiket.status}</span>
+                                                <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                </Link>
+                            ))}
                         </div>
-                        <Link href="/tiket/buat">
-                            <Button className="gap-2">
-                                <PlusCircle className="h-4 w-4" />
-                                Buat Tiket Baru
-                            </Button>
-                        </Link>
-                    </CardContent>
-                </Card>
+                    </div>
+                ) : (
+                    <Card className="border-dashed border-border/50">
+                        <CardContent className="flex flex-col items-center justify-center py-12 gap-4">
+                            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+                                <Ticket className="h-8 w-8 text-muted-foreground/60" />
+                            </div>
+                            <div className="text-center max-w-sm">
+                                <h3 className="text-base font-semibold text-foreground">Belum ada tiket</h3>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Ajukan tiket pertama Anda untuk memulai layanan.
+                                </p>
+                            </div>
+                            <Link href="/tiket/buat">
+                                <Button className="gap-2">
+                                    <PlusCircle className="h-4 w-4" />
+                                    Buat Tiket Baru
+                                </Button>
+                            </Link>
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </UserLayout>
     );

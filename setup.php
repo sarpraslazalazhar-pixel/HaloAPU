@@ -10,12 +10,14 @@ $kernel->bootstrap();
 $app->make('config')->set('app.env', 'production');
 
 $commands = [
-    'key:generate' => ['--force' => true],
-    'migrate'      => ['--force' => true],
-    'storage:link' => [],
-    'config:cache' => [],
-    'route:cache'  => [],
-    'view:cache'   => [],
+    'optimize:clear' => [],
+    'key:generate'   => ['--force' => true],
+    'migrate'        => ['--force' => true],
+    'storage:link'   => [],
+    'config:cache'   => [],
+    'route:cache'    => [],
+    'view:cache'     => [],
+    'event:cache'    => [],
 ];
 
 foreach ($commands as $command => $params) {

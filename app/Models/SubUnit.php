@@ -12,6 +12,11 @@ class SubUnit extends Model
         'monitor_asset_field_id', 'monitor_start_field_id', 'monitor_end_field_id'
     ];
 
+    protected $casts = [
+        'aktif' => 'boolean',
+        'is_monitored' => 'boolean',
+    ];
+
     public function unit()
     {
         return $this->belongsTo(Unit::class);

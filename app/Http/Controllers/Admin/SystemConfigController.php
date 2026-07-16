@@ -17,6 +17,7 @@ class SystemConfigController extends Controller
             'logo_path' => SystemConfig::getValue('logo_path'),
             'favicon_path' => SystemConfig::getValue('favicon_path'),
             'banner_path' => SystemConfig::getValue('banner_path'),
+            'notification_sound_path' => SystemConfig::getValue('notification_sound_path'),
             'email_admin' => SystemConfig::getValue('email_admin'),
             'wa_api_key' => SystemConfig::getValue('wa_api_key'),
             'wa_number_key' => SystemConfig::getValue('wa_number_key'),
@@ -135,5 +136,26 @@ class SystemConfigController extends Controller
         SystemConfig::setValue('favicon_path', $path);
 
         return back()->with('success', 'Favicon berhasil diunggah.');
+    }
+
+    public function uploadSound(Request $request)
+    {
+        $request->validate([
+            'sound' => 'required|file|mimes:mp3,wav|max:5120',
+        ]);
+
+        $oldPath = SystemConfig::getValue('notification_sound_path');
+        if ($oldPath && Storage::disk('public')->exists($oldPath)) {
+            Storage::disk('public')->delete($oldPath);
+        }
+
+        $file = $request->file('sound');
+        $filename = $file->hashName();
+        Storage::disk('public')->put('branding/' . $filename, file_get_contents($file->getPathname()));
+        $path = 'branding/' . $filename;
+
+        SystemConfig::setValue('notification_sound_path', $path);
+
+        return back()->with('success', 'Suara Notifikasi berhasil diunggah.');
     }
 }

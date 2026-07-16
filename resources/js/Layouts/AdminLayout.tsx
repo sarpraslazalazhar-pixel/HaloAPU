@@ -33,6 +33,7 @@ import NotificationBell from '@/Components/NotificationBell';
 import ProfileModal from '@/Components/ProfileModal';
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
+import { useIdleTimer } from '@/hooks/useIdleTimer';
 
 interface AdminLayoutProps {
     children: React.ReactNode;
@@ -95,6 +96,8 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     const [profileOpen, setProfileOpen] = useState(false);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
+    useIdleTimer('/admin/logout');
+
     useEffect(() => {
         if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
         if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
@@ -115,7 +118,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-5 lg:h-[60px]">
                 <Link href="/admin/dashboard" className="flex items-center gap-2.5 min-w-0">
                     {appConfig?.logo_path && (
-                        <img src={`/storage/${appConfig.logo_path}`} alt={systemName} className="h-9 w-auto object-contain shrink-0" />
+                        <img id="displayBannerImg" src={`/storage/${appConfig.logo_path}`} alt="Banner" style={{ height: '55px', width: 'auto', objectFit: 'contain', display: 'inline-block' }} />
                     )}
                 </Link>
             </div>

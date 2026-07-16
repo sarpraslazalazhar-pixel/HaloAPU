@@ -373,7 +373,9 @@ export default function Wizard({ divisiList, jabatanList, unitList }: WizardProp
                                     </div>
                                 ) : (
                                     <div className="space-y-6">
-                                        {uploadFields.map(field => (
+                                        {uploadFields
+                                            .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                                            .map(field => (
                                             <div key={field.id}>
                                                 <div className="flex items-center gap-2">
                                                     <Label className="text-sm font-medium">{field.label}</Label>
@@ -475,7 +477,9 @@ export default function Wizard({ divisiList, jabatanList, unitList }: WizardProp
                                             </CardTitle>
                                         </CardHeader>
                                         <CardContent className="py-2 space-y-2 text-sm">
-                                            {uploadFields.map(field => {
+                                            {uploadFields
+                                                .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                                                .map(field => {
                                                 const file = data.attachments[String(field.id)];
                                                 return (
                                                     <div key={field.id} className="flex justify-between">

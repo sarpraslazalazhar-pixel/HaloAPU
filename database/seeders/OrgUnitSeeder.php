@@ -18,6 +18,8 @@ class OrgUnitSeeder extends Seeder
             'Divisi LAZ'         => ['Fundraising', 'Program', 'KPw'],
             'Divisi Keuangan'    => ['Penyaluran & Treasury', 'Penerimaan', 'Akuntansi'],
             'Divisi Wakaf'       => ['Fundraising', 'Pengelolaan Wakaf'],
+            'Direktur Utama'     => ['Direktur Utama'],
+            'SAI'                => ['SAI'],
         ];
 
         foreach ($mapping as $divisiNama => $units) {

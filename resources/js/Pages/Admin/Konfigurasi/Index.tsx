@@ -147,6 +147,22 @@ export default function KonfigurasiIndex({ configs }: any) {
                                         <Input id="nomor_wa_fallback" value={data.nomor_wa_fallback} onChange={(e) => setData('nomor_wa_fallback', e.target.value)} />
                                         {errors.nomor_wa_fallback && <div className="text-destructive text-xs mt-1">{errors.nomor_wa_fallback}</div>}
                                     </div>
+                                    <div className="pt-4 border-t">
+                                        <Label>Suara Tiket Masuk</Label>
+                                        <p className="text-xs text-muted-foreground mb-2">Format: MP3, WAV. Maks 5MB. (Diputar saat ada tiket baru)</p>
+                                        <Input type="file" accept="audio/mp3,audio/wav" onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            const formData = new window.FormData();
+                                            formData.append('sound', file);
+                                            router.post(route('admin.konfigurasi.upload-sound'), formData, { preserveScroll: true });
+                                        }} />
+                                        {configs.notification_sound_path && (
+                                            <audio controls className="mt-2" src={`/storage/${configs.notification_sound_path}`}>
+                                                Browser Anda tidak mendukung elemen audio.
+                                            </audio>
+                                        )}
+                                    </div>
                                 </CardContent>
                             </Card>
                         </TabsContent>

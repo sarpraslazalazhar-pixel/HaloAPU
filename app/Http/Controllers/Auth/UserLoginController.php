@@ -25,7 +25,7 @@ class UserLoginController extends Controller
 
         if (Auth::attempt([$field => $credentials['username'], 'password' => $credentials['password']], $request->boolean('remember'))) {
             $request->session()->regenerate();
-            return redirect()->intended(route('dashboard'));
+            return redirect()->intended(route('dashboard'))->with('success', 'Selamat datang kembali!');
         }
 
         return back()->withErrors([

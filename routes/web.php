@@ -10,19 +10,21 @@ use App\Http\Controllers\Admin\SystemConfigController;
 use App\Http\Controllers\Admin\AdminManagementController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\MonitorController;
-use Inertia\Inertia;
+use App\Http\Controllers\HomeController;
+use App\Http\Controllers\Auth\RegisterController;
+use App\Http\Controllers\User\DashboardController;
+use App\Http\Controllers\Api\DropdownController;
 
-Route::get('/', function () {
-    return redirect()->route('login');
-});
+Route::get('/', HomeController::class);
+
+// TV Dashboard (Public)
+Route::get('/tv', [\App\Http\Controllers\TvDashboardController::class, 'index'])->name('tv.index');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [UserLoginController::class, 'showLoginForm'])->name('login');
     Route::post('login', [UserLoginController::class, 'login'])->middleware('throttle:5,1');
     
-    Route::get('register', function () {
-        return Inertia::render('Auth/Register');
-    })->name('register');
+    Route::get('register', [RegisterController::class, 'showForm'])->name('register');
 
     // Lupa Password
     Route::get('/lupa-password', [ForgotPasswordController::class, 'showForm'])->name('password.request');
@@ -33,9 +35,7 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('logout', [UserLoginController::class, 'logout'])->name('logout');
-    Route::get('/dashboard', function () {
-        return inertia('User/Dashboard');
-    })->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Tickets Wizard
     Route::get('/tiket/buat', [\App\Http\Controllers\User\TicketWizardController::class, 'create'])->name('tiket.create');
@@ -61,17 +61,9 @@ Route::middleware('auth')->group(function () {
 
     // API dropdown (dependent dropdown & dynamic form)
     Route::prefix('api')->group(function () {
-        Route::get('/org-units/{divisiId}', function ($divisiId) {
-            return \App\Models\OrgUnit::where('divisi_id', $divisiId)->orderBy('nama_unit_organisasi')->get();
-        })->name('api.org-units');
-    
-        Route::get('/sub-units/{unitId}', function ($unitId) {
-            return \App\Models\SubUnit::where('unit_id', $unitId)->where('aktif', true)->orderBy('nama_layanan')->get();
-        })->name('api.sub-units');
-    
-        Route::get('/form-fields/{subUnitId}', function ($subUnitId) {
-            return \App\Models\FormField::where('sub_unit_id', $subUnitId)->orderBy('urutan')->get();
-        })->name('api.form-fields');
+        Route::get('/org-units/{divisiId}', [DropdownController::class, 'orgUnits'])->name('api.org-units');
+        Route::get('/sub-units/{unitId}', [DropdownController::class, 'subUnits'])->name('api.sub-units');
+        Route::get('/form-fields/{subUnitId}', [DropdownController::class, 'formFields'])->name('api.form-fields');
     });
 });
 
@@ -102,6 +94,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/konfigurasi/upload-logo', [SystemConfigController::class, 'uploadLogo'])->name('konfigurasi.upload-logo');
         Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
         Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
+        Route::post('/konfigurasi/upload-sound', [SystemConfigController::class, 'uploadSound'])->name('konfigurasi.upload-sound');
 
         // Manual Scheduler
         Route::prefix('scheduler')->name('scheduler.')->group(function () {

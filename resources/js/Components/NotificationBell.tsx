@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { router } from '@inertiajs/react';
+import { router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Bell, Check, Clock, ExternalLink, Volume2, VolumeX } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
@@ -21,13 +21,18 @@ export default function NotificationBell() {
     const previousCountRef = useRef<number | null>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
+    const { appConfig } = usePage<any>().props;
+
     // Inisialisasi audio
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            audioRef.current = new Audio('/sounds/ting-ting-ting.mp3');
+            const soundUrl = appConfig?.notification_sound_path 
+                ? `/storage/${appConfig.notification_sound_path}` 
+                : '/sounds/ting-ting-ting.mp3';
+            audioRef.current = new Audio(soundUrl);
             audioRef.current.volume = 0.7;
         }
-    }, []);
+    }, [appConfig?.notification_sound_path]);
 
     const fetchUnreadCount = useCallback(async () => {
         try {

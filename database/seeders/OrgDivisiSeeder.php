@@ -16,5 +16,7 @@ class OrgDivisiSeeder extends Seeder
         OrgDivisi::create(['nama_divisi' => 'Divisi LAZ']);
         OrgDivisi::create(['nama_divisi' => 'Divisi Sekretariat']);
         OrgDivisi::create(['nama_divisi' => 'Divisi Wakaf']);
+        OrgDivisi::create(['nama_divisi' => 'Direktur Utama']);
+        OrgDivisi::create(['nama_divisi' => 'SAI']);
     }
 }

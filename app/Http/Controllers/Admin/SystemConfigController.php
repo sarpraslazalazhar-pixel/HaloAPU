@@ -158,4 +158,42 @@ class SystemConfigController extends Controller
 
         return back()->with('success', 'Suara Notifikasi berhasil diunggah.');
     }
+
+    public function serveNotificationSound()
+    {
+        $path = SystemConfig::getValue('notification_sound_path');
+        if ($path && Storage::disk('public')->exists($path)) {
+            $filePath = Storage::disk('public')->path($path);
+            $mimeType = $this->getAudioMimeType($filePath);
+            return response()->file($filePath, [
+                'Content-Type' => $mimeType,
+                'Accept-Ranges' => 'bytes',
+                'Cache-Control' => 'public, max-age=3600',
+            ]);
+        }
+
+        $defaultPath = public_path('sounds/ting-ting-ting.mp3');
+        if (file_exists($defaultPath)) {
+            return response()->file($defaultPath, [
+                'Content-Type' => 'audio/mpeg',
+                'Accept-Ranges' => 'bytes',
+                'Cache-Control' => 'public, max-age=3600',
+            ]);
+        }
+
+        abort(404);
+    }
+
+    private function getAudioMimeType(string $filePath): string
+    {
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+        return match ($extension) {
+            'mp3' => 'audio/mpeg',
+            'wav' => 'audio/wav',
+            'ogg' => 'audio/ogg',
+            'aac', 'm4a' => 'audio/aac',
+            'webm' => 'audio/webm',
+            default => 'audio/mpeg',
+        };
+    }
 }

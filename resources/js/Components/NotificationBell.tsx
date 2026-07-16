@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Bell, Check, Clock, ExternalLink, Volume2, VolumeX } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
 import {
@@ -23,16 +24,115 @@ export default function NotificationBell() {
 
     const { appConfig } = usePage<any>().props;
 
-    // Inisialisasi audio
+    // Inisialisasi audio (menggunakan fetch & blob untuk bypass Internet Download Manager, dengan fallback)
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            const soundUrl = appConfig?.notification_sound_path 
-                ? `/storage/${appConfig.notification_sound_path}` 
-                : '/sounds/ting-ting-ting.mp3';
-            audioRef.current = new Audio(soundUrl);
-            audioRef.current.volume = 0.7;
+            const cacheBuster = appConfig?.notification_sound_path ? `?v=${encodeURIComponent(appConfig.notification_sound_path)}` : '';
+            const soundUrl = route('system.notification-sound') + cacheBuster;
+            
+            // Coba fetch blob dulu (bypass IDM)
+            fetch(soundUrl)
+                .then(res => {
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    return res.arrayBuffer();
+                })
+                .then(buffer => {
+                    const blob = new Blob([buffer], { type: 'audio/mpeg' });
+                    const objectUrl = URL.createObjectURL(blob);
+                    const audio = new Audio(objectUrl);
+                    audio.volume = 0.7;
+                    // Test apakah audio bisa di-load
+                    audio.addEventListener('canplaythrough', () => {
+                        audioRef.current = audio;
+                        console.log('Audio loaded via blob successfully');
+                    }, { once: true });
+                    audio.addEventListener('error', () => {
+                        console.warn('Blob audio gagal, fallback ke URL langsung');
+                        URL.revokeObjectURL(objectUrl);
+                        initDirectAudio(soundUrl);
+                    }, { once: true });
+                    audio.load();
+                })
+                .catch(err => {
+                    console.warn("Fetch blob gagal, fallback ke URL langsung:", err);
+                    initDirectAudio(soundUrl);
+                });
+
+            function initDirectAudio(url: string) {
+                const audio = new Audio(url);
+                audio.volume = 0.7;
+                audio.preload = 'auto';
+                audio.addEventListener('canplaythrough', () => {
+                    audioRef.current = audio;
+                    console.log('Audio loaded via direct URL');
+                }, { once: true });
+                audio.addEventListener('error', (e) => {
+                    console.error('Direct audio juga gagal:', e);
+                    // Last resort: coba file default langsung
+                    const fallback = new Audio('/sounds/ting-ting-ting.mp3');
+                    fallback.volume = 0.7;
+                    fallback.preload = 'auto';
+                    audioRef.current = fallback;
+                    console.log('Using fallback default sound');
+                }, { once: true });
+                audio.load();
+            }
         }
     }, [appConfig?.notification_sound_path]);
+
+    const playNotificationSound = useCallback(() => {
+        if (!audioRef.current) {
+            console.warn('Audio belum siap, mencoba inisialisasi ulang...');
+            const fallback = new Audio('/sounds/ting-ting-ting.mp3');
+            fallback.volume = 0.7;
+            audioRef.current = fallback;
+        }
+        
+        const audio = audioRef.current;
+        audio.currentTime = 0;
+        
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+                console.log('Audio play failed:', error);
+                if (error.name === 'NotAllowedError') {
+                    toast('Browser memblokir suara notifikasi. Klik halaman ini agar suara bisa diputar.', {
+                        icon: '⚠️',
+                        id: 'audio-blocked-toast',
+                        duration: 6000,
+                    });
+                } else {
+                    // Coba fallback terakhir
+                    try {
+                        const emergency = new Audio('/sounds/ting-ting-ting.mp3');
+                        emergency.volume = 0.7;
+                        emergency.play().catch(() => {
+                            toast.error('Gagal memutar suara notifikasi. Pastikan file suara tersedia.', {
+                                id: 'audio-error-toast',
+                            });
+                        });
+                        audioRef.current = emergency;
+                    } catch {
+                        toast.error('Gagal memutar suara notifikasi. Pastikan file suara tersedia.', {
+                            id: 'audio-error-toast',
+                        });
+                    }
+                }
+            });
+        }
+    }, []);
+
+    const handleToggleMute = useCallback(() => {
+        toggleMute();
+        // Jika isMuted sebelumnya true, berarti sekarang akan jadi false (unmuted)
+        // Kita test play suara sekalian me-unlock audio context dari browser
+        if (isMuted) {
+            playNotificationSound();
+            toast.success('Suara notifikasi diaktifkan', { id: 'unmuted-toast' });
+        } else {
+            toast('Suara notifikasi dimatikan', { icon: '🔇', id: 'muted-toast' });
+        }
+    }, [isMuted, toggleMute, playNotificationSound]);
 
     const fetchUnreadCount = useCallback(async () => {
         try {
@@ -41,7 +141,7 @@ export default function NotificationBell() {
 
             // Play sound jika count naik & tidak muted
             if (!isMuted && previousCountRef.current !== null && newCount > previousCountRef.current) {
-                audioRef.current?.play().catch(() => {});
+                playNotificationSound();
             }
 
             previousCountRef.current = newCount;
@@ -134,7 +234,7 @@ export default function NotificationBell() {
 
     return (
         <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={toggleMute} title={isMuted ? 'Aktifkan suara' : 'Matikan suara'}>
+            <Button variant="ghost" size="icon" onClick={handleToggleMute} title={isMuted ? 'Aktifkan suara' : 'Matikan suara'}>
                 {isMuted ? <VolumeX className="h-4 w-4 text-muted-foreground" /> : <Volume2 className="h-4 w-4" />}
             </Button>
 

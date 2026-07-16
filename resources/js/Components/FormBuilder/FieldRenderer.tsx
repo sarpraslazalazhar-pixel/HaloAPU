@@ -149,19 +149,24 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
                     </div>
                 );
 
-            case 'nominal_rp':
+            case 'nominal_rp': {
+                const displayValue = value ? new Intl.NumberFormat('id-ID').format(Number(value)) : '';
                 return (
                     <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Rp</span>
                         <input
-                            type="number"
+                            type="text"
                             className={`w-full border rounded-md p-2 pl-10 ${errorClass}`}
-                            value={value || ''}
-                            onChange={e => onChange(field.id, e.target.value)}
+                            value={displayValue}
+                            onChange={e => {
+                                const raw = e.target.value.replace(/\D/g, '');
+                                onChange(field.id, raw);
+                            }}
                             required={field.wajib}
                         />
                     </div>
                 );
+            }
             case 'upload_gambar':
             case 'upload_file':
                 return (

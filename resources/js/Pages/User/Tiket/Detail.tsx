@@ -4,7 +4,10 @@ import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
-import { FileText, Download, Clock, User, XCircle } from 'lucide-react';
+import { TicketTimeline } from '@/Components/TicketTimeline';
+import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
+import { AttachmentViewer } from '@/Components/AttachmentViewer';
+import { FileText, XCircle, Eye } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 
@@ -107,9 +110,21 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                                 <div key={field.id}>
                                     <span className="text-sm text-slate-500">{field.label}:</span>
                                     <p className="font-medium mt-1">
-                                        {ticket.form_data && ticket.form_data[field.id] !== undefined && ticket.form_data[field.id] !== null && ticket.form_data[field.id] !== ''
-                                            ? String(ticket.form_data[field.id])
-                                            : '-'}
+                                        {field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file'
+                                            ? (ticket.attachments?.find((a: any) => a.field_id == field.id)
+                                                ? (
+                                                    <AttachmentViewer attachment={ticket.attachments.find((a: any) => a.field_id == field.id)} viewRoute="tiket.view" downloadRoute="tiket.download">
+                                                        <button type="button" className="text-blue-600 hover:underline flex items-center gap-1">
+                                                            <Eye className="w-4 h-4"/> {ticket.attachments.find((a: any) => a.field_id == field.id).original_name}
+                                                        </button>
+                                                    </AttachmentViewer>
+                                                )
+                                                : '-')
+                                            : ticket.form_data && ticket.form_data[field.id] !== undefined && ticket.form_data[field.id] !== null && ticket.form_data[field.id] !== ''
+                                                ? (field.tipe_field === 'nominal_rp' 
+                                                    ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(ticket.form_data[field.id]) || 0) 
+                                                    : String(ticket.form_data[field.id]))
+                                                : '-'}
                                     </p>
                                 </div>
                             ))
@@ -119,7 +134,7 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                     </CardContent>
                 </Card>
 
-                {ticket.attachments && ticket.attachments.length > 0 && (
+                {ticket.attachments?.length > 0 && (
                     <Card className="md:col-span-2">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
@@ -128,55 +143,21 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-2">
-                                {ticket.attachments.map((att: any) => (
-                                    <div key={att.id} className="flex items-center justify-between p-3 border rounded-lg">
-                                        <div className="flex items-center gap-3">
-                                            <FileText className="h-4 w-4 text-slate-400" />
-                                            <span className="text-sm font-medium">{att.original_name || att.file_path?.split('/').pop()}</span>
-                                        </div>
-                                        <a
-                                            href={route('tiket.download', att.id)}
-                                            className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                                        >
-                                            <Download className="h-4 w-4" />
-                                            Download
-                                        </a>
-                                    </div>
-                                ))}
-                            </div>
+                            <TicketAttachmentList attachments={ticket.attachments} downloadRoute="tiket.download" />
                         </CardContent>
                     </Card>
                 )}
 
-                {ticket.logs && ticket.logs.length > 0 && (
+                {ticket.logs?.length > 0 && (
                     <Card className="md:col-span-2">
                         <CardHeader>
                             <CardTitle className="flex items-center gap-2">
-                                <Clock className="h-5 w-5" />
+                                <FileText className="h-5 w-5" />
                                 Timeline Respon
                             </CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4 border-l-2 border-slate-200 ml-3 pl-4">
-                                {ticket.logs.map((log: any) => (
-                                    <div key={log.id} className="relative">
-                                        <div className="absolute -left-[23px] top-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white"></div>
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <p className="text-sm font-semibold capitalize">{log.aksi}</p>
-                                            {log.admin && (
-                                                <span className="text-xs text-slate-400 flex items-center gap-1">
-                                                    <User className="h-3 w-3" /> {log.admin.username}
-                                                </span>
-                                            )}
-                                        </div>
-                                        {log.catatan && <p className="text-sm text-slate-600">{log.catatan}</p>}
-                                        <p className="text-xs text-slate-400 mt-1">
-                                            {new Date(log.timestamp || log.created_at).toLocaleString()}
-                                        </p>
-                                    </div>
-                                ))}
-                            </div>
+                            <TicketTimeline logs={ticket.logs} />
                         </CardContent>
                     </Card>
                 )}

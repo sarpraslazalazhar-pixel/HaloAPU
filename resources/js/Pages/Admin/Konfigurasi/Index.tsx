@@ -158,7 +158,7 @@ export default function KonfigurasiIndex({ configs }: any) {
                                             router.post(route('admin.konfigurasi.upload-sound'), formData, { preserveScroll: true });
                                         }} />
                                         {configs.notification_sound_path && (
-                                            <audio controls className="mt-2" src={`/storage/${configs.notification_sound_path}`}>
+                                            <audio controls className="mt-2" src={`${route('system.notification-sound')}?v=${encodeURIComponent(configs.notification_sound_path)}`}>
                                                 Browser Anda tidak mendukung elemen audio.
                                             </audio>
                                         )}

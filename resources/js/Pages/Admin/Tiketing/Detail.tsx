@@ -4,7 +4,10 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
-import { FileText, Download, Clock, User, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield } from 'lucide-react';
+import { TicketTimeline } from '@/Components/TicketTimeline';
+import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
+import { AttachmentViewer } from '@/Components/AttachmentViewer';
+import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye } from 'lucide-react';
 
 const validTransitions: Record<string, string[]> = {
     open: ['on_proses', 'reject', 'pending'],
@@ -27,15 +30,21 @@ export default function TicketDetail({ ticket, formFields }: any) {
     };
 
     const renderFormValue = (field: any) => {
-        const value = ticket.form_data?.[field.id];
-        if (value === undefined || value === null) return '-';
         if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
             const attachment = ticket.attachments?.find((a: any) => a.field_id == field.id);
             return attachment ? (
-                <a href={route('admin.tiket.download', attachment.id)} className="text-blue-600 hover:underline flex items-center gap-1">
-                    <Download className="w-4 h-4" /> {attachment.original_name}
-                </a>
+                <AttachmentViewer attachment={attachment} viewRoute="admin.tiket.view" downloadRoute="admin.tiket.download">
+                    <button type="button" className="text-blue-600 hover:underline flex items-center gap-1">
+                        <Eye className="w-4 h-4" /> {attachment.original_name}
+                    </button>
+                </AttachmentViewer>
             ) : '-';
+        }
+
+        const value = ticket.form_data?.[field.id];
+        if (value === undefined || value === null) return '-';
+        if (field.tipe_field === 'nominal_rp') {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
         }
         if (field.tipe_field === 'checkbox' && typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
         if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) return value.join(', ');
@@ -89,41 +98,16 @@ export default function TicketDetail({ ticket, formFields }: any) {
                         <Card>
                             <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Lampiran</CardTitle></CardHeader>
                             <CardContent>
-                                <div className="space-y-2">
-                                    {ticket.attachments.map((att: any) => (
-                                        <div key={att.id} className="flex items-center justify-between p-3 border rounded-lg">
-                                            <span className="text-sm font-medium">{att.original_name}</span>
-                                            <a href={route('admin.tiket.download', att.id)} className="text-blue-600 hover:underline flex items-center gap-1 text-sm">
-                                                <Download className="w-4 h-4" /> Download
-                                            </a>
-                                        </div>
-                                    ))}
-                                </div>
+                                <TicketAttachmentList attachments={ticket.attachments} downloadRoute="admin.tiket.download" />
                             </CardContent>
                         </Card>
                     )}
 
                     {ticket.logs?.length > 0 && (
                         <Card>
-                            <CardHeader><CardTitle className="flex items-center gap-2"><Clock className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
+                            <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
                             <CardContent>
-                                <div className="space-y-4 border-l-2 border-slate-200 ml-3 pl-4">
-                                    {ticket.logs.map((log: any) => (
-                                        <div key={log.id} className="relative">
-                                            <div className="absolute -left-[23px] top-1 w-3 h-3 bg-blue-500 rounded-full border-2 border-white" />
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <p className="text-sm font-semibold capitalize">{log.aksi}</p>
-                                                {log.admin && (
-                                                    <span className="text-xs text-slate-400 flex items-center gap-1">
-                                                        <User className="w-3 h-3" /> {log.admin.username}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            {log.catatan && <p className="text-sm text-slate-600">{log.catatan}</p>}
-                                            <p className="text-xs text-slate-400 mt-1">{new Date(log.timestamp).toLocaleString()}</p>
-                                        </div>
-                                    ))}
-                                </div>
+                                <TicketTimeline logs={ticket.logs} />
                             </CardContent>
                         </Card>
                     )}

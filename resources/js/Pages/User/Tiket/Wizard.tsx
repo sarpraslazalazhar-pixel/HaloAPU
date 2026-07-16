@@ -5,54 +5,14 @@ import { Stepper } from '@/Components/Stepper';
 import { Button } from '@/Components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/Components/ui/card';
 import { Label } from '@/Components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
 import { Input } from '@/Components/ui/input';
+import { RadioCardGrid } from '@/Components/RadioCardGrid';
 import { useDependentDropdown } from '@/hooks/useDependentDropdown';
 import DynamicField from '@/Components/DynamicForm/DynamicField';
 import axios from 'axios';
 import { FormField as FormFieldType } from '@/types';
-import { Trash2, FileText, FileImage, CheckCircle2, AlertCircle, Info, Upload, Building2, HeartHandshake, Coins, Building } from 'lucide-react';
+import { Trash2, FileText, CheckCircle2, AlertCircle, Info, Upload } from 'lucide-react';
 import Swal from 'sweetalert2';
-
-const getIconForDivisi = (nama: string) => {
-    const lower = nama.toLowerCase();
-    if (lower.includes('sekretariat')) return <Building2 className="w-6 h-6 mb-2" />;
-    if (lower.includes('laz')) return <HeartHandshake className="w-6 h-6 mb-2" />;
-    if (lower.includes('keuangan')) return <Coins className="w-6 h-6 mb-2" />;
-    return <Building className="w-6 h-6 mb-2" />;
-};
-
-const RadioCardGrid = ({ options, value, onChange, labelKey, valueKey = 'id', disabled = false, showIcon = false }: any) => {
-    if (!options || options.length === 0) {
-        return <p className="text-sm text-gray-500 italic p-3 bg-slate-50 border rounded-lg">Tidak ada pilihan tersedia.</p>;
-    }
-    
-    return (
-        <div className="flex flex-wrap justify-center gap-3">
-            {options.map((opt: any) => {
-                const optValue = String(opt[valueKey]);
-                const isSelected = value === optValue;
-                
-                return (
-                    <button
-                        key={optValue}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => onChange(optValue)}
-                        className={`flex-1 basis-[150px] max-w-[220px] p-3 border rounded-lg text-center flex flex-col items-center justify-center transition-all min-h-[4rem] font-medium text-sm
-                            ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50 border-gray-200 text-gray-400' :
-                            isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 
-                            'bg-white border-blue-600 text-blue-600 hover:bg-blue-50 hover:shadow-sm'}
-                        `}
-                    >
-                        {showIcon && getIconForDivisi(opt[labelKey])}
-                        <span>{opt[labelKey]}</span>
-                    </button>
-                );
-            })}
-        </div>
-    );
-};
 
 const STEPS = [
     { label: 'Data Pengaju', description: 'Divisi, unit organisasi, jabatan' },
@@ -139,6 +99,15 @@ export default function Wizard({ divisiList, jabatanList, unitList }: WizardProp
     const handleFileChange = (fieldId: number, file: File | null) => {
         const newAttachments = { ...data.attachments };
         if (file) {
+            if (file.size > 2 * 1024 * 1024) {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'File Terlalu Besar',
+                    text: 'Ukuran lampiran maksimal adalah 2 MB.',
+                    confirmButtonColor: '#3b82f6'
+                });
+                return;
+            }
             newAttachments[String(fieldId)] = file;
         } else {
             delete newAttachments[String(fieldId)];
@@ -212,6 +181,31 @@ export default function Wizard({ divisiList, jabatanList, unitList }: WizardProp
         }));
         post(route('tiket.store'));
     };
+
+function ReviewSection({ title, icon, children }: { title: string; icon?: React.ReactNode; children: React.ReactNode }) {
+    return (
+        <Card className="border-green-200">
+            <CardHeader className="py-3">
+                <CardTitle className="text-sm flex items-center gap-2">
+                    {icon}
+                    {title}
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="py-2 space-y-1 text-sm">
+                {children}
+            </CardContent>
+        </Card>
+    );
+}
+
+function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+    return (
+        <div className="flex justify-between">
+            <span className="text-slate-500">{label}</span>
+            <span className="font-medium text-right max-w-[60%] truncate">{value}</span>
+        </div>
+    );
+}
 
     const getSelectedName = (list: any[], id: string | number) => {
         const item = list.find((i: any) => String(i.id) === String(id));
@@ -395,60 +389,22 @@ export default function Wizard({ divisiList, jabatanList, unitList }: WizardProp
 
                         {activeStep === 4 && (
                             <div className="space-y-4">
-                                <Card className="border-green-200">
-                                    <CardHeader className="py-3">
-                                        <CardTitle className="text-sm flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                            Data Pengaju
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="py-2 space-y-1 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">Divisi</span>
-                                            <span className="font-medium">{getSelectedName(divisiList, data.divisi_id)}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">Unit Organisasi</span>
-                                            <span className="font-medium">{orgUnits.options.find((u: any) => String(u.id) === String(data.org_unit_id))?.nama_unit_organisasi || '-'}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">Jabatan</span>
-                                            <span className="font-medium">{getSelectedName(jabatanList, data.jabatan_id)}</span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                <ReviewSection title="Data Pengaju" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
+                                    <ReviewRow label="Divisi" value={getSelectedName(divisiList, data.divisi_id)} />
+                                    <ReviewRow label="Unit Organisasi" value={orgUnits.options.find((u: any) => String(u.id) === String(data.org_unit_id))?.nama_unit_organisasi || '-'} />
+                                    <ReviewRow label="Jabatan" value={getSelectedName(jabatanList, data.jabatan_id)} />
+                                </ReviewSection>
 
-                                <Card className="border-green-200">
-                                    <CardHeader className="py-3">
-                                        <CardTitle className="text-sm flex items-center gap-2">
-                                            <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                            Layanan Tujuan
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="py-2 space-y-1 text-sm">
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">Unit</span>
-                                            <span className="font-medium">{getSelectedName(unitList, data.unit_id)}</span>
-                                        </div>
-                                        <div className="flex justify-between">
-                                            <span className="text-slate-500">Sub Unit</span>
-                                            <span className="font-medium">{subUnits.options.find((s: any) => String(s.id) === String(data.sub_unit_id))?.nama_layanan || '-'}</span>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                                <ReviewSection title="Layanan Tujuan" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
+                                    <ReviewRow label="Unit" value={getSelectedName(unitList, data.unit_id)} />
+                                    <ReviewRow label="Sub Unit" value={subUnits.options.find((s: any) => String(s.id) === String(data.sub_unit_id))?.nama_layanan || '-'} />
+                                </ReviewSection>
 
                                 {nonUploadFields.length > 0 && (
-                                    <Card className="border-green-200">
-                                        <CardHeader className="py-3">
-                                            <CardTitle className="text-sm flex items-center gap-2">
-                                                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                                Isian Form
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="py-2 space-y-2 text-sm">
-                                            {nonUploadFields
-                                                .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
-                                                .map(field => {
+                                    <ReviewSection title="Isian Form" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
+                                        {nonUploadFields
+                                            .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                                            .map(field => {
                                                 const value = data.form_data[field.id];
                                                 const displayValue = field.tipe_field === 'checkbox'
                                                     ? (value ? 'Ya' : 'Tidak')
@@ -456,40 +412,22 @@ export default function Wizard({ divisiList, jabatanList, unitList }: WizardProp
                                                         ? (value?.length ? value.join(', ') : '-')
                                                         : field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file'
                                                             ? (value?.name || '-')
-                                                            : value ?? '-';
-                                                return (
-                                                    <div key={field.id} className="flex justify-between">
-                                                        <span className="text-slate-500">{field.label}</span>
-                                                        <span className="font-medium text-right max-w-[60%] truncate">{displayValue}</span>
-                                                    </div>
-                                                );
+                                                            : field.tipe_field === 'nominal_rp' && value
+                                                                ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value))
+                                                                : value ?? '-';
+                                                return <ReviewRow key={field.id} label={field.label} value={displayValue} />;
                                             })}
-                                        </CardContent>
-                                    </Card>
+                                    </ReviewSection>
                                 )}
 
                                 {uploadFields.length > 0 && (
-                                    <Card className="border-green-200">
-                                        <CardHeader className="py-3">
-                                            <CardTitle className="text-sm flex items-center gap-2">
-                                                <CheckCircle2 className="w-4 h-4 text-green-500" />
-                                                Lampiran
-                                            </CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="py-2 space-y-2 text-sm">
-                                            {uploadFields
-                                                .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
-                                                .map(field => {
-                                                const file = data.attachments[String(field.id)];
-                                                return (
-                                                    <div key={field.id} className="flex justify-between">
-                                                        <span className="text-slate-500">{field.label}</span>
-                                                        <span className="font-medium">{file?.name || <span className="text-red-400">Belum diupload</span>}</span>
-                                                    </div>
-                                                );
-                                            })}
-                                        </CardContent>
-                                    </Card>
+                                    <ReviewSection title="Lampiran" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
+                                        {uploadFields
+                                            .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                                            .map(field => (
+                                                <ReviewRow key={field.id} label={field.label} value={data.attachments[String(field.id)]?.name || <span className="text-red-400">Belum diupload</span>} />
+                                            ))}
+                                    </ReviewSection>
                                 )}
 
                                 {Object.keys(errors).length > 0 && (

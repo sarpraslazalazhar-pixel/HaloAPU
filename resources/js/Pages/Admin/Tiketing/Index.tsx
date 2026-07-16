@@ -123,8 +123,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
         <AdminLayout title="Daftar Tiket">
             <Head title="Daftar Tiket" />
 
-            <div className="bg-white dark:bg-slate-900 rounded-lg border p-4 mb-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+            <div className="bg-white dark:bg-slate-900 rounded-lg border p-4 mb-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <select className="rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={unitId} onChange={e => { setUnitId(e.target.value); setSubUnitId(''); setSubUnits([]); if (e.target.value) fetch(`/api/sub-units/${e.target.value}`).then(r => r.json()).then(setSubUnits); }}>
                         <option value="">Semua Unit</option>
                         {units.map((u: any) => <option key={u.id} value={u.id}>{u.nama_unit}</option>)}
@@ -133,16 +133,6 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                         <option value="">Semua Sub Unit</option>
                         {subUnits.map((s: any) => <option key={s.id} value={s.id}>{s.nama_layanan}</option>)}
                     </select>
-                    <div className="flex flex-wrap items-center gap-2 p-2 border rounded-md">
-                        <span className="text-xs text-slate-500 mr-1">Status:</span>
-                        {STATUS_LIST.map(s => (
-                            <label key={s.value} className="flex items-center gap-1 text-xs cursor-pointer">
-                                <input type="checkbox" checked={selectedStatuses.includes(s.value)} onChange={() => toggleStatus(s.value)} className="rounded" />
-                                {s.label}
-                            </label>
-                        ))}
-                    </div>
-                    <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
                     <select className="rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={divisiId} onChange={e => setDivisiId(e.target.value)}>
                         <option value="">Semua Divisi</option>
                         {divisiList.map((d: any) => <option key={d.id} value={d.id}>{d.nama_divisi}</option>)}
@@ -152,7 +142,29 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                         {orgUnitList.map((o: any) => <option key={o.id} value={o.id}>{o.nama_unit_organisasi}</option>)}
                     </select>
                 </div>
-                <Button onClick={applyFilter}>Terapkan Filter</Button>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Status</span>
+                        <div className="flex flex-wrap items-center gap-3 p-2.5 border rounded-md bg-slate-50/50 dark:bg-slate-800/50">
+                            {STATUS_LIST.map(s => (
+                                <label key={s.value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                                    <input type="checkbox" checked={selectedStatuses.includes(s.value)} onChange={() => toggleStatus(s.value)} className="rounded border-slate-300 text-primary focus:ring-primary" />
+                                    {s.label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    
+                    <div className="flex flex-col gap-1.5">
+                        <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Tanggal</span>
+                        <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
+                    </div>
+                </div>
+
+                <div className="flex justify-end pt-2">
+                    <Button onClick={applyFilter} className="w-full md:w-auto">Terapkan Filter</Button>
+                </div>
             </div>
 
             <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: Ticket) => t.id} />

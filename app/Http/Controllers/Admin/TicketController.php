@@ -153,4 +153,18 @@ class TicketController extends Controller
 
         return Storage::disk('public')->download($attachment->file_path, $attachment->original_name);
     }
+
+    public function viewAttachment(TicketAttachment $attachment)
+    {
+        if (!Storage::disk('public')->exists($attachment->file_path)) {
+            abort(404, 'File tidak ditemukan.');
+        }
+
+        $headers = [
+            'Content-Type' => $attachment->mime_type,
+            'Content-Disposition' => 'inline; filename="' . $attachment->original_name . '"'
+        ];
+
+        return response()->file(Storage::disk('public')->path($attachment->file_path), $headers);
+    }
 }

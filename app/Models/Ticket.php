@@ -13,6 +13,12 @@ class Ticket extends Model
 
     protected $casts = [
         'form_data' => 'array',
+        'user_id' => 'integer',
+        'divisi_id' => 'integer',
+        'org_unit_id' => 'integer',
+        'jabatan_id' => 'integer',
+        'unit_id' => 'integer',
+        'sub_unit_id' => 'integer',
     ];
 
     public function user()

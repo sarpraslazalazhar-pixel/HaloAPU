@@ -63,6 +63,12 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
 
     const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files.length > 0) {
+            const file = e.target.files[0];
+            if (file.size > 5 * 1024 * 1024) {
+                alert('Ukuran foto maksimal 5 MB.');
+                if (fileInputRef.current) fileInputRef.current.value = '';
+                return;
+            }
             const reader = new FileReader();
             reader.addEventListener('load', () =>
                 setImgSrc(reader.result?.toString() || '')

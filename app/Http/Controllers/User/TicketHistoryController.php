@@ -60,6 +60,25 @@ class TicketHistoryController extends Controller
         return Storage::disk('public')->download($attachment->file_path, $attachment->original_name);
     }
 
+    public function viewAttachment(TicketAttachment $attachment)
+    {
+        $ticket = $attachment->ticket;
+        if ($ticket->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        if (!Storage::disk('public')->exists($attachment->file_path)) {
+            abort(404, 'File tidak ditemukan.');
+        }
+
+        $headers = [
+            'Content-Type' => $attachment->mime_type,
+            'Content-Disposition' => 'inline; filename="' . $attachment->original_name . '"'
+        ];
+
+        return response()->file(Storage::disk('public')->path($attachment->file_path), $headers);
+    }
+
     public function show(Ticket $ticket)
     {
         // Pastikan tiket milik user yang login

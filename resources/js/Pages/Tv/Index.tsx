@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { Head, router } from '@inertiajs/react';
 import { Card, CardContent } from '@/Components/ui/card';
 import { Badge } from '@/Components/ui/badge';
-import { Clock, Calendar, CheckCircle, Ticket as TicketIcon, Activity, AlertCircle, User, ArrowRight } from 'lucide-react';
+import { Clock, Calendar, CheckCircle, Ticket as TicketIcon, Activity, AlertCircle, User, ArrowRight, Play } from 'lucide-react';
 import { format } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { Toaster, toast } from 'react-hot-toast';
@@ -59,23 +59,82 @@ const statCards = [
     },
 ];
 
-export default function TvDashboard({ stats, recentTickets, upcomingBookings, notificationSound, logoPath }: TvDashboardProps) {
+export default function TvDashboard({ stats: initialStats, recentTickets: initialRecentTickets, upcomingBookings: initialUpcomingBookings, notificationSound, logoPath }: TvDashboardProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
-    const prevLatestTicketIdRef = useRef<number | null>(null);
-    const audioRef = useRef<HTMLAudioElement | null>(null);
+    const [hasInteracted, setHasInteracted] = useState(false);
+    const [data, setData] = useState({ stats: initialStats, recent_tickets: initialRecentTickets, upcoming_bookings: initialUpcomingBookings });
+    const [latestTicket, setLatestTicket] = useState<any>(null);
+    const previousTicketsRef = useRef<any[]>(initialRecentTickets);
     const tableRef = useRef<HTMLDivElement>(null);
-    const [newTicketIds, setNewTicketIds] = useState<Set<number>>(new Set());
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const audioBufferRef = useRef<AudioBuffer | null>(null);
+    
+    // Missing state & refs restored
+    const prevLatestTicketIdRef = useRef<number | null>(null);
     const prevTicketsRef = useRef<any[]>([]);
+    const [newTicketIds, setNewTicketIds] = useState<Set<number>>(new Set());
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
-            const soundUrl = notificationSound
-                ? `/storage/${notificationSound}`
-                : '/sounds/ting-ting-ting.mp3';
-            audioRef.current = new Audio(soundUrl);
-            audioRef.current.volume = 1.0;
+            const cacheBuster = notificationSound ? `?v=${encodeURIComponent(notificationSound)}` : '';
+            const soundUrl = route('system.notification-sound') + cacheBuster;
+            
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            audioContextRef.current = new AudioContextClass();
+
+            fetch(soundUrl)
+                .then(res => res.arrayBuffer())
+                .then(buffer => audioContextRef.current?.decodeAudioData(buffer))
+                .then(decodedData => {
+                    if (decodedData) audioBufferRef.current = decodedData;
+                })
+                .catch(err => console.error("Gagal memuat file audio:", err));
         }
     }, [notificationSound]);
+
+    const fetchDashboardData = useCallback(async () => {
+        try {
+            const response = await axios.get(route('tv.index'), {
+                headers: { Accept: 'application/json' }
+            });
+            const newData = response.data;
+
+            if (previousTicketsRef.current) {
+                const newTickets = newData.recent_tickets.filter((ticket: any) =>
+                    !previousTicketsRef.current.some((prev: any) => prev.id === ticket.id)
+                );
+
+                if (newTickets.length > 0) {
+                    setLatestTicket(newTickets[0]);
+                    
+                    if (audioContextRef.current && audioBufferRef.current) {
+                        try {
+                            if (audioContextRef.current.state === 'suspended') {
+                                audioContextRef.current.resume();
+                            }
+                            const source = audioContextRef.current.createBufferSource();
+                            source.buffer = audioBufferRef.current;
+                            const gainNode = audioContextRef.current.createGain();
+                            gainNode.gain.value = 1.0;
+                            source.connect(gainNode);
+                            gainNode.connect(audioContextRef.current.destination);
+                            source.start(0);
+                        } catch (e) {
+                            console.error('Web Audio API error:', e);
+                            toast.error('Gagal memutar suara notifikasi. Pastikan browser mengizinkan pemutaran audio.', {
+                                id: 'audio-error'
+                            });
+                        }
+                    }
+                }
+            }
+
+            previousTicketsRef.current = newData.recent_tickets;
+            setData(newData);
+        } catch (error) {
+            console.error('Error fetching TV dashboard data:', error);
+        }
+    }, []);
 
     useEffect(() => {
         const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -94,7 +153,24 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
             const currentLatestId = recentTickets[0].id;
 
             if (prevLatestTicketIdRef.current !== null && currentLatestId > prevLatestTicketIdRef.current) {
-                audioRef.current?.play().catch(e => console.log('Audio play failed:', e));
+                if (hasInteracted) {
+                    if (audioContextRef.current && audioBufferRef.current) {
+                        try {
+                            if (audioContextRef.current.state === 'suspended') {
+                                audioContextRef.current.resume();
+                            }
+                            const source = audioContextRef.current.createBufferSource();
+                            source.buffer = audioBufferRef.current;
+                            const gainNode = audioContextRef.current.createGain();
+                            gainNode.gain.value = 1.0;
+                            source.connect(gainNode);
+                            gainNode.connect(audioContextRef.current.destination);
+                            source.start(0);
+                        } catch (e) {
+                            console.error('Web Audio API error:', e);
+                        }
+                    }
+                }
 
             if (prevTicketsRef.current.length > 0) {
                 const prevIds = new Set(prevTicketsRef.current.map((t: any) => t.id));
@@ -164,6 +240,39 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
             default: return 'bg-slate-100 text-slate-700 border-slate-300';
         }
     };
+
+    if (!hasInteracted) {
+        return (
+            <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white p-6 relative overflow-hidden">
+                <div className="absolute inset-0 bg-blue-900/20 blur-3xl rounded-full w-96 h-96 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                
+                <div className="relative z-10 flex flex-col items-center max-w-lg text-center">
+                    <div className="w-24 h-24 bg-blue-600/20 rounded-3xl flex items-center justify-center mb-8 shadow-[0_0_50px_rgba(37,99,235,0.3)]">
+                        <Activity className="w-12 h-12 text-blue-500 animate-pulse" />
+                    </div>
+                    
+                    <h1 className="text-4xl md:text-5xl font-bold mb-4 tracking-tight">Live Dashboard</h1>
+                    <p className="text-slate-400 mb-10 text-lg md:text-xl leading-relaxed">
+                        Dashboard pasif ini membutuhkan interaksi pertama kali untuk mengizinkan browser memutar suara notifikasi otomatis.
+                    </p>
+                    
+                    <button
+                        onClick={() => {
+                            setHasInteracted(true);
+                            // Trik untuk me-unlock audio context di browser modern
+                            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                                audioContextRef.current.resume();
+                            }
+                        }}
+                        className="group relative inline-flex items-center justify-center gap-3 px-8 py-4 font-bold text-white transition-all duration-200 bg-blue-600 border border-transparent rounded-2xl hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-600 focus:ring-offset-slate-900"
+                    >
+                        <Play className="w-6 h-6 fill-white" />
+                        Mulai Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 text-slate-900 font-sans flex flex-col overflow-hidden">

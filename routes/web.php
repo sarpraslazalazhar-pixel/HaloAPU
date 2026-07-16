@@ -19,6 +19,7 @@ Route::get('/', HomeController::class);
 
 // TV Dashboard (Public)
 Route::get('/tv', [\App\Http\Controllers\TvDashboardController::class, 'index'])->name('tv.index');
+Route::get('/system/notification-sound', [\App\Http\Controllers\Admin\SystemConfigController::class, 'serveNotificationSound'])->name('system.notification-sound');
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [UserLoginController::class, 'showLoginForm'])->name('login');
@@ -46,6 +47,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/tiket/{ticket}', [\App\Http\Controllers\User\TicketHistoryController::class, 'show'])->name('tiket.show');
     Route::patch('/tiket/{ticket}/batal', [\App\Http\Controllers\User\TicketHistoryController::class, 'cancel'])->name('tiket.batal');
     Route::get('/tiket/download/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'download'])->name('tiket.download');
+    Route::get('/tiket/view/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'viewAttachment'])->name('tiket.view');
 
     // Profil User
     Route::put('/profil', [\App\Http\Controllers\User\ProfileController::class, 'update'])->name('profil.update');
@@ -151,6 +153,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::prefix('tiket')->name('tiket.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\TicketController::class, 'index'])->name('index');
             Route::get('/download/{attachment}', [\App\Http\Controllers\Admin\TicketController::class, 'downloadAttachment'])->name('download');
+            Route::get('/view/{attachment}', [\App\Http\Controllers\Admin\TicketController::class, 'viewAttachment'])->name('view');
             Route::get('/{ticket}', [\App\Http\Controllers\Admin\TicketController::class, 'show'])->name('show');
             Route::patch('/{ticket}/status', [\App\Http\Controllers\Admin\TicketController::class, 'updateStatus'])->name('status');
         });

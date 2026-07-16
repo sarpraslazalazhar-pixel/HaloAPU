@@ -6,15 +6,33 @@ import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
+import { DataTable } from '@/Components/DataTable';
 import { Pagination } from '@/Components/Pagination';
 import { StatusBadge } from '@/Components/StatusBadge';
-import { Search, X } from 'lucide-react';
+import { Search, X, ExternalLink } from 'lucide-react';
 
 interface RiwayatProps {
     tickets: any;
     filters: any;
     statuses: string[];
 }
+
+const columns = [
+    { key: 'id', header: 'No. Tiket', render: (t: any) => `#TKT-${t.id}` },
+    { key: 'unit', header: 'Unit', render: (t: any) => t.unit?.nama_unit || '-' },
+    { key: 'sub_unit', header: 'Layanan', render: (t: any) => t.sub_unit?.nama_layanan || '-' },
+    { key: 'status', header: 'Status', render: (t: any) => <StatusBadge status={t.status} /> },
+    { key: 'created_at', header: 'Tanggal', render: (t: any) => new Date(t.created_at).toLocaleDateString() },
+    {
+        key: 'aksi',
+        header: 'Aksi',
+        render: (t: any) => (
+            <Link href={route('tiket.show', t.id)} className="text-blue-600 hover:underline inline-flex items-center gap-1 text-sm">
+                Lihat Detail <ExternalLink className="w-3 h-3" />
+            </Link>
+        ),
+    },
+];
 
 export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
     const [showFilter, setShowFilter] = useState(false);
@@ -126,45 +144,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
                     <CardTitle>Daftar Tiket Anda</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {tickets.data && tickets.data.length > 0 ? (
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr className="border-b">
-                                        <th className="py-3 px-4 font-medium text-slate-500">No. Tiket</th>
-                                        <th className="py-3 px-4 font-medium text-slate-500">Unit</th>
-                                        <th className="py-3 px-4 font-medium text-slate-500">Layanan</th>
-                                        <th className="py-3 px-4 font-medium text-slate-500">Status</th>
-                                        <th className="py-3 px-4 font-medium text-slate-500">Tanggal</th>
-                                        <th className="py-3 px-4 font-medium text-slate-500">Aksi</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {tickets.data.map((ticket: any) => (
-                                        <tr key={ticket.id} className="border-b hover:bg-slate-50">
-                                            <td className="py-3 px-4">#TKT-{ticket.id}</td>
-                                            <td className="py-3 px-4">{ticket.unit?.nama_unit}</td>
-                                            <td className="py-3 px-4">{ticket.sub_unit?.nama_layanan}</td>
-                                            <td className="py-3 px-4">
-                                                <StatusBadge status={ticket.status} />
-                                            </td>
-                                            <td className="py-3 px-4">{new Date(ticket.created_at).toLocaleDateString()}</td>
-                                            <td className="py-3 px-4">
-                                                <Link href={route('tiket.show', ticket.id)} className="text-blue-600 hover:underline">
-                                                    Lihat Detail
-                                                </Link>
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                    ) : (
-                        <div className="text-center py-8 text-slate-500">
-                            Belum ada tiket yang diajukan.
-                        </div>
-                    )}
-
+                    <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: any) => t.id} emptyMessage="Belum ada tiket yang diajukan." />
                     <Pagination links={tickets.links} />
                 </CardContent>
             </Card>

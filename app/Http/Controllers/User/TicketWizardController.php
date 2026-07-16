@@ -50,7 +50,7 @@ class TicketWizardController extends Controller
             'sub_unit_id' => 'required|exists:sub_units,id',
             'form_data' => 'required|array',
             'attachments' => 'nullable|array',
-            'attachments.*' => 'file|max:10240', // max 10MB per file
+            'attachments.*' => 'file|max:2048', // max 2MB per file
         ]);
 
         // Validasi form_data berdasarkan form_fields yang wajib (hanya yg visible)
@@ -84,9 +84,23 @@ class TicketWizardController extends Controller
             ]);
 
             // 2. Simpan attachments
-            if ($request->hasFile('attachments')) {
-                foreach ($request->file('attachments') as $fieldId => $file) {
-                    $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
+            $uploadedFiles = $request->file('attachments');
+            if (!empty($uploadedFiles) && is_array($uploadedFiles)) {
+                foreach ($uploadedFiles as $fieldId => $file) {
+                    if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) {
+                        \Log::error("Invalid file upload for field $fieldId", [
+                            'is_file' => $file ? is_a($file, \Illuminate\Http\UploadedFile::class) : false,
+                            'valid' => $file ? $file->isValid() : false
+                        ]);
+                        continue;
+                    }
+
+                    // Bypass getRealPath() bug in Windows by passing string path
+                    $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                        "ticket-attachments/{$ticket->id}",
+                        $file->getPathname(),
+                        $file->hashName()
+                    );
 
                     $field = $formFields->firstWhere('id', $fieldId);
 

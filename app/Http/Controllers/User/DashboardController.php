@@ -10,14 +10,24 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $recentTickets = Ticket::where('user_id', auth()->id())
+        $userId = auth()->id();
+        
+        $recentTickets = Ticket::where('user_id', $userId)
             ->with(['subUnit:id,nama_layanan'])
             ->orderBy('created_at', 'desc')
             ->take(5)
             ->get();
 
+        $stats = [
+            'aktif' => Ticket::where('user_id', $userId)->whereNotIn('status', ['selesai', 'ditolak', 'batal'])->count(),
+            'diproses' => Ticket::where('user_id', $userId)->where('status', 'on_proses')->count(),
+            'selesai' => Ticket::where('user_id', $userId)->where('status', 'selesai')->count(),
+            'ditolak' => Ticket::where('user_id', $userId)->where('status', 'ditolak')->count(),
+        ];
+
         return inertia('User/Dashboard', [
-            'recentTickets' => $recentTickets
+            'recentTickets' => $recentTickets,
+            'stats' => $stats,
         ]);
     }
 }

@@ -82,7 +82,7 @@ class TicketHistoryController extends Controller
     public function show(Ticket $ticket)
     {
         // Pastikan tiket milik user yang login
-        if ($ticket->user_id !== auth()->id()) {
+        if ((int)$ticket->user_id !== (int)auth()->id()) {
             abort(403, 'Anda tidak memiliki akses ke tiket ini.');
         }
 

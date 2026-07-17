@@ -5,23 +5,23 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { FolderOpen, Loader2, CheckCircle2, XCircle, PlusCircle, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
 
-const STATUS_CARDS = [
-    { label: 'Tiket Aktif', icon: FolderOpen, count: 0, bg: 'from-blue-500 to-blue-600', anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
-    { label: 'Sedang Diproses', icon: Loader2, count: 0, bg: 'from-orange-500 to-orange-600', anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
-    { label: 'Selesai', icon: CheckCircle2, count: 0, bg: 'from-green-500 to-green-600', anim: 'group-hover:scale-125 group-hover:opacity-100' },
-    { label: 'Ditolak', icon: XCircle, count: 0, bg: 'from-red-500 to-red-600', anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
-];
-
-const QUICK_ACTIONS = [
-    { label: 'Ajukan Tiket', desc: 'Buat permohonan layanan baru', icon: PlusCircle, href: '/tiket/buat', color: 'text-primary bg-primary/10' },
-    { label: 'Riwayat Tiket', desc: 'Lihat semua pengajuan Anda', icon: History, href: '/tiket/riwayat', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
-    { label: 'CSAT', desc: 'Riwayat penilaian kepuasan', icon: Star, href: '/csat/riwayat', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
-    { label: 'Monitor', desc: 'Pantau status ruangan & kendaraan', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/30' },
-];
-
-export default function Dashboard({ recentTickets = [] }: { recentTickets?: any[] }) {
+export default function Dashboard({ recentTickets = [], stats }: { recentTickets?: any[], stats?: any }) {
     const { auth } = usePage<any>().props;
     const user = auth?.user;
+
+    const STATUS_CARDS = [
+        { label: 'Tiket Aktif', icon: FolderOpen, count: stats?.aktif || 0, bg: 'from-blue-500 to-blue-600', anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
+        { label: 'Sedang Diproses', icon: Loader2, count: stats?.diproses || 0, bg: 'from-orange-500 to-orange-600', anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
+        { label: 'Selesai', icon: CheckCircle2, count: stats?.selesai || 0, bg: 'from-green-500 to-green-600', anim: 'group-hover:scale-125 group-hover:opacity-100' },
+        { label: 'Ditolak', icon: XCircle, count: stats?.ditolak || 0, bg: 'from-red-500 to-red-600', anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
+    ];
+
+    const QUICK_ACTIONS = [
+        { label: 'Ajukan Tiket', desc: 'Buat permohonan layanan baru', icon: PlusCircle, href: '/tiket/buat', color: 'text-primary bg-primary/10' },
+        { label: 'Riwayat Tiket', desc: 'Lihat semua pengajuan Anda', icon: History, href: '/tiket/riwayat', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
+        { label: 'CSAT', desc: 'Riwayat penilaian kepuasan', icon: Star, href: '/csat/riwayat', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
+        { label: 'Monitor', desc: 'Pantau status ruangan & kendaraan', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/30' },
+    ];
 
     const timeGreeting = () => {
         const hour = new Date().getHours();

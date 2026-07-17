@@ -73,7 +73,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                 if (!sla) return <span className="text-slate-400">-</span>;
                 return (
                     <SlaBadge
-                        currentTier={sla.current_tier}
+                        priority={t.priority}
                         isBreached={sla.is_response_breached || sla.is_resolution_breached}
                         deadline={sla.sla_resolution_deadline}
                         respondedAt={sla.responded_at}

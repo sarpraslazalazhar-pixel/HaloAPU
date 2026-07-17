@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Ticket;
 use App\Models\RoomVehicleBooking;
 use App\Models\SystemConfig;
+use App\Models\Unit;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -37,10 +38,35 @@ class TvDashboardController extends Controller
             ->take(10)
             ->get();
 
+        // ── Daily Chart (30 Hari Terakhir) ──
+        $startDate = now()->subDays(30)->startOfDay();
+        $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
+            ->where('created_at', '>=', $startDate)
+            ->groupBy('date', 'unit_id')
+            ->get();
+
+        $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+        $unitNames = $units->pluck('nama_unit', 'id');
+
+        $dates = collect();
+        for ($i = 30; $i >= 0; $i--) {
+            $dates->push(now()->subDays($i)->format('Y-m-d'));
+        }
+
+        $dailyChartData = $dates->map(function ($dateStr) use ($dailyRaw, $unitNames) {
+            $row = ['date' => $dateStr];
+            foreach ($unitNames as $id => $name) {
+                $row[$name] = $dailyRaw->firstWhere(fn($r) => $r->date === $dateStr && $r->unit_id === $id)?->total ?? 0;
+            }
+            return $row;
+        });
+
         return Inertia::render('Tv/Index', [
             'stats' => $stats,
             'recentTickets' => $recentTickets,
             'upcomingBookings' => $upcomingBookings,
+            'dailyChartData' => $dailyChartData,
+            'units' => $units,
             'notificationSound' => SystemConfig::getValue('notification_sound_path', null),
             'logoPath' => SystemConfig::getValue('logo_path', null),
         ]);

@@ -47,7 +47,23 @@ class SlaCalculator
             ];
         }
 
-        return json_decode($config->value, true);
+        $decoded = json_decode($config->value, true);
+
+        // Fallback jika JSON rusak/invalid
+        if (!is_array($decoded)) {
+            Log::warning('Konfigurasi jam_kerja memiliki JSON yang tidak valid, menggunakan default.');
+            return [
+                'senin'  => ['08:00', '16:00'],
+                'selasa' => ['08:00', '16:00'],
+                'rabu'   => ['08:00', '16:00'],
+                'kamis'  => ['08:00', '16:00'],
+                'jumat'  => ['08:00', '16:00'],
+                'sabtu'  => null,
+                'minggu' => null,
+            ];
+        }
+
+        return $decoded;
     }
 
     protected function isWorkingDay(Carbon $date): bool
@@ -79,7 +95,8 @@ class SlaCalculator
     public function calculateResponseDeadline(Ticket $ticket): Carbon
     {
         $subUnitId = $ticket->sub_unit_id;
-        $thresholdMinutes = SlaConfig::getThreshold($subUnitId, 3, 'respon');
+        $priority = $ticket->priority ?? 'Sedang'; // Default to Sedang if not set
+        $thresholdMinutes = SlaConfig::getThreshold($subUnitId, $priority, 'respon');
 
         return $this->addWorkingMinutes($ticket->created_at, $thresholdMinutes);
     }
@@ -87,7 +104,8 @@ class SlaCalculator
     public function calculateResolutionDeadline(Ticket $ticket): Carbon
     {
         $subUnitId = $ticket->sub_unit_id;
-        $thresholdMinutes = SlaConfig::getThreshold($subUnitId, 3, 'penyelesaian');
+        $priority = $ticket->priority ?? 'Sedang';
+        $thresholdMinutes = SlaConfig::getThreshold($subUnitId, $priority, 'penyelesaian');
 
         return $this->addWorkingMinutes($ticket->created_at, $thresholdMinutes);
     }
@@ -139,6 +157,7 @@ class SlaCalculator
     {
         $ticket = $sla->ticket;
         $subUnitId = $ticket->sub_unit_id;
+        $priority = $ticket->priority ?? 'Sedang';
         $now = Carbon::now();
 
         $effectiveNow = $sla->paused_at ?? $now;
@@ -149,46 +168,27 @@ class SlaCalculator
         ) - $sla->total_paused_minutes;
 
         if (!$sla->responded_at) {
-            $tier3Resp = SlaConfig::getThreshold($subUnitId, 3, 'respon');
-            $tier2Resp = SlaConfig::getThreshold($subUnitId, 2, 'respon');
-            $tier1Resp = SlaConfig::getThreshold($subUnitId, 1, 'respon');
+            $respThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'respon');
 
-            if ($elapsedMinutes >= $tier3Resp) {
+            if ($elapsedMinutes >= $respThreshold) {
                 $sla->update([
-                    'current_tier' => 3,
                     'is_response_breached' => true,
                 ]);
-                return 3;
-            } elseif ($elapsedMinutes >= $tier2Resp) {
-                $sla->update(['current_tier' => max($sla->current_tier, 2)]);
-                return max($sla->current_tier, 2);
-            } elseif ($elapsedMinutes >= $tier1Resp) {
-                $sla->update(['current_tier' => max($sla->current_tier, 1)]);
-                return max($sla->current_tier, 1);
             }
         }
 
         if (!$sla->resolved_at) {
-            $tier3Res = SlaConfig::getThreshold($subUnitId, 3, 'penyelesaian');
-            $tier2Res = SlaConfig::getThreshold($subUnitId, 2, 'penyelesaian');
-            $tier1Res = SlaConfig::getThreshold($subUnitId, 1, 'penyelesaian');
+            $resThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'penyelesaian');
 
-            if ($elapsedMinutes >= $tier3Res) {
+            if ($elapsedMinutes >= $resThreshold) {
                 $sla->update([
-                    'current_tier' => 3,
                     'is_resolution_breached' => true,
                 ]);
-                return 3;
-            } elseif ($elapsedMinutes >= $tier2Res) {
-                $sla->update(['current_tier' => max($sla->current_tier, 2)]);
-                return max($sla->current_tier, 2);
-            } elseif ($elapsedMinutes >= $tier1Res) {
-                $sla->update(['current_tier' => max($sla->current_tier, 1)]);
-                return max($sla->current_tier, 1);
             }
         }
 
-        return $sla->current_tier;
+        // Return current tier for backward compatibility in calling functions, though it's no longer used for escalation.
+        return $sla->current_tier ?? 0;
     }
 
     public function getWorkingMinutesBetween(Carbon $start, Carbon $end): int

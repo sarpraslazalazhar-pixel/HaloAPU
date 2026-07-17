@@ -156,10 +156,10 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
                                             if (notification.data.aksi_url) window.location.href = notification.data.aksi_url;
                                         }}>
                                             <div className="flex items-center gap-2 mb-1">
-                                                <h4 className="font-semibold">{notification.data.judul}</h4>
+                                                <h4 className="font-semibold">{notification.data.title || notification.data.judul}</h4>
                                                 <span className="text-xs text-muted-foreground">{formatTimeAgo(notification.created_at)}</span>
                                             </div>
-                                            <p className="text-sm text-muted-foreground">{notification.data.pesan}</p>
+                                            <p className="text-sm text-muted-foreground">{notification.data.message || notification.data.pesan}</p>
                                         </div>
                                     </div>
 

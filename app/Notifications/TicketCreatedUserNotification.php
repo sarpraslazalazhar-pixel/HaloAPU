@@ -44,9 +44,10 @@ class TicketCreatedUserNotification extends Notification
         $nama = $notifiable->name ?: $notifiable->username;
         $url = route('tiket.show', $this->ticket->id);
         
-        $message = "Halo *{$nama}*,\n\n";
-        $message .= "Tiket Anda dengan layanan *{$layanan}* telah berhasil kami terima. Tiket sedang menunggu proses dari admin.\n\n";
-        $message .= "Anda dapat memantau status tiket melalui link berikut:\n{$url}\n\n";
+        $message = "✅ *TIKET BERHASIL DIAJUKAN*\n\n";
+        $message .= "Halo *{$nama}*\n\n";
+        $message .= "Pengajuan Kamu dengan layanan *{$layanan}* telah terdaftar di sistem ticketing Kami.\n\n";
+        $message .= "Kamu bisa memantau status pengajuan melalui link berikut:\n{$url}\n\n";
         $message .= "Terima kasih,\nTim Halo APU";
 
         return [

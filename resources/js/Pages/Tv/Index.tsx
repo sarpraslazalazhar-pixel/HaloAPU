@@ -6,6 +6,7 @@ import { Clock, Calendar, CheckCircle, Ticket as TicketIcon, Activity, AlertCirc
 import { format } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { Toaster, toast } from 'react-hot-toast';
+import ReactECharts from 'echarts-for-react';
 
 interface TvDashboardProps {
     stats: {
@@ -16,6 +17,8 @@ interface TvDashboardProps {
     };
     recentTickets: any[];
     upcomingBookings: any[];
+    dailyChartData: any[];
+    units: any[];
     notificationSound: string | null;
     logoPath: string | null;
 }
@@ -59,7 +62,7 @@ const statCards = [
     },
 ];
 
-export default function TvDashboard({ stats: initialStats, recentTickets: initialRecentTickets, upcomingBookings: initialUpcomingBookings, notificationSound, logoPath }: TvDashboardProps) {
+export default function TvDashboard({ stats: initialStats, recentTickets: initialRecentTickets, upcomingBookings: initialUpcomingBookings, dailyChartData, units, notificationSound, logoPath }: TvDashboardProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [hasInteracted, setHasInteracted] = useState(false);
     const [data, setData] = useState({ stats: initialStats, recent_tickets: initialRecentTickets, upcoming_bookings: initialUpcomingBookings });
@@ -143,7 +146,7 @@ export default function TvDashboard({ stats: initialStats, recentTickets: initia
 
     useEffect(() => {
         const poll = setInterval(() => {
-            router.reload({ only: ['stats', 'recentTickets', 'upcomingBookings'] });
+            router.reload({ only: ['stats', 'recentTickets', 'upcomingBookings', 'dailyChartData'] });
         }, 15000);
         return () => clearInterval(poll);
     }, []);
@@ -511,6 +514,40 @@ export default function TvDashboard({ stats: initialStats, recentTickets: initia
                                         </div>
                                     );
                                 })
+                            )}
+                        </div>
+                    </Card>
+                </div>
+
+                <div className="flex-1 shrink-0 overflow-hidden mb-6">
+                    <Card className="h-full bg-white border-slate-200 shadow-md flex flex-col">
+                        <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-white to-slate-50">
+                            <h2 className="text-3xl font-bold flex items-center gap-3 text-slate-800">
+                                <Activity className="w-7 h-7 text-green-500" />
+                                Grafik Harian Tiket (30 Hari)
+                            </h2>
+                        </div>
+                        <div className="p-4 flex-1">
+                            {dailyChartData?.length > 0 ? (
+                                <ReactECharts option={{
+                                    tooltip: { trigger: 'axis' },
+                                    legend: { bottom: 0, textStyle: { fontSize: 16 } },
+                                    grid: { left: '2%', right: '2%', bottom: '15%', top: '10%', containLabel: true },
+                                    xAxis: { type: 'category', data: dailyChartData.map((d: any) => d.date), axisLabel: { fontSize: 14 } },
+                                    yAxis: { type: 'value', axisLabel: { fontSize: 14 } },
+                                    series: units.map((u: any) => ({
+                                        name: u.nama_unit,
+                                        type: 'line',
+                                        smooth: true,
+                                        symbolSize: 8,
+                                        lineStyle: { width: 4 },
+                                        data: dailyChartData.map((d: any) => d[u.nama_unit] || 0)
+                                    }))
+                                }} style={{ height: '100%', width: '100%', minHeight: 300 }} />
+                            ) : (
+                                <div className="h-full flex items-center justify-center text-slate-500 text-xl">
+                                    Belum ada data harian
+                                </div>
                             )}
                         </div>
                     </Card>

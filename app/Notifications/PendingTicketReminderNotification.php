@@ -9,10 +9,11 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
+use Illuminate\Queue\SerializesModels;
 
-class PendingTicketReminderNotification extends Notification implements ShouldQueue
+class PendingTicketReminderNotification extends Notification
 {
-    use Queueable;
+    use Queueable, SerializesModels;
 
     protected int $hariPending;
 
@@ -46,8 +47,8 @@ class PendingTicketReminderNotification extends Notification implements ShouldQu
             'judul_tiket' => $this->ticket->judul,
             'status' => 'Pending',
             'hari_pending' => $this->hariPending,
-            'unit' => $this->ticket->subUnit?->unit?->nama,
-            'sub_unit' => $this->ticket->subUnit?->nama,
+            'unit' => $this->ticket->subUnit?->unit?->nama_unit,
+            'sub_unit' => $this->ticket->subUnit?->nama_layanan,
             'judul' => "Tiket Pending Lama",
             'pesan' => "Tiket #{$this->ticket->id} \"{$this->ticket->judul}\" sudah pending selama {$this->hariPending} hari. Silakan tindak lanjuti.",
             'icon' => 'clock',
@@ -62,7 +63,7 @@ class PendingTicketReminderNotification extends Notification implements ShouldQu
             ->greeting("Halo, {$notifiable->name}!")
             ->line("Tiket berikut sudah dalam status Pending selama **{$this->hariPending} hari**:")
             ->line("**Tiket:** #{$this->ticket->id} — {$this->ticket->judul}")
-            ->line("**Unit:** {$this->ticket->subUnit?->unit?->nama}")
+            ->line("**Unit:** {$this->ticket->subUnit?->unit?->nama_unit}")
             ->line("**Pending Sejak:** {$this->ticket->updated_at->format('d M Y H:i')}")
             ->action('Lihat Tiket', url("/admin/tiketing/{$this->ticket->id}"))
             ->line('Mohon segera ditindaklanjuti.');
@@ -76,7 +77,7 @@ class PendingTicketReminderNotification extends Notification implements ShouldQu
                 . "Tiket: #{$this->ticket->id}\n"
                 . "Judul: {$this->ticket->judul}\n"
                 . "Pending: {$this->hariPending} hari\n"
-                . "Unit: {$this->ticket->subUnit?->unit?->nama}\n\n"
+                . "Unit: {$this->ticket->subUnit?->unit?->nama_unit}\n\n"
                 . "Mohon segera ditindaklanjuti.",
         ];
     }

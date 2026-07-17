@@ -37,4 +37,10 @@ class Admin extends Authenticatable
     {
         return !empty($this->attributes['name']) ? $this->attributes['name'] : $this->username;
     }
+
+    public function units()
+    {
+        return $this->belongsToMany(Unit::class, 'admin_unit', 'admin_id', 'unit_id');
+    }
 }
+

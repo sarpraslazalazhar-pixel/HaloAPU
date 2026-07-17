@@ -7,6 +7,8 @@ use App\Models\ReminderConfig;
 use App\Models\Ticket;
 use App\Notifications\PendingTicketReminderNotification;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PendingTicketReminderCommand extends Command
 {
@@ -26,35 +28,61 @@ class PendingTicketReminderCommand extends Command
 
         $tickets = Ticket::whereRaw('LOWER(status) = ?', ['pending'])
             ->where('updated_at', '<', $cutoff)
-            ->with(['subUnit.unit', 'assignedAdmin'])
+            ->with(['subUnit.unit.admins', 'assignedAdmin'])
             ->get();
+
+        $ticketIds = $tickets->pluck('id')->toArray();
+
+        $sentTicketIds = \Illuminate\Notifications\DatabaseNotification::where('type', PendingTicketReminderNotification::class)
+            ->whereDate('created_at', today())
+            ->get()
+            ->map(fn ($n) => isset($n->data['ticket_id']) ? (int)$n->data['ticket_id'] : null)
+            ->filter()
+            ->toArray();
 
         $sent = 0;
 
         foreach ($tickets as $ticket) {
-            // Anti-spam: max 1 reminder per hari per tiket
-            $alreadySent = \Illuminate\Notifications\DatabaseNotification::where('type', PendingTicketReminderNotification::class)
-                ->where('data->ticket_id', $ticket->id)
-                ->whereDate('created_at', today())
-                ->exists();
+            try {
+                $notificationsToDispatch = [];
 
-            if ($alreadySent) continue;
+                DB::transaction(function () use ($ticket, &$notificationsToDispatch, $sentTicketIds) {
+                    $lockedTicket = Ticket::lockForUpdate()->find($ticket->id);
+                    if (!$lockedTicket || strtolower($lockedTicket->status) !== 'pending') {
+                        return;
+                    }
 
-            // Kirim ke admin yang di-assign + admin unit terkait
-            $admins = collect();
-            if ($ticket->assignedAdmin) {
-                $admins->push($ticket->assignedAdmin);
-            }
+                    // Anti-spam: max 1 reminder per hari per tiket
+                    if (in_array($lockedTicket->id, $sentTicketIds)) {
+                        return;
+                    }
 
-            $unitId = $ticket->subUnit?->unit_id;
-            if ($unitId) {
-                $unitAdmins = Admin::whereHas('units', fn ($q) => $q->where('unit_id', $unitId))->get();
-                $admins = $admins->merge($unitAdmins)->unique('id');
-            }
+                    // Kirim ke admin yang di-assign + admin unit terkait
+                    $admins = collect();
+                    if ($ticket->assignedAdmin) {
+                        $admins->push($ticket->assignedAdmin);
+                    }
 
-            foreach ($admins as $admin) {
-                $admin->notify(new PendingTicketReminderNotification($ticket));
-                $sent++;
+                    $unit = $ticket->subUnit?->unit;
+                    if ($unit) {
+                        $unitAdmins = $unit->admins;
+                        $admins = $admins->merge($unitAdmins)->unique('id');
+                    }
+
+                    foreach ($admins as $admin) {
+                        $notificationsToDispatch[] = [
+                            'admin' => $admin,
+                            'ticket' => $lockedTicket,
+                        ];
+                    }
+                });
+
+                foreach ($notificationsToDispatch as $item) {
+                    $item['admin']->notify(new PendingTicketReminderNotification($item['ticket']));
+                    $sent++;
+                }
+            } catch (\Exception $e) {
+                Log::error("Gagal mengirim reminder pending untuk Tiket #{$ticket->id}: " . $e->getMessage());
             }
         }
 

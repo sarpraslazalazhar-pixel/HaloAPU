@@ -6,6 +6,7 @@ import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
+import { formatDateId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, XCircle, Eye } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
@@ -36,7 +37,7 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                         #TKT-{ticket.id}
                         <StatusBadge status={ticket.status} />
                     </h1>
-                    <p className="text-slate-500 mt-1">Dibuat pada {new Date(ticket.created_at).toLocaleString()}</p>
+                    <p className="text-slate-500 mt-1">Dibuat pada {formatDateId(ticket.created_at)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {showCsat && (

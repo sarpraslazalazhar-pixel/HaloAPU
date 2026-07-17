@@ -7,12 +7,13 @@ use App\Models\Ticket;
 use App\Notifications\SlaEscalationNotification;
 use App\Services\SlaCalculator;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class CheckSlaCommand extends Command
 {
     protected $signature = 'sla:check';
-    protected $description = 'Cek status SLA semua tiket aktif dan update tier';
+    protected $description = 'Cek status SLA semua tiket aktif dan kirim notifikasi jika breach';
 
     public function handle(SlaCalculator $slaCalculator): int
     {
@@ -22,27 +23,87 @@ class CheckSlaCommand extends Command
             ->whereHas('slaTracking', function ($q) {
                 $q->whereNull('paused_at');
             })
-            ->with(['slaTracking', 'subUnit.unit'])
+            ->with(['slaTracking', 'subUnit.unit', 'unit.admins', 'assignedAdmin'])
             ->get();
 
         $escalated = 0;
 
         foreach ($activeTickets as $ticket) {
-            $sla = $ticket->slaTracking;
-            if (!$sla) continue;
+            try {
+                $notificationsToDispatch = [];
 
-            $previousTier = $sla->current_tier;
-            $currentTier = $slaCalculator->checkAndUpdateTier($sla);
+                DB::transaction(function () use ($ticket, $slaCalculator, &$notificationsToDispatch) {
+                    $sla = $ticket->slaTracking()->lockForUpdate()->first();
+                    if (!$sla) {
+                        return;
+                    }
 
-            if ($currentTier > $previousTier) {
-                Log::info("SLA escalation: Tiket #{$ticket->id} naik ke Tier {$currentTier}");
+                    $wasResponseBreached = $sla->is_response_breached;
+                    $wasResolutionBreached = $sla->is_resolution_breached;
 
-                $admins = Admin::all();
-                foreach ($admins as $admin) {
-                    $admin->notify(new SlaEscalationNotification($ticket, $sla, $currentTier));
+                    // Calculates SLA status and updates the tracking model flags.
+                    $slaCalculator->checkAndUpdateTier($sla);
+
+                    $sla->refresh();
+
+                    $isResponseNewlyBreached = !$wasResponseBreached && $sla->is_response_breached;
+                    $isResolutionNewlyBreached = !$wasResolutionBreached && $sla->is_resolution_breached;
+
+                    if ($isResponseNewlyBreached) {
+                        Log::info("SLA Breach (Response): Tiket #{$ticket->id} priority {$ticket->priority}");
+                        
+                        $adminsToNotify = collect();
+                        if ($ticket->unit && $ticket->unit->admins->isNotEmpty()) {
+                            $adminsToNotify = $adminsToNotify->concat($ticket->unit->admins);
+                        }
+                        if ($ticket->assignedAdmin) {
+                            $adminsToNotify->push($ticket->assignedAdmin);
+                        }
+                        if ($adminsToNotify->isEmpty()) {
+                            $adminsToNotify = Admin::all();
+                        }
+                        
+                        $adminsToNotify = $adminsToNotify->unique('id');
+                        foreach ($adminsToNotify as $admin) {
+                            $notificationsToDispatch[] = [
+                                'admin' => $admin,
+                                'type' => 'respon',
+                                'priority' => $ticket->priority ?? 'Sedang',
+                            ];
+                        }
+                    }
+
+                    if ($isResolutionNewlyBreached) {
+                        Log::info("SLA Breach (Resolution): Tiket #{$ticket->id} priority {$ticket->priority}");
+                        
+                        $adminsToNotify = collect();
+                        if ($ticket->unit && $ticket->unit->admins->isNotEmpty()) {
+                            $adminsToNotify = $adminsToNotify->concat($ticket->unit->admins);
+                        }
+                        if ($ticket->assignedAdmin) {
+                            $adminsToNotify->push($ticket->assignedAdmin);
+                        }
+                        if ($adminsToNotify->isEmpty()) {
+                            $adminsToNotify = Admin::all();
+                        }
+                        
+                        $adminsToNotify = $adminsToNotify->unique('id');
+                        foreach ($adminsToNotify as $admin) {
+                            $notificationsToDispatch[] = [
+                                'admin' => $admin,
+                                'type' => 'penyelesaian',
+                                'priority' => $ticket->priority ?? 'Sedang',
+                            ];
+                        }
+                    }
+                });
+
+                foreach ($notificationsToDispatch as $item) {
+                    $item['admin']->notify(new SlaEscalationNotification($ticket, $item['type'], $item['priority']));
+                    $escalated++;
                 }
-
-                $escalated++;
+            } catch (\Exception $e) {
+                Log::error("Gagal memeriksa SLA untuk Tiket #{$ticket->id}: " . $e->getMessage());
             }
         }
 

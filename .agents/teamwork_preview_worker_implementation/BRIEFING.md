@@ -1,7 +1,7 @@
-# BRIEFING — 2026-07-13T11:20:06+08:00
+# BRIEFING — 2026-07-17T12:01:02+08:00
 
 ## Mission
-Implement the CSAT and Live Monitor requirements based on 'Doc/PLAN-FASE-5.md' and the global plan in 'PROJECT.md'.
+Refactor and fix the SLA checker and Reminder systems in the Laravel Helpdesk application (Halo APU).
 
 ## 🔒 My Identity
 - Archetype: Full Stack Developer
@@ -21,39 +21,42 @@ Implement the CSAT and Live Monitor requirements based on 'Doc/PLAN-FASE-5.md' a
 - Updated: not yet
 
 ## Task Summary
-- **What to build**: Migration, models, controller for room_vehicle_bookings, routes, frontend Monitor pages/grid, CSAT rating integration, PHPUnit tests, and build verification.
-- **Success criteria**: All PHPUnit tests pass, `npm run build` succeeds, functionality is genuine.
-- **Interface contracts**: Doc/PLAN-FASE-5.md, PROJECT.md
-- **Code layout**: Standard Laravel + Inertia.js React layout (app/, database/, routes/, resources/js/, tests/).
+- **What to build**:
+  - Step 1: Database migrations (pivot table `admin_unit`, foreign key `assigned_admin_id` in `tickets`), model relationships (`Admin`, `Unit`, `Ticket`).
+  - Step 2: Refactor `CheckSlaCommand.php` to use transactions per ticket, catch exceptions, and handle breaches via state changes. Refactor `SlaEscalationNotification.php` for breach type and priority-based delivery.
+  - Step 3: Fix notification attribute names (accessing `$ticket->subUnit?->unit?->nama_unit` and `$ticket->subUnit?->nama_layanan`).
+  - Step 4: Refactor `SnoozeCheckCommand.php` to filter directly in DB and re-dispatch original notification class.
+  - Step 5: Fix unit tests (`tests/Unit/SlaCalculatorTest.php` and `tests/Unit/SlaCalculatorStressTest.php`).
+  - Step 6: Wrap status updates & notification dispatches in DB transactions. Ensure external channel notifications are queued.
+- **Success criteria**: All PHPUnit tests pass, migrations run successfully, refactored SLA & Reminder systems work correctly and genuinely.
+- **Interface contracts**: PROJECT.md, original request.
 
 ## Key Decisions Made
-- Used case-insensitive matching for `'solve'` and `'selesai'` statuses in `CsatController.php` to avoid PHP `in_array` case mismatch issues.
-- Updated `MonitorController.php` query and response mapping to use `username` instead of `name` (since the `users` table has no `name` column).
-- Corrected ExampleTest assertions from expecting a 200 code to a 302 code for the root route `/` redirecting to `/login`.
+- Used `status = 'Disetujui'` status filter for `MonitorController` bookings queries to fix `MonitorTest` and `MonitorAdversarialTest` failures, as only approved bookings should count as active/scheduled.
+- Retained dynamic re-dispatch of custom and generic notifications in `SnoozeCheckCommand.php` by looking up the class string from the database and using reflection constructor arguments where possible.
 
 ## Change Tracker
 - **Files modified**:
-  - `database/migrations/2026_07_13_000004_create_room_vehicle_bookings_table.php` (Created room_vehicle_bookings table migration)
-  - `app/Models/RoomVehicleBooking.php` (Created RoomVehicleBooking model)
-  - `app/Models/Ticket.php` (Added booking() hasOne relationship)
-  - `app/Http/Controllers/User/TicketHistoryController.php` (Loaded 'csat' relation in show method)
-  - `app/Http/Controllers/MonitorController.php` (Created MonitorController with real-time status determination using username)
-  - `routes/web.php` (Registered /monitor and /admin/monitor routes)
-  - `resources/js/Pages/User/Tiket/Detail.tsx` (Passed ticket.csat?.rating to CsatDialog)
-  - `resources/js/Components/MonitorGrid.tsx` (Created shared MonitorGrid component using Inertia usePoll)
-  - `resources/js/Pages/User/Monitor/Index.tsx` (Created user Monitor page)
-  - `resources/js/Pages/Admin/Monitor/Index.tsx` (Created admin Monitor page)
-  - `tests/Feature/CsatTest.php` (Created CSAT feature test)
-  - `tests/Feature/MonitorTest.php` (Created Monitor feature test)
-  - `tests/Feature/ExampleTest.php` (Fixed redirect assertion)
-  - `database/factories/UserFactory.php` (Fixed UserFactory database fields)
+  - `database/migrations/2026_07_17_120000_create_admin_unit_table.php` (Created admin_unit pivot table)
+  - `database/migrations/2026_07_17_120001_add_assigned_admin_id_to_tickets_table.php` (Added assigned_admin_id to tickets table)
+  - `app/Models/Admin.php` (Defined belongsToMany 'units' relation)
+  - `app/Models/Unit.php` (Defined belongsToMany 'admins' relation)
+  - `app/Models/Ticket.php` (Defined belongsTo 'assignedAdmin' relation and fillable field)
+  - `app/Console/Commands/CheckSlaCommand.php` (Refactored to database transaction per ticket, caught exceptions, and breach state changes)
+  - `app/Notifications/SlaEscalationNotification.php` (Refactored constructor, channels via priority, queueing, and attribute names)
+  - `app/Notifications/PendingTicketReminderNotification.php` (Fixed attribute names)
+  - `app/Console/Commands/SnoozeCheckCommand.php` (Refactored to database json queries, re-dispatching of class, and clearing snooze data)
+  - `app/Console/Commands/PendingTicketReminderCommand.php` (Wrapped check and dispatch in database transaction per ticket)
+  - `app/Http/Controllers/MonitorController.php` (Updated status checking filter to Disetujui)
+  - `tests/Unit/SlaCalculatorTest.php` (Updated to priority instead of tier)
+  - `tests/Unit/SlaCalculatorStressTest.php` (Updated to priority instead of tier)
 - **Build status**: PASS
 - **Pending issues**: None
 
 ## Quality Status
-- **Build/test result**: PASS (8 tests passed)
+- **Build/test result**: PASS (36 tests passed)
 - **Lint status**: PASS
-- **Tests added/modified**: `tests/Feature/CsatTest.php` (5 tests), `tests/Feature/MonitorTest.php` (1 test), `tests/Feature/ExampleTest.php` (1 test)
+- **Tests added/modified**: `tests/Unit/SlaCalculatorTest.php` and `tests/Unit/SlaCalculatorStressTest.php` updated.
 
 ## Loaded Skills
 - None
@@ -61,4 +64,4 @@ Implement the CSAT and Live Monitor requirements based on 'Doc/PLAN-FASE-5.md' a
 ## Artifact Index
 - c:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\teamwork_preview_worker_implementation\ORIGINAL_REQUEST.md — Original task description
 - c:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\teamwork_preview_worker_implementation\progress.md — Progress tracker
-
+- c:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\teamwork_preview_worker_implementation\handoff.md — Handoff report

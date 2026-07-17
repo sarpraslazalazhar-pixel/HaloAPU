@@ -6,9 +6,10 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from '@/Components/ui/tooltip';
+import { formatDateId } from '@/lib/utils';
 
 interface SlaBadgeProps {
-    currentTier: number;
+    priority?: string;
     isBreached: boolean;
     deadline: string | null;
     respondedAt: string | null;
@@ -18,7 +19,7 @@ interface SlaBadgeProps {
 }
 
 export default function SlaBadge({
-    currentTier,
+    priority,
     isBreached,
     deadline,
     respondedAt,
@@ -29,10 +30,7 @@ export default function SlaBadge({
     const getStatus = () => {
         if (resolvedAt) return { label: 'Selesai', color: 'bg-gray-500 text-white' };
         if (isBreached) return { label: 'Breach', color: 'bg-red-600 text-white' };
-        if (currentTier >= 3) return { label: 'Tier 3', color: 'bg-red-500 text-white' };
-        if (currentTier === 2) return { label: 'Tier 2', color: 'bg-orange-500 text-white' };
-        if (currentTier === 1) return { label: 'Tier 1', color: 'bg-yellow-500 text-black' };
-
+        
         if (deadline) {
             const now = new Date();
             const dl = new Date(deadline);
@@ -45,6 +43,7 @@ export default function SlaBadge({
 
         return { label: 'Aman', color: 'bg-green-500 text-white' };
     };
+
 
     const status = getStatus();
 
@@ -75,16 +74,16 @@ export default function SlaBadge({
                 <TooltipContent className="text-sm space-y-1">
                     <p><strong>Status SLA:</strong> {status.label}</p>
                     <p><strong>Sisa Waktu:</strong> {formatSisaWaktu()}</p>
-                    <p><strong>Tier:</strong> {currentTier}</p>
+                    {priority && <p><strong>Prioritas:</strong> {priority}</p>}
                     {pausedAt && <p><strong>Sedang Paused</strong></p>}
                     {totalPausedMinutes > 0 && (
                         <p><strong>Total Paused:</strong> {totalPausedMinutes} menit</p>
                     )}
                     {respondedAt && (
-                        <p><strong>Direspon:</strong> {new Date(respondedAt).toLocaleString('id-ID')}</p>
+                        <p><strong>Direspon:</strong> {formatDateId(respondedAt)}</p>
                     )}
                     {resolvedAt && (
-                        <p><strong>Diselesaikan:</strong> {new Date(resolvedAt).toLocaleString('id-ID')}</p>
+                        <p><strong>Diselesaikan:</strong> {formatDateId(resolvedAt)}</p>
                     )}
                 </TooltipContent>
             </Tooltip>

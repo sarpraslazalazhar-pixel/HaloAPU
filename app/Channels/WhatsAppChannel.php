@@ -33,7 +33,10 @@ class WhatsAppChannel
             return;
         }
 
-        // Normalisasi nomor: ubah awalan 08 menjadi 628
+        // Sanitize: strip all non-digit characters
+        $phoneNumber = preg_replace('/\D/', '', $phoneNumber);
+
+        // Normalisasi nomor: ubah awalan 0 menjadi 62
         $phoneNumber = preg_replace('/^0/', '62', $phoneNumber);
 
         // Ambil konfigurasi gateway dari system_configs

@@ -6,6 +6,7 @@ import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
 import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
+import { formatDateId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye } from 'lucide-react';
 
@@ -20,13 +21,19 @@ const statusLabels: Record<string, string> = {
 };
 
 export default function TicketDetail({ ticket, formFields }: any) {
-    const { data, setData, patch, processing, errors } = useForm({ status: '', catatan: '' });
+    const { data: statusData, setData: setStatusData, patch: patchStatus, processing: processingStatus, errors: errorsStatus } = useForm({ status: '', catatan: '' });
+    const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
 
     const transitions = validTransitions[ticket.status] || [];
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleStatusSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        patch(route('admin.tiket.status', ticket.id));
+        patchStatus(route('admin.tiket.status', ticket.id));
+    };
+
+    const handlePrioritySubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        patchPriority(route('admin.tiket.priority', ticket.id));
     };
 
     const renderFormValue = (field: any) => {
@@ -118,31 +125,51 @@ export default function TicketDetail({ ticket, formFields }: any) {
                         <CardHeader><CardTitle>Aksi Status</CardTitle></CardHeader>
                         <CardContent>
                             {transitions.length > 0 ? (
-                                <form onSubmit={handleSubmit} className="space-y-4">
+                                <form onSubmit={handleStatusSubmit} className="space-y-4">
                                     <div className="space-y-2">
                                         <span className="text-sm text-slate-500">Status Saat Ini:</span>
                                         <div><StatusBadge status={ticket.status} /></div>
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">Ubah ke</label>
-                                        <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={data.status} onChange={e => setData('status', e.target.value)}>
+                                        <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={statusData.status} onChange={e => setStatusData('status', e.target.value)}>
                                             <option value="">Pilih status</option>
                                             {transitions.map((s: string) => (
                                                 <option key={s} value={s}>{statusLabels[s] || s}</option>
                                             ))}
                                         </select>
-                                        {errors.status && <p className="text-red-500 text-sm">{errors.status}</p>}
+                                        {errorsStatus.status && <p className="text-red-500 text-sm">{errorsStatus.status}</p>}
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-sm font-medium">Catatan Admin <span className="text-red-500">*</span></label>
-                                        <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={data.catatan} onChange={e => setData('catatan', e.target.value)} placeholder="Wajib diisi..." />
-                                        {errors.catatan && <p className="text-red-500 text-sm">{errors.catatan}</p>}
+                                        <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={statusData.catatan} onChange={e => setStatusData('catatan', e.target.value)} placeholder="Wajib diisi..." />
+                                        {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
                                     </div>
-                                    <Button type="submit" className="w-full" disabled={processing}>Simpan Perubahan</Button>
+                                    <Button type="submit" className="w-full" disabled={processingStatus}>Simpan Perubahan Status</Button>
                                 </form>
                             ) : (
                                 <p className="text-sm text-slate-500">Tidak ada transisi status yang tersedia.</p>
                             )}
+                        </CardContent>
+                    </Card>
+
+                    <Card>
+                        <CardHeader><CardTitle>Prioritas SLA</CardTitle></CardHeader>
+                        <CardContent>
+                            <form onSubmit={handlePrioritySubmit} className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Ubah Prioritas</label>
+                                    <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={priorityData.priority} onChange={e => setPriorityData('priority', e.target.value)}>
+                                        <option value="">Pilih Prioritas (Default: Sedang)</option>
+                                        <option value="Rendah">Rendah</option>
+                                        <option value="Sedang">Sedang</option>
+                                        <option value="Tinggi">Tinggi</option>
+                                        <option value="Kritis">Kritis</option>
+                                    </select>
+                                    {errorsPriority.priority && <p className="text-red-500 text-sm">{errorsPriority.priority}</p>}
+                                </div>
+                                <Button type="submit" variant="secondary" className="w-full" disabled={processingPriority}>Set Prioritas</Button>
+                            </form>
                         </CardContent>
                     </Card>
 
@@ -155,20 +182,17 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                 </CardTitle>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                {/* Tier */}
+                                {/* Prioritas */}
                                 <div className="flex items-center justify-between">
-                                    <span className="text-sm text-slate-500">Tier Saat Ini</span>
+                                    <span className="text-sm text-slate-500">Prioritas Saat Ini</span>
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                                        ticket.sla_tracking.current_tier >= 3
-                                            ? 'bg-red-100 text-red-700'
-                                            : ticket.sla_tracking.current_tier >= 2
-                                            ? 'bg-orange-100 text-orange-700'
-                                            : ticket.sla_tracking.current_tier >= 1
-                                            ? 'bg-yellow-100 text-yellow-700'
-                                            : 'bg-green-100 text-green-700'
+                                        ticket.priority === 'Kritis' ? 'bg-red-100 text-red-700' :
+                                        ticket.priority === 'Tinggi' ? 'bg-orange-100 text-orange-700' :
+                                        ticket.priority === 'Sedang' ? 'bg-yellow-100 text-yellow-700' :
+                                        'bg-green-100 text-green-700'
                                     }`}>
                                         <AlertTriangle className="w-3 h-3" />
-                                        {ticket.sla_tracking.current_tier > 0 ? `Tier ${ticket.sla_tracking.current_tier}` : 'Normal'}
+                                        {ticket.priority || 'Belum Diset'}
                                     </span>
                                 </div>
 
@@ -177,10 +201,16 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-slate-500">SLA Respon</span>
                                         {ticket.sla_tracking.responded_at ? (
-                                            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                                                <CheckCircle2 className="w-3 h-3" /> Tercapai
-                                            </span>
-                                        ) : ticket.sla_tracking.is_response_breached ? (
+                                            new Date(ticket.sla_tracking.responded_at) > new Date(ticket.sla_tracking.sla_response_deadline) ? (
+                                                <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                                                    <XCircle className="w-3 h-3" /> Terlanggar
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                                    <CheckCircle2 className="w-3 h-3" /> Tercapai
+                                                </span>
+                                            )
+                                        ) : ticket.sla_tracking.is_response_breached || (ticket.sla_tracking.sla_response_deadline && new Date() > new Date(ticket.sla_tracking.sla_response_deadline)) ? (
                                             <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                                                 <XCircle className="w-3 h-3" /> Terlanggar
                                             </span>
@@ -192,13 +222,13 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                     </div>
                                     {ticket.sla_tracking.sla_response_deadline && (
                                         <p className="text-xs text-slate-400">
-                                            Deadline: {new Date(ticket.sla_tracking.sla_response_deadline).toLocaleString('id-ID')}
+                                            Deadline: {formatDateId(ticket.sla_tracking.sla_response_deadline)}
                                         </p>
                                     )}
                                     {ticket.sla_tracking.responded_at && (
-                                        <p className="text-xs text-slate-400">
-                                            Direspon: {new Date(ticket.sla_tracking.responded_at).toLocaleString('id-ID')}
-                                        </p>
+                                        <div className="text-xs mt-1 text-slate-500">
+                                            Direspon: {formatDateId(ticket.sla_tracking.responded_at)}
+                                        </div>
                                     )}
                                 </div>
 
@@ -207,10 +237,16 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-slate-500">SLA Penyelesaian</span>
                                         {ticket.sla_tracking.resolved_at ? (
-                                            <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                                                <CheckCircle2 className="w-3 h-3" /> Tercapai
-                                            </span>
-                                        ) : ticket.sla_tracking.is_resolution_breached ? (
+                                            new Date(ticket.sla_tracking.resolved_at) > new Date(ticket.sla_tracking.sla_resolution_deadline) ? (
+                                                <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                                                    <XCircle className="w-3 h-3" /> Terlanggar
+                                                </span>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                                                    <CheckCircle2 className="w-3 h-3" /> Tercapai
+                                                </span>
+                                            )
+                                        ) : ticket.sla_tracking.is_resolution_breached || (ticket.sla_tracking.sla_resolution_deadline && new Date() > new Date(ticket.sla_tracking.sla_resolution_deadline)) ? (
                                             <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                                                 <XCircle className="w-3 h-3" /> Terlanggar
                                             </span>
@@ -222,13 +258,13 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                     </div>
                                     {ticket.sla_tracking.sla_resolution_deadline && (
                                         <p className="text-xs text-slate-400">
-                                            Deadline: {new Date(ticket.sla_tracking.sla_resolution_deadline).toLocaleString('id-ID')}
+                                            Deadline: {formatDateId(ticket.sla_tracking.sla_resolution_deadline)}
                                         </p>
                                     )}
                                     {ticket.sla_tracking.resolved_at && (
-                                        <p className="text-xs text-slate-400">
-                                            Diselesaikan: {new Date(ticket.sla_tracking.resolved_at).toLocaleString('id-ID')}
-                                        </p>
+                                        <div className="text-xs mt-1 text-slate-500">
+                                            Diselesaikan: {formatDateId(ticket.sla_tracking.resolved_at)}
+                                        </div>
                                     )}
                                 </div>
 

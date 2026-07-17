@@ -29,28 +29,32 @@ class CsatReminderCommand extends Command
             ->with(['user'])
             ->get();
 
+        $ticketIds = $tickets->pluck('id')->toArray();
+
+        $notifications = \Illuminate\Notifications\DatabaseNotification::where('type', CsatReminderNotification::class)
+            ->whereIn('data->ticket_id', $ticketIds)
+            ->get();
+
+        $notificationsGrouped = $notifications->groupBy(function ($notification) {
+            $data = $notification->data;
+            return is_array($data) ? ($data['ticket_id'] ?? null) : ($data->ticket_id ?? null);
+        });
+
         $sent = 0;
 
         foreach ($tickets as $ticket) {
             $user = $ticket->user;
             if (!$user) continue;
 
+            $ticketNotifications = $notificationsGrouped->get($ticket->id) ?? collect();
+
             // Anti-spam: max 3 reminder per tiket
-            $reminderCount = \Illuminate\Notifications\DatabaseNotification::where('type', CsatReminderNotification::class)
-                ->where('notifiable_type', get_class($user))
-                ->where('notifiable_id', $user->id)
-                ->where('data->ticket_id', $ticket->id)
-                ->count();
+            $reminderCount = $ticketNotifications->count();
 
             if ($reminderCount >= 3) continue;
 
             // Cek interval: tidak lebih dari 1 reminder per 2 hari per tiket
-            $lastSent = \Illuminate\Notifications\DatabaseNotification::where('type', CsatReminderNotification::class)
-                ->where('notifiable_type', get_class($user))
-                ->where('notifiable_id', $user->id)
-                ->where('data->ticket_id', $ticket->id)
-                ->latest()
-                ->first();
+            $lastSent = $ticketNotifications->sortByDesc('created_at')->first();
 
             if ($lastSent && $lastSent->created_at->diffInDays(now()) < 2) {
                 continue;

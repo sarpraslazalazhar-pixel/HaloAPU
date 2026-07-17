@@ -58,3 +58,39 @@ DO NOT CHEAT. All implementations must be genuine. DO NOT hardcode test results,
 
 Delivery:
 Write your handoff report to 'c:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\teamwork_preview_worker_implementation\handoff.md' summarizing what you did, the commands run, test outcomes, and code layout compliance.
+
+## 2026-07-17T04:01:02Z
+You are the Worker subagent (teamwork_preview_worker). Your task is to refactor and fix the SLA checker and Reminder systems in the Laravel Helpdesk application (Halo APU).
+
+Please follow the 6-step refactoring strategy based on the Explorer's findings:
+
+Step 1: Establish Database Relationships
+- Create database migrations to:
+  1. Add pivot table `admin_unit` with columns `admin_id` and `unit_id`.
+  2. Add a nullable foreign key column `assigned_admin_id` to the `tickets` table referencing `admins.id`.
+- Define the relationships in Eloquent:
+  - `Admin` model (`app/Models/Admin.php`): Define a `belongsToMany` relationship named `units` (target `Unit`).
+  - `Unit` model (`app/Models/Unit.php`): Define a `belongsToMany` relationship named `admins` (target `Admin`).
+  - `Ticket` model (`app/Models/Ticket.php`): Define a `belongsTo` relationship named `assignedAdmin` (target `Admin`).
+- Run the migrations using `php artisan migrate`.
+
+Step 2: Refactor SLA Escalation Logic
+- Refactor `app/Console/Commands/CheckSlaCommand.php` to run in database transactions per ticket, catch exceptions, and handle SLA breaches based on state changes of `is_response_breached` and `is_resolution_breached` instead of comparing numeric tiers.
+- Refactor `app/Notifications/SlaEscalationNotification.php` to accept breach type ('respon' or 'penyelesaian') and ticket priority. Configure delivery channels based on priority (e.g. Tinggi/Kritis sends WhatsApp and DB, others send database and email).
+
+Step 3: Fix Notification Attribute Names
+- Update `SlaEscalationNotification.php` and `PendingTicketReminderNotification.php` to access:
+  - `$ticket->subUnit?->unit?->nama_unit` instead of `nama`
+  - `$ticket->subUnit?->nama_layanan` instead of `nama`
+
+Step 4: Refactor Snooze Check Command
+- In `SnoozeCheckCommand.php`, rewrite the query to filter the notifications directly in the database (using `whereNotNull`, `where('data->snoozed', true)`, etc.) instead of filtering in PHP memory.
+- In the execution loop, re-dispatch the actual notification classes based on their type, and update the old notification's data to avoid infinite loops.
+
+Step 5: Fix Unit Tests
+- Update `tests/Unit/SlaCalculatorTest.php` and `tests/Unit/SlaCalculatorStressTest.php` to use `priority` instead of the non-existent `tier` column when setting up `SlaConfig` data and endpoint PUT payloads.
+- Verify unit tests by running `php artisan test` or `./vendor/bin/phpunit`.
+
+Step 6: Safe Database Interactions
+- Wrap status updates and notification dispatches in database transactions. Ensure notifications sent over external HTTP channels (like WhatsApp) are queued.
+

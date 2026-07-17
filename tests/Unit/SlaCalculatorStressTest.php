@@ -130,17 +130,17 @@ class SlaCalculatorStressTest extends TestCase
     }
 
     /**
-     * Test batch update endpoint: duplicate configs for the same tier in the same request.
+     * Test batch update endpoint: duplicate configs for the same priority in the same request.
      */
-    public function test_endpoint_validation_with_duplicate_tiers_in_request(): void
+    public function test_endpoint_validation_with_duplicate_priorities_in_request(): void
     {
         $response = $this->actingAs($this->admin, 'admin')
             ->put(route('admin.sla-config.update'), [
                 'configs' => [
-                    ['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 30],
-                    ['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 40],
-                    ['sub_unit_id' => null, 'tier' => 2, 'jenis' => 'respon', 'threshold_minutes' => 60],
-                    ['sub_unit_id' => null, 'tier' => 3, 'jenis' => 'respon', 'threshold_minutes' => 120],
+                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30],
+                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 40],
+                    ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon', 'threshold_minutes' => 60],
+                    ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'respon', 'threshold_minutes' => 120],
                 ]
             ]);
 
@@ -149,37 +149,34 @@ class SlaCalculatorStressTest extends TestCase
 
         $this->assertDatabaseHas('sla_configs', [
             'sub_unit_id' => null,
-            'tier' => 1,
+            'priority' => 'Rendah',
             'jenis' => 'respon',
             'threshold_minutes' => 40,
         ]);
     }
 
     /**
-     * Test batch update endpoint: partial update causing database inconsistency.
-     * We have Tier 1 = 30, Tier 2 = 60, Tier 3 = 120 in DB.
-     * We submit update for Tier 1 = 80, but do NOT submit Tier 2.
-     * DB will have Tier 1 = 80 and Tier 2 = 60, which is inconsistent (Tier 1 > Tier 2).
+     * Test batch update endpoint: partial update is processed successfully.
      */
-    public function test_endpoint_validation_partial_update_inconsistency(): void
+    public function test_endpoint_validation_partial_update(): void
     {
-        SlaConfig::create(['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 30]);
-        SlaConfig::create(['sub_unit_id' => null, 'tier' => 2, 'jenis' => 'respon', 'threshold_minutes' => 60]);
-        SlaConfig::create(['sub_unit_id' => null, 'tier' => 3, 'jenis' => 'respon', 'threshold_minutes' => 120]);
+        SlaConfig::create(['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30]);
 
         $response = $this->actingAs($this->admin, 'admin')
             ->put(route('admin.sla-config.update'), [
                 'configs' => [
-                    ['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 80],
+                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 80],
                 ]
             ]);
 
         $response->assertRedirect();
         $response->assertSessionHasNoErrors();
 
-        $tier1 = SlaConfig::whereNull('sub_unit_id')->where('tier', 1)->where('jenis', 'respon')->first();
-        $tier2 = SlaConfig::whereNull('sub_unit_id')->where('tier', 2)->where('jenis', 'respon')->first();
-
-        $this->assertGreaterThan($tier2->threshold_minutes, $tier1->threshold_minutes);
+        $this->assertDatabaseHas('sla_configs', [
+            'sub_unit_id' => null,
+            'priority' => 'Rendah',
+            'jenis' => 'respon',
+            'threshold_minutes' => 80,
+        ]);
     }
 }

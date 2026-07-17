@@ -1,5 +1,6 @@
 import React from 'react';
 import { Clock, User } from 'lucide-react';
+import { formatDateId } from '@/lib/utils';
 
 interface TimelineLog {
     id: number;
@@ -30,7 +31,7 @@ export function TicketTimeline({ logs }: TicketTimelineProps) {
                         )}
                     </div>
                     {log.catatan && <p className="text-sm text-slate-600">{log.catatan}</p>}
-                    <p className="text-xs text-slate-400 mt-1">{new Date(log.timestamp).toLocaleString()}</p>
+                    <p className="text-xs text-slate-400 mt-1">{formatDateId(log.timestamp)}</p>
                 </div>
             ))}
         </div>

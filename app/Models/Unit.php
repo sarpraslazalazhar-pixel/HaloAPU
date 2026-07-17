@@ -12,4 +12,9 @@ class Unit extends Model
     {
         return $this->hasMany(SubUnit::class);
     }
+
+    public function admins()
+    {
+        return $this->belongsToMany(Admin::class, 'admin_unit', 'unit_id', 'admin_id');
+    }
 }

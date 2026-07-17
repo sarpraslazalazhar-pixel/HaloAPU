@@ -8,7 +8,7 @@ class Ticket extends Model
 {
     protected $fillable = [
         'user_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
-        'unit_id', 'sub_unit_id', 'form_data', 'status'
+        'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id'
     ];
 
     protected $casts = [
@@ -74,6 +74,11 @@ class Ticket extends Model
     public function booking()
     {
         return $this->hasOne(RoomVehicleBooking::class);
+    }
+
+    public function assignedAdmin()
+    {
+        return $this->belongsTo(Admin::class, 'assigned_admin_id');
     }
 }
 

@@ -168,20 +168,14 @@ class SlaCalculatorTest extends TestCase
     {
         SlaConfig::create([
             'sub_unit_id' => $this->subUnit->id,
-            'tier' => 1,
+            'priority' => 'Sedang',
             'jenis' => 'respon',
             'threshold_minutes' => 30,
         ]);
         SlaConfig::create([
             'sub_unit_id' => $this->subUnit->id,
-            'tier' => 2,
-            'jenis' => 'respon',
-            'threshold_minutes' => 60,
-        ]);
-        SlaConfig::create([
-            'sub_unit_id' => $this->subUnit->id,
-            'tier' => 3,
-            'jenis' => 'respon',
+            'priority' => 'Sedang',
+            'jenis' => 'penyelesaian',
             'threshold_minutes' => 120,
         ]);
 
@@ -192,6 +186,7 @@ class SlaCalculatorTest extends TestCase
             'sub_unit_id' => $this->subUnit->id,
             'form_data' => [],
             'status' => 'on_proses',
+            'priority' => 'Sedang',
         ]);
         $ticket->created_at = $createdAt;
         $ticket->save();
@@ -202,17 +197,18 @@ class SlaCalculatorTest extends TestCase
             'sla_resolution_deadline' => $createdAt->copy()->addHours(4),
             'paused_at' => null,
             'total_paused_minutes' => 0,
-            'current_tier' => 0,
+            'is_response_breached' => false,
+            'is_resolution_breached' => false,
         ]);
 
         $calculator = new SlaCalculator();
 
         Carbon::setTestNow(Carbon::parse('2026-07-13 09:35:00'));
 
-        $tier = $calculator->checkAndUpdateTier($sla);
+        $calculator->checkAndUpdateTier($sla);
 
-        $this->assertEquals(2, $tier);
-        $this->assertEquals(2, $sla->fresh()->current_tier);
+        $this->assertTrue($sla->fresh()->is_response_breached);
+        $this->assertFalse($sla->fresh()->is_resolution_breached);
 
         Carbon::setTestNow();
     }
@@ -233,9 +229,9 @@ class SlaCalculatorTest extends TestCase
         $response = $this->actingAs($admin, 'admin')
             ->put(route('admin.sla-config.update'), [
                 'configs' => [
-                    ['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 30],
-                    ['sub_unit_id' => null, 'tier' => 2, 'jenis' => 'respon', 'threshold_minutes' => 60],
-                    ['sub_unit_id' => null, 'tier' => 3, 'jenis' => 'respon', 'threshold_minutes' => 120],
+                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30],
+                    ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon', 'threshold_minutes' => 60],
+                    ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'respon', 'threshold_minutes' => 120],
                 ]
             ]);
 
@@ -244,25 +240,25 @@ class SlaCalculatorTest extends TestCase
 
         $this->assertDatabaseHas('sla_configs', [
             'sub_unit_id' => null,
-            'tier' => 1,
+            'priority' => 'Rendah',
             'jenis' => 'respon',
             'threshold_minutes' => 30,
         ]);
         $this->assertDatabaseHas('sla_configs', [
             'sub_unit_id' => null,
-            'tier' => 2,
+            'priority' => 'Sedang',
             'jenis' => 'respon',
             'threshold_minutes' => 60,
         ]);
         $this->assertDatabaseHas('sla_configs', [
             'sub_unit_id' => null,
-            'tier' => 3,
+            'priority' => 'Tinggi',
             'jenis' => 'respon',
             'threshold_minutes' => 120,
         ]);
     }
 
-    public function test_endpoint_validation_fails_if_tier_order_invalid(): void
+    public function test_endpoint_validation_fails_if_priority_invalid(): void
     {
         if (Role::where('name', 'admin')->where('guard_name', 'admin')->doesntExist()) {
             Role::create(['name' => 'admin', 'guard_name' => 'admin']);
@@ -278,13 +274,11 @@ class SlaCalculatorTest extends TestCase
         $response = $this->actingAs($admin, 'admin')
             ->put(route('admin.sla-config.update'), [
                 'configs' => [
-                    ['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 30],
-                    ['sub_unit_id' => null, 'tier' => 2, 'jenis' => 'respon', 'threshold_minutes' => 20], // Invalid (Tier 2 <= Tier 1)
-                    ['sub_unit_id' => null, 'tier' => 3, 'jenis' => 'respon', 'threshold_minutes' => 120],
+                    ['sub_unit_id' => null, 'priority' => 'InvalidPriority', 'jenis' => 'respon', 'threshold_minutes' => 30],
                 ]
             ]);
 
-        $response->assertSessionHasErrors(['configs']);
+        $response->assertSessionHasErrors(['configs.0.priority']);
     }
 
     public function test_endpoint_validation_fails_if_threshold_less_than_one(): void
@@ -303,7 +297,7 @@ class SlaCalculatorTest extends TestCase
         $response = $this->actingAs($admin, 'admin')
             ->put(route('admin.sla-config.update'), [
                 'configs' => [
-                    ['sub_unit_id' => null, 'tier' => 1, 'jenis' => 'respon', 'threshold_minutes' => 0], // Invalid
+                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 0], // Invalid
                 ]
             ]);
 

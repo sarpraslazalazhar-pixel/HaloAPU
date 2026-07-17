@@ -100,7 +100,11 @@ class TicketController extends Controller
 
         if ($oldStatus === 'open' && $newStatus === 'on_proses') {
             if ($sla && !$sla->responded_at) {
-                $sla->update(['responded_at' => now()]);
+                $respondedAt = now();
+                $sla->update([
+                    'responded_at' => $respondedAt,
+                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
+                ]);
             }
         }
 
@@ -115,13 +119,21 @@ class TicketController extends Controller
                 $slaCalculator->resumeSla($sla);
             }
             if ($sla && !$sla->responded_at) {
-                $sla->update(['responded_at' => now()]);
+                $respondedAt = now();
+                $sla->update([
+                    'responded_at' => $respondedAt,
+                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
+                ]);
             }
         }
 
         if ($newStatus === 'solve') {
             if ($sla && !$sla->resolved_at) {
-                $sla->update(['resolved_at' => now()]);
+                $resolvedAt = now();
+                $sla->update([
+                    'resolved_at' => $resolvedAt,
+                    'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
+                ]);
             }
         }
 
@@ -143,6 +155,40 @@ class TicketController extends Controller
         $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
 
         return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
+    }
+
+    public function updatePriority(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)
+    {
+        $request->validate([
+            'priority' => 'required|string|in:Rendah,Sedang,Tinggi,Kritis',
+        ]);
+
+        $oldPriority = $ticket->priority;
+        $newPriority = $request->priority;
+
+        if ($oldPriority !== $newPriority) {
+            $ticket->update(['priority' => $newPriority]);
+
+            // Recalculate SLA if ticket is still open/on_proses and tracking exists
+            if ($ticket->slaTracking && !in_array($ticket->status, ['solve', 'reject'])) {
+                $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
+                $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
+                
+                $ticket->slaTracking->update([
+                    'sla_response_deadline' => $responseDeadline,
+                    'sla_resolution_deadline' => $resolutionDeadline,
+                ]);
+            }
+
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => auth('admin')->id(),
+                'aksi' => 'update_priority',
+                'catatan' => "Prioritas diubah dari " . ($oldPriority ?? 'Belum diset') . " menjadi $newPriority",
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Prioritas tiket berhasil diatur.');
     }
 
     public function downloadAttachment(TicketAttachment $attachment)

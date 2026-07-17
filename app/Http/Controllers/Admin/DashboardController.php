@@ -207,6 +207,26 @@ class DashboardController extends Controller
             ->orderBy('bulan')
             ->get();
 
+        // ── Daily Chart (30 Hari Terakhir) ──
+        $startDate = now()->subDays(30)->startOfDay();
+        $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
+            ->where('created_at', '>=', $startDate)
+            ->groupBy('date', 'unit_id')
+            ->get();
+
+        $dates = collect();
+        for ($i = 30; $i >= 0; $i--) {
+            $dates->push(now()->subDays($i)->format('Y-m-d'));
+        }
+
+        $dailyChartData = $dates->map(function ($dateStr) use ($dailyRaw, $unitNames) {
+            $row = ['date' => $dateStr];
+            foreach ($unitNames as $id => $name) {
+                $row[$name] = $dailyRaw->firstWhere(fn($r) => $r->date === $dateStr && $r->unit_id === $id)?->total ?? 0;
+            }
+            return $row;
+        });
+
         return Inertia::render('Admin/Dashboard/Index', [
             'totalTickets' => $totalTickets,
             'statusCounts' => $statusCounts,
@@ -217,6 +237,7 @@ class DashboardController extends Controller
             'followUpTickets' => $followUpTickets,
             'monthlyChartData' => $monthlyChartData,
             'yearlyChartData' => $yearlyChartData,
+            'dailyChartData' => $dailyChartData,
             'subUnitChartData' => $subUnitChartData,
             'units' => $units,
             'filters' => ['month' => $month, 'year' => $year],

@@ -10,7 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class CsatReminderNotification extends Notification implements ShouldQueue
+class CsatReminderNotification extends Notification
 {
     use Queueable;
 

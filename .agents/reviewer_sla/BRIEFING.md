@@ -1,39 +1,67 @@
-# BRIEFING — 2026-07-13T12:36:00+08:00
+# BRIEFING — 2026-07-17T04:12:31Z
 
 ## Mission
-Review the SLA time setting features (Migration, SlaConfig model, Admin/SlaConfigController, web.php routes, frontend Admin/SlaConfig/Index.tsx page, and Unit tests in tests/Unit/SlaCalculatorTest.php) to ensure correctness, code quality, and robustness.
+Perform a detailed review and adversarial challenge of the SLA checker and Reminder systems implementation in Laravel.
 
 ## 🔒 My Identity
-- Archetype: reviewer
+- Archetype: reviewer_and_adversarial_critic
 - Roles: reviewer, critic
-- Working directory: c:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\reviewer_sla
-- Original parent: 062d0ac4-4212-43f8-b6c7-3ad4e1aefcd4
-- Milestone: SLA review
+- Working directory: C:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\reviewer_sla
+- Original parent: afa31e08-b363-4ac9-b6c4-e9ae064c5055
+- Milestone: SLA and Reminder System Review
 - Instance: 1 of 1
 
 ## 🔒 Key Constraints
 - Review-only — do NOT modify implementation code.
-- Verify that the implementation follows correct Laravel and Inertia/React conventions.
-- Run tests and verify the output.
-- No network access (CODE_ONLY).
+- Network restriction: CODE_ONLY mode.
 
 ## Current Parent
-- Conversation ID: 062d0ac4-4212-43f8-b6c7-3ad4e1aefcd4
-- Updated: not yet
+- Conversation ID: afa31e08-b363-4ac9-b6c4-e9ae064c5055
+- Updated: 2026-07-17T04:18:00Z
 
 ## Review Scope
 - **Files to review**:
-  - `database/migrations/2026_07_10_000012_create_sla_configs_table.php`
-  - `app/Models/SlaConfig.php`
-  - `app/Http/Controllers/Admin/SlaConfigController.php`
-  - `routes/web.php`
-  - `resources/js/Pages/Admin/SlaConfig/Index.tsx`
+  - `app/Console/Commands/CheckSlaCommand.php`
+  - `app/Console/Commands/BookingReminderCommand.php`
+  - `app/Console/Commands/PendingTicketReminderCommand.php`
+  - `app/Console/Commands/CsatReminderCommand.php`
+  - `app/Console/Commands/SnoozeCheckCommand.php`
+  - `app/Services/SlaCalculator.php`
+  - `app/Models/Admin.php`
+  - `app/Models/Unit.php`
+  - `app/Models/Ticket.php`
+  - `app/Notifications/SlaEscalationNotification.php`
+  - `app/Notifications/PendingTicketReminderNotification.php`
+  - New migrations in `database/migrations/`
   - `tests/Unit/SlaCalculatorTest.php`
-- **Interface contracts**: Correct Laravel, Inertia, and React conventions.
-- **Review criteria**: Correctness, completeness, style, security, robustness, edge cases, complexity/efficiency.
+  - `tests/Unit/SlaCalculatorStressTest.php`
+  - `app/Console/Commands/SimulateSlaAndRemindersCommand.php`
+- **Interface contracts**: Correct Laravel, database, and background job patterns.
+- **Review criteria**: Correctness, quality, conventions, transaction safety, error resilience, performance (N+1 queries, memory), and conformance to specifications.
 
 ## Key Decisions Made
-- Start review of the SLA migration, model, controller, routes, frontend, and tests.
+- Performed detailed quality and adversarial review.
+- Identified N+1 query patterns, transactional notification hazards, regex robustness issues, and serialization inefficiencies.
+- Issued verdict: REQUEST_CHANGES.
 
 ## Artifact Index
-- `c:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\reviewer_sla\handoff.md` — Final review report.
+- C:\Users\LAZ AL AZHAR\Documents\Halo APU V2\.agents\reviewer_sla\handoff.md — Handoff report with findings and verdict.
+
+## Review Checklist
+- **Items reviewed**: All code files, migrations, notifications, and tests.
+- **Verdict**: request_changes
+- **Unverified claims**: None.
+
+## Attack Surface
+- **Hypotheses tested**:
+  - Tested SLA Calculator for edge cases (boundaries, start equals end, out of work hours, cross day, weekends).
+  - Analyzed N+1 query patterns in commands.
+  - Inspected concurrency issues and database locking.
+  - Checked notification dispatching inside transaction blocks.
+  - Checked phone number serialization and formatting.
+- **Vulnerabilities found**:
+  - N+1 query loops in `BookingReminderCommand`, `PendingTicketReminderCommand`, and `CsatReminderCommand`.
+  - Transaction block notification dispatching in `CheckSlaCommand`, `PendingTicketReminderCommand`, and `SnoozeCheckCommand`.
+  - Weak phone number parsing regex in `WhatsAppChannel`.
+  - Missing `SerializesModels` trait on queued notifications.
+- **Untested angles**: None.

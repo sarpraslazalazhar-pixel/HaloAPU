@@ -21,7 +21,7 @@ class MonitorController extends Controller
         $now = Carbon::now();
 
         // Ambil semua booking yang relevan (hari ini dan ke depan)
-        $query = RoomVehicleBooking::whereNotIn('status', ['Ditolak', 'dibatalkan', 'selesai', 'solve'])
+        $query = RoomVehicleBooking::where('status', 'Disetujui')
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->with(['ticket.user:id,username']);
 
@@ -135,7 +135,7 @@ class MonitorController extends Controller
      */
     protected function getCalendarData()
     {
-        $bookings = RoomVehicleBooking::whereNotIn('status', ['Ditolak', 'dibatalkan', 'selesai', 'solve'])
+        $bookings = RoomVehicleBooking::where('status', 'Disetujui')
             ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
             ->with(['ticket.user:id,username'])
             ->orderBy('tanggal_mulai')

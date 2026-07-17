@@ -15,11 +15,11 @@ class SlaConfigController extends Controller
     {
         $globalConfigs = SlaConfig::whereNull('sub_unit_id')
             ->orderBy('jenis')
-            ->orderBy('tier')
+            ->orderBy('priority')
             ->get();
 
         $subUnits = SubUnit::with(['unit', 'slaConfigs' => function ($q) {
-            $q->orderBy('jenis')->orderBy('tier');
+            $q->orderBy('jenis')->orderBy('priority');
         }])->get();
 
         return Inertia::render('Admin/SlaConfig/Index', [
@@ -33,31 +33,17 @@ class SlaConfigController extends Controller
         $validated = $request->validate([
             'configs' => 'required|array|min:1',
             'configs.*.sub_unit_id' => 'nullable|exists:sub_units,id',
-            'configs.*.tier' => 'required|integer|in:1,2,3',
+            'configs.*.priority' => ['required', Rule::in(['Rendah', 'Sedang', 'Tinggi', 'Kritis'])],
             'configs.*.jenis' => ['required', Rule::in(['respon', 'penyelesaian'])],
             'configs.*.threshold_minutes' => 'required|integer|min:1',
         ]);
-
-        $grouped = collect($validated['configs'])
-            ->groupBy(fn ($c) => ($c['sub_unit_id'] ?? 'global') . '_' . $c['jenis']);
-
-        foreach ($grouped as $key => $items) {
-            $sorted = $items->sortBy('tier')->values();
-            for ($i = 1; $i < $sorted->count(); $i++) {
-                if ($sorted[$i]['threshold_minutes'] <= $sorted[$i - 1]['threshold_minutes']) {
-                    return back()->withErrors([
-                        'configs' => "Threshold Tier {$sorted[$i]['tier']} harus lebih besar dari Tier {$sorted[$i-1]['tier']} untuk grup {$key}.",
-                    ]);
-                }
-            }
-        }
 
         $keepIds = [];
         foreach ($validated['configs'] as $config) {
             $record = SlaConfig::updateOrCreate(
                 [
                     'sub_unit_id' => $config['sub_unit_id'],
-                    'tier' => $config['tier'],
+                    'priority' => $config['priority'],
                     'jenis' => $config['jenis'],
                 ],
                 [

@@ -38,11 +38,16 @@ if (empty($command)) {
     echo "</div>";
     
     echo "<div class='section'><h2>⚙️ Artisan Commands</h2>";
-    $cmds = ['optimize:clear', 'config:clear', 'cache:clear', 'route:clear', 'view:clear', 'config:cache', 'route:cache', 'view:cache', 'storage:link', 'migrate --force', 'key:generate --force', 'ziggy:generate'];
+    $cmds = ['optimize:clear', 'config:clear', 'cache:clear', 'route:clear', 'view:clear', 'config:cache', 'route:cache', 'view:cache', 'storage:link', 'migrate --force', 'key:generate --force', 'ziggy:generate', 'schedule:run', 'sla:check', 'simulate:sla-and-reminders'];
     foreach ($cmds as $c) {
         $label = $c;
         echo "<a href='{$baseUrl}?key={$key}&cmd=" . urlencode($c) . "'>▶ {$label}</a>";
     }
+    echo "</div>";
+    
+    echo "<div class='section'><h2>🚀 Deployment</h2>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=deploy' style='border-left-color: #00e676;'>▶ deploy — Jalankan migrate --force & optimize:clear</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=deploy-cpanel' style='border-left-color: #00b0ff;'>▶ deploy-cpanel — Full cPanel Deploy (Down, Cache, Migrate, Storage, Up)</a>";
     echo "</div>";
     
     echo "<div class='section'><h2>🔍 Diagnostik</h2>";
@@ -450,7 +455,6 @@ if ($command === 'ziggy:generate') {
     exit;
 }
 
-// ==============================
 // Command Artisan standar
 // ==============================
 $allowed = [
@@ -466,6 +470,11 @@ $allowed = [
     'optimize:clear',
     'key:generate --force',
     'ziggy:generate',
+    'deploy',
+    'deploy-cpanel',
+    'schedule:run',
+    'sla:check',
+    'simulate:sla-and-reminders'
 ];
 
 if (!in_array($command, $allowed)) {
@@ -476,6 +485,64 @@ if (!in_array($command, $allowed)) {
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+
+if ($command === 'deploy') {
+    echo "<pre>=== Memulai Deployment ===\n\n";
+    try {
+        echo "1. Menjalankan migrate --force...\n";
+        $kernel->call('migrate', ['--force' => true]);
+        echo Artisan::output() . "\n";
+        
+        echo "2. Menjalankan optimize:clear...\n";
+        $kernel->call('optimize:clear');
+        echo Artisan::output() . "\n";
+        
+        echo "✅ Deployment Selesai!\n";
+    } catch (\Throwable $e) {
+        echo "❌ Error: " . htmlspecialchars($e->getMessage()) . "\n\n";
+    }
+    echo "</pre>";
+    exit;
+}
+
+if ($command === 'deploy-cpanel') {
+    echo "<pre>=== Memulai Deployment ke cPanel ===\n\n";
+    try {
+        echo "1. Mengaktifkan Maintenance Mode...\n";
+        $kernel->call('down');
+        echo Artisan::output() . "\n";
+        
+        echo "2. Clear Cache & Optimize...\n";
+        $kernel->call('optimize:clear');
+        echo Artisan::output() . "\n";
+        
+        echo "3. Menjalankan Migrasi Database...\n";
+        $kernel->call('migrate', ['--force' => true]);
+        echo Artisan::output() . "\n";
+        
+        echo "4. Caching Ulang (Config & Route)...\n";
+        $kernel->call('config:cache');
+        $kernel->call('route:cache');
+        $kernel->call('view:cache');
+        echo "Cache berhasil dibangun.\n\n";
+        
+        echo "5. Membuat Storage Link (jika belum ada)...\n";
+        $kernel->call('storage:link');
+        echo Artisan::output() . "\n";
+
+        echo "6. Mematikan Maintenance Mode...\n";
+        $kernel->call('up');
+        echo Artisan::output() . "\n";
+        
+        echo "✅ Deployment cPanel Selesai!\n";
+    } catch (\Throwable $e) {
+        echo "❌ Error: " . htmlspecialchars($e->getMessage()) . "\n\n";
+        // Force UP just in case
+        $kernel->call('up');
+    }
+    echo "</pre>";
+    exit;
+}
 
 // Parse command
 $parts = explode(' ', $command);

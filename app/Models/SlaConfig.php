@@ -9,13 +9,12 @@ class SlaConfig extends Model
 {
     protected $fillable = [
         'sub_unit_id',
-        'tier',
+        'priority',
         'jenis',
         'threshold_minutes',
     ];
 
     protected $casts = [
-        'tier' => 'integer',
         'threshold_minutes' => 'integer',
     ];
 
@@ -34,11 +33,11 @@ class SlaConfig extends Model
         return $query->where('sub_unit_id', $subUnitId);
     }
 
-    public static function getThreshold(?int $subUnitId, int $tier, string $jenis): int
+    public static function getThreshold(?int $subUnitId, string $priority, string $jenis): int
     {
         if ($subUnitId) {
             $config = self::where('sub_unit_id', $subUnitId)
-                ->where('tier', $tier)
+                ->where('priority', $priority)
                 ->where('jenis', $jenis)
                 ->first();
 
@@ -48,7 +47,7 @@ class SlaConfig extends Model
         }
 
         $global = self::whereNull('sub_unit_id')
-            ->where('tier', $tier)
+            ->where('priority', $priority)
             ->where('jenis', $jenis)
             ->first();
 

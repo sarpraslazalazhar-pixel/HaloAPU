@@ -48,15 +48,20 @@ class TicketStatusUpdatedNotification extends Notification
         $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
         $url = route('tiket.show', $this->ticket->id);
         
-        $message = "Halo *{$nama}*,\n\n";
-        $message .= "Status tiket Anda terkait layanan *{$layanan}* telah diperbarui.\n\n";
+        $message = "🔄 *STATUS TIKET DIPERBARUI*\n\n";
+        $message .= "Halo *{$nama}*\n\n";
+        $message .= "Status pengajuan Kamu terkait layanan *{$layanan}* telah diperbarui.\n\n";
         $message .= "Status Saat Ini: *{$statusStr}*\n";
-        $message .= "Catatan: \"{$this->catatan}\"\n\n";
+        if (!empty($this->catatan)) {
+            $message .= "Catatan: _{$this->catatan}_\n\n";
+        } else {
+            $message .= "\n";
+        }
         
         if ($this->ticket->status === 'solve' || $this->ticket->status === 'selesai') {
-            $message .= "Karena tiket Anda telah selesai, mohon ketersediaannya untuk memberikan **Rating Kepuasan (CSAT)** melalui link berikut ini:\n{$url}\n\n";
+            $message .= "Karena tiket Kamu telah selesai, mohon ketersediaannya untuk memberikan *Rating Kepuasan (CSAT)* melalui link berikut ini:\n{$url}\n\n";
         } else {
-            $message .= "Anda dapat melihat detail tiket melalui link berikut:\n{$url}\n\n";
+            $message .= "Kamu bisa melihat detail tiket melalui link berikut:\n{$url}\n\n";
         }
         
         $message .= "Terima kasih,\nTim Halo APU";

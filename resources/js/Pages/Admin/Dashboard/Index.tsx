@@ -19,7 +19,7 @@ const STATUS_META: Record<string, { label: string; bg: string; icon: React.Eleme
     reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
 };
 
-export default function DashboardIndex({ totalTickets, statusCounts, topUsers, followUpTickets, monthlyChartData, yearlyChartData, subUnitChartData, units, filters, slaStats, slaPieChartData, slaBarChartData, slaTrendData, slaFilters, topUsersAll, csatTrend, tiketBulanan }: any) {
+export default function DashboardIndex({ totalTickets, statusCounts, topUsers, followUpTickets, monthlyChartData, yearlyChartData, dailyChartData, subUnitChartData, units, filters, slaStats, slaPieChartData, slaBarChartData, slaTrendData, slaFilters, topUsersAll, csatTrend, tiketBulanan }: any) {
     const [month, setMonth] = useState(filters?.month !== null && filters?.month !== undefined ? String(filters.month) : '');
     const [year, setYear] = useState(filters?.year !== null && filters?.year !== undefined ? String(filters.year) : '');
     const [selectedUnit, setSelectedUnit] = useState('');
@@ -205,6 +205,32 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Daily Chart */}
+            <Card className="mb-8">
+                <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold">Grafik Tiket Harian (30 Hari Terakhir)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {dailyChartData?.length > 0 ? (
+                        <ReactECharts option={{
+                            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                            legend: { bottom: 0 },
+                            grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+                            xAxis: { type: 'category', data: dailyChartData.map((d: any) => d.date) },
+                            yAxis: { type: 'value' },
+                            series: units.map((u: any, i: number) => ({
+                                name: u.nama_unit,
+                                type: 'line',
+                                smooth: true,
+                                data: dailyChartData.map((d: any) => d[u.nama_unit] || 0)
+                            }))
+                        }} style={{ height: 350, width: '100%' }} />
+                    ) : (
+                        <p className="text-sm text-muted-foreground text-center py-8">Belum ada data harian.</p>
+                    )}
+                </CardContent>
+            </Card>
 
             <section className="mb-8 space-y-6">
                 <div className="flex items-center gap-2">

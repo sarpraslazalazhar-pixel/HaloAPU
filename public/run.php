@@ -50,6 +50,11 @@ if (empty($command)) {
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy-cpanel' style='border-left-color: #00b0ff;'>▶ deploy-cpanel — Full cPanel Deploy (Down, Cache, Migrate, Storage, Up)</a>";
     echo "</div>";
     
+    echo "<div class='section'><h2>⏱️ SLA Management</h2>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=sla-view' style='border-left-color: #00e676;'>📊 sla-view — Lihat semua konfigurasi SLA saat ini</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=sla-update' style='border-left-color: #ffab40;'>✏️ sla-update — Update waktu SLA (via form)</a>";
+    echo "</div>";
+    
     echo "<div class='section'><h2>🔍 Diagnostik</h2>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=check-route'>🔍 check-route — Cek route web.php di server</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=opcache-reset'>🧹 opcache-reset — Hapus cache RAM PHP</a>";
@@ -341,6 +346,245 @@ if ($command === 'test-email') {
 }
 
 // ==============================
+// Command khusus: Lihat semua SLA Config
+// ==============================
+if ($command === 'sla-view') {
+    require __DIR__ . '/../vendor/autoload.php';
+    $app = require_once __DIR__ . '/../bootstrap/app.php';
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+    $configs = DB::table('sla_configs')
+        ->leftJoin('sub_units', 'sla_configs.sub_unit_id', '=', 'sub_units.id')
+        ->leftJoin('units', 'sub_units.unit_id', '=', 'units.id')
+        ->select(
+            'sla_configs.id',
+            'sla_configs.sub_unit_id',
+            'sub_units.name as sub_unit_name',
+            'units.name as unit_name',
+            'sla_configs.priority',
+            'sla_configs.jenis',
+            'sla_configs.threshold_minutes'
+        )
+        ->orderBy('sla_configs.sub_unit_id')
+        ->orderBy('sla_configs.jenis')
+        ->orderBy('sla_configs.priority')
+        ->get();
+
+    echo "<html><head><title>SLA Config Viewer</title>";
+    echo "<style>
+        body { font-family: 'Courier New', monospace; background: #1a1a2e; color: #e0e0e0; padding: 30px; margin: 0 auto; }
+        h1 { color: #7c4dff; }
+        h2 { color: #ffab40; font-size: 1em; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th { background: #16213e; color: #40c4ff; padding: 10px 12px; text-align: left; border: 1px solid #2a3a5e; }
+        td { padding: 8px 12px; border: 1px solid #2a3a5e; }
+        tr:nth-child(even) { background: #16213e; }
+        tr:hover { background: #1a2744; }
+        .global { color: #00e676; font-weight: bold; }
+        .back { display: inline-block; margin-top: 20px; color: #40c4ff; text-decoration: none; padding: 8px 16px; background: #16213e; border-radius: 6px; border-left: 3px solid #7c4dff; }
+        .back:hover { background: #1a2744; }
+    </style></head><body>";
+    echo "<h1>📊 SLA Config — Semua Konfigurasi</h1>";
+
+    // Pisahkan global dan per-subunit
+    $globals = $configs->filter(fn($c) => $c->sub_unit_id === null);
+    $perSubUnit = $configs->filter(fn($c) => $c->sub_unit_id !== null)->groupBy('sub_unit_id');
+
+    // Tabel Global
+    echo "<h2>🌐 Default Global</h2>";
+    echo "<table><tr><th>ID</th><th>Jenis</th><th>Priority</th><th>Threshold (menit)</th></tr>";
+    foreach ($globals as $g) {
+        echo "<tr><td>{$g->id}</td><td>{$g->jenis}</td><td>{$g->priority}</td><td><span class='global'>{$g->threshold_minutes}</span></td></tr>";
+    }
+    echo "</table>";
+
+    // Tabel Per Sub Unit
+    if ($perSubUnit->isNotEmpty()) {
+        echo "<h2>🏢 Override Per Sub Unit</h2>";
+        foreach ($perSubUnit as $subUnitId => $items) {
+            $first = $items->first();
+            $label = ($first->unit_name ?? '?') . ' — ' . ($first->sub_unit_name ?? '?');
+            echo "<h3 style='color:#40c4ff; margin-top:20px;'>$label (sub_unit_id: $subUnitId)</h3>";
+            echo "<table><tr><th>ID</th><th>Jenis</th><th>Priority</th><th>Threshold (menit)</th></tr>";
+            foreach ($items as $item) {
+                echo "<tr><td>{$item->id}</td><td>{$item->jenis}</td><td>{$item->priority}</td><td>{$item->threshold_minutes}</td></tr>";
+            }
+            echo "</table>";
+        }
+    }
+
+    $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+    $key = urlencode($SECRET_KEY);
+    echo "<a class='back' href='{$baseUrl}?key={$key}'>← Kembali ke Menu</a>";
+    echo "</body></html>";
+    exit;
+}
+
+// ==============================
+// Command khusus: Update SLA Config via Form
+// ==============================
+if ($command === 'sla-update') {
+    require __DIR__ . '/../vendor/autoload.php';
+    $app = require_once __DIR__ . '/../bootstrap/app.php';
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+    $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+    $key = urlencode($SECRET_KEY);
+    $message = '';
+
+    // Proses update jika ada parameter action=save
+    if (($_GET['action'] ?? '') === 'save') {
+        $priority = $_GET['priority'] ?? '';
+        $jenis = $_GET['jenis'] ?? '';
+        $minutes = (int) ($_GET['minutes'] ?? 0);
+        $subUnitId = ($_GET['sub_unit_id'] ?? '') === '' ? null : (int) $_GET['sub_unit_id'];
+
+        $validPriorities = ['Rendah', 'Sedang', 'Tinggi', 'Kritis'];
+        $validJenis = ['respon', 'penyelesaian'];
+
+        if (!in_array($priority, $validPriorities)) {
+            $message = '❌ Priority tidak valid. Harus: ' . implode(', ', $validPriorities);
+        } elseif (!in_array($jenis, $validJenis)) {
+            $message = '❌ Jenis tidak valid. Harus: respon atau penyelesaian';
+        } elseif ($minutes < 1) {
+            $message = '❌ Waktu (minutes) harus minimal 1';
+        } else {
+            DB::table('sla_configs')->updateOrInsert(
+                [
+                    'sub_unit_id' => $subUnitId,
+                    'priority' => $priority,
+                    'jenis' => $jenis,
+                ],
+                [
+                    'threshold_minutes' => $minutes,
+                    'updated_at' => now(),
+                ]
+            );
+            $scope = $subUnitId === null ? 'Global' : "Sub Unit ID: $subUnitId";
+            $message = "✅ Berhasil update! [$scope] {$jenis} - {$priority} = {$minutes} menit";
+        }
+    }
+
+    // Proses bulk update jika ada parameter action=bulk-save
+    if (($_GET['action'] ?? '') === 'bulk-save') {
+        $priorities = ['Kritis', 'Tinggi', 'Sedang', 'Rendah'];
+        $jenisTypes = ['respon', 'penyelesaian'];
+        $subUnitId = ($_GET['sub_unit_id'] ?? '') === '' ? null : (int) $_GET['sub_unit_id'];
+        $count = 0;
+
+        foreach ($jenisTypes as $jenis) {
+            foreach ($priorities as $priority) {
+                $paramKey = "{$jenis}_" . strtolower($priority);
+                $val = $_GET[$paramKey] ?? '';
+                if ($val !== '' && (int)$val >= 1) {
+                    DB::table('sla_configs')->updateOrInsert(
+                        ['sub_unit_id' => $subUnitId, 'priority' => $priority, 'jenis' => $jenis],
+                        ['threshold_minutes' => (int)$val, 'updated_at' => now()]
+                    );
+                    $count++;
+                }
+            }
+        }
+        $scope = $subUnitId === null ? 'Global' : "Sub Unit ID: $subUnitId";
+        $message = "✅ Berhasil update {$count} konfigurasi SLA! [$scope]";
+    }
+
+    // Ambil data saat ini untuk pre-fill form
+    $currentConfigs = DB::table('sla_configs')
+        ->whereNull('sub_unit_id')
+        ->get()
+        ->keyBy(fn($c) => "{$c->jenis}_{$c->priority}");
+
+    // Ambil daftar sub_units untuk dropdown
+    $subUnits = DB::table('sub_units')
+        ->leftJoin('units', 'sub_units.unit_id', '=', 'units.id')
+        ->select('sub_units.id', 'sub_units.name as sub_unit_name', 'units.name as unit_name')
+        ->orderBy('units.name')
+        ->orderBy('sub_units.name')
+        ->get();
+
+    echo "<html><head><title>SLA Config Updater</title>";
+    echo "<style>
+        body { font-family: 'Courier New', monospace; background: #1a1a2e; color: #e0e0e0; padding: 30px; max-width: 900px; margin: 0 auto; }
+        h1 { color: #7c4dff; }
+        h2 { color: #ffab40; font-size: 1em; margin-top: 25px; }
+        .msg-ok { background: #1b3a2a; border-left: 4px solid #00e676; padding: 12px 16px; margin: 15px 0; border-radius: 6px; }
+        .msg-err { background: #3e1621; border-left: 4px solid #ff5252; padding: 12px 16px; margin: 15px 0; border-radius: 6px; }
+        table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+        th { background: #16213e; color: #40c4ff; padding: 10px 12px; text-align: left; border: 1px solid #2a3a5e; }
+        td { padding: 8px 12px; border: 1px solid #2a3a5e; }
+        input[type=number] { background: #0d1b2a; color: #e0e0e0; border: 1px solid #40c4ff; padding: 6px 10px; width: 80px; border-radius: 4px; text-align: center; }
+        input[type=number]:focus { outline: none; border-color: #7c4dff; box-shadow: 0 0 5px rgba(124,77,255,0.5); }
+        select { background: #0d1b2a; color: #e0e0e0; border: 1px solid #40c4ff; padding: 6px 10px; border-radius: 4px; }
+        .btn { display: inline-block; color: #fff; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-family: inherit; font-size: 14px; text-decoration: none; margin: 5px 3px; }
+        .btn-save { background: #00e676; color: #1a1a2e; font-weight: bold; }
+        .btn-save:hover { background: #69f0ae; }
+        .btn-view { background: #40c4ff; color: #1a1a2e; }
+        .btn-view:hover { background: #80d8ff; }
+        .back { display: inline-block; margin-top: 20px; color: #40c4ff; text-decoration: none; padding: 8px 16px; background: #16213e; border-radius: 6px; border-left: 3px solid #7c4dff; }
+        .back:hover { background: #1a2744; }
+        .help { color: #888; font-size: 0.85em; margin-top: 5px; }
+    </style></head><body>";
+    echo "<h1>✏️ SLA Config — Update Waktu</h1>";
+
+    if ($message) {
+        $cls = str_starts_with($message, '✅') ? 'msg-ok' : 'msg-err';
+        echo "<div class='{$cls}'>{$message}</div>";
+    }
+
+    // Form Bulk Update Global
+    echo "<h2>🌐 Update Default Global (Semua Sekaligus)</h2>";
+    echo "<form method='GET' action='{$baseUrl}'>";
+    echo "<input type='hidden' name='key' value='{$SECRET_KEY}'>";
+    echo "<input type='hidden' name='cmd' value='sla-update'>";
+    echo "<input type='hidden' name='action' value='bulk-save'>";
+    echo "<input type='hidden' name='sub_unit_id' value=''>";
+    echo "<table>";
+    echo "<tr><th>Jenis</th><th>Kritis (menit)</th><th>Tinggi (menit)</th><th>Sedang (menit)</th><th>Rendah (menit)</th></tr>";
+
+    foreach (['respon', 'penyelesaian'] as $jenis) {
+        $label = $jenis === 'respon' ? 'SLA Respon' : 'SLA Penyelesaian';
+        echo "<tr><td><strong>{$label}</strong></td>";
+        foreach (['Kritis', 'Tinggi', 'Sedang', 'Rendah'] as $priority) {
+            $paramKey = "{$jenis}_" . strtolower($priority);
+            $current = $currentConfigs["{$jenis}_{$priority}"] ?? null;
+            $val = $current ? $current->threshold_minutes : '';
+            echo "<td><input type='number' name='{$paramKey}' value='{$val}' min='1' placeholder='menit'></td>";
+        }
+        echo "</tr>";
+    }
+    echo "</table>";
+    echo "<button type='submit' class='btn btn-save'>💾 Simpan Semua Global</button>";
+    echo "</form>";
+
+    // Form Update Per Sub Unit
+    echo "<h2>🏢 Update Per Sub Unit (Satu per Satu)</h2>";
+    echo "<form method='GET' action='{$baseUrl}'>";
+    echo "<input type='hidden' name='key' value='{$SECRET_KEY}'>";
+    echo "<input type='hidden' name='cmd' value='sla-update'>";
+    echo "<input type='hidden' name='action' value='save'>";
+    echo "<table>";
+    echo "<tr><td><strong>Sub Unit</strong></td><td><select name='sub_unit_id'><option value=''>— Global (Default) —</option>";
+    foreach ($subUnits as $su) {
+        echo "<option value='{$su->id}'>{$su->unit_name} — {$su->sub_unit_name}</option>";
+    }
+    echo "</select></td></tr>";
+    echo "<tr><td><strong>Priority</strong></td><td><select name='priority'><option value='Kritis'>Kritis</option><option value='Tinggi'>Tinggi</option><option value='Sedang'>Sedang</option><option value='Rendah'>Rendah</option></select></td></tr>";
+    echo "<tr><td><strong>Jenis</strong></td><td><select name='jenis'><option value='respon'>Respon</option><option value='penyelesaian'>Penyelesaian</option></select></td></tr>";
+    echo "<tr><td><strong>Waktu (menit)</strong></td><td><input type='number' name='minutes' min='1' placeholder='contoh: 60'></td></tr>";
+    echo "</table>";
+    echo "<button type='submit' class='btn btn-save'>💾 Simpan</button>";
+    echo "</form>";
+
+    echo "<p class='help'>💡 Tips: Gunakan <a href='{$baseUrl}?key={$key}&cmd=sla-view' style='color:#40c4ff;'>sla-view</a> untuk melihat semua konfigurasi saat ini.</p>";
+    echo "<br>";
+    echo "<a class='btn btn-view' href='{$baseUrl}?key={$key}&cmd=sla-view'>📊 Lihat Semua Config</a>";
+    echo "<a class='back' href='{$baseUrl}?key={$key}'>← Kembali ke Menu</a>";
+    echo "</body></html>";
+    exit;
+}
+
+// ==============================
 // Command khusus: copy storage (pengganti symlink kalau symlink() diblokir)
 // ==============================
 if ($command === 'fix-storage-copy') {
@@ -474,7 +718,9 @@ $allowed = [
     'deploy-cpanel',
     'schedule:run',
     'sla:check',
-    'simulate:sla-and-reminders'
+    'simulate:sla-and-reminders',
+    'sla-view',
+    'sla-update'
 ];
 
 if (!in_array($command, $allowed)) {

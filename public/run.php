@@ -450,16 +450,28 @@ if ($command === 'sla-update') {
         } elseif ($minutes < 1) {
             $message = '❌ Waktu (minutes) harus minimal 1';
         } else {
-            \App\Models\SlaConfig::updateOrCreate(
-                [
+            $exists = DB::table('sla_configs')
+                ->where('sub_unit_id', $subUnitId)
+                ->where('priority', $priority)
+                ->where('jenis', $jenis)
+                ->exists();
+                
+            if ($exists) {
+                DB::table('sla_configs')
+                    ->where('sub_unit_id', $subUnitId)
+                    ->where('priority', $priority)
+                    ->where('jenis', $jenis)
+                    ->update(['threshold_minutes' => $minutes, 'updated_at' => now()]);
+            } else {
+                DB::table('sla_configs')->insert([
                     'sub_unit_id' => $subUnitId,
                     'priority' => $priority,
                     'jenis' => $jenis,
-                ],
-                [
                     'threshold_minutes' => $minutes,
-                ]
-            );
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
             $scope = $subUnitId === null ? 'Global' : "Sub Unit ID: $subUnitId";
             $message = "✅ Berhasil update! [$scope] {$jenis} - {$priority} = {$minutes} menit";
         }
@@ -477,10 +489,28 @@ if ($command === 'sla-update') {
                 $paramKey = "{$jenis}_" . strtolower($priority);
                 $val = $_GET[$paramKey] ?? '';
                 if ($val !== '' && (int)$val >= 1) {
-                    \App\Models\SlaConfig::updateOrCreate(
-                        ['sub_unit_id' => $subUnitId, 'priority' => $priority, 'jenis' => $jenis],
-                        ['threshold_minutes' => (int)$val]
-                    );
+                    $exists = DB::table('sla_configs')
+                        ->where('sub_unit_id', $subUnitId)
+                        ->where('priority', $priority)
+                        ->where('jenis', $jenis)
+                        ->exists();
+                        
+                    if ($exists) {
+                        DB::table('sla_configs')
+                            ->where('sub_unit_id', $subUnitId)
+                            ->where('priority', $priority)
+                            ->where('jenis', $jenis)
+                            ->update(['threshold_minutes' => (int)$val, 'updated_at' => now()]);
+                    } else {
+                        DB::table('sla_configs')->insert([
+                            'sub_unit_id' => $subUnitId,
+                            'priority' => $priority,
+                            'jenis' => $jenis,
+                            'threshold_minutes' => (int)$val,
+                            'created_at' => now(),
+                            'updated_at' => now()
+                        ]);
+                    }
                     $count++;
                 }
             }
@@ -651,6 +681,13 @@ if ($command === 'sla-diagnose') {
         
         if ($hasPriority) {
             echo "<span class='ok'>✅ Kolom 'priority' sudah ada (migration terbaru sudah jalan)</span>";
+            
+            // Cleanup data lama yang priority-nya kosong/blank
+            $deletedCount = DB::table('sla_configs')->where('priority', '')->orWhereNull('priority')->delete();
+            if ($deletedCount > 0) {
+                echo "<br><span class='warn'>⚠️ Membersihkan {$deletedCount} data lama yang rusak (priority kosong)</span>";
+            }
+            
         } elseif ($hasTier) {
             echo "<span class='warn'>⚠️ Kolom 'tier' masih ada, kolom 'priority' belum ada</span><br>";
             echo "Menjalankan migration pending...";

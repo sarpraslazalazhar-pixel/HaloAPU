@@ -904,7 +904,8 @@ $allowed = [
     'sla:check',
     'simulate:sla-and-reminders',
     'sla-view',
-    'sla-update'
+    'sla-update',
+    'sla-diagnose'
 ];
 
 if (!in_array($command, $allowed)) {

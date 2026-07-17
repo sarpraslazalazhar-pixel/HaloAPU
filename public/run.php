@@ -51,6 +51,7 @@ if (empty($command)) {
     echo "</div>";
     
     echo "<div class='section'><h2>⏱️ SLA Management</h2>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=sla-diagnose' style='border-left-color: #ff5252;'>🔧 sla-diagnose — Diagnosa & perbaiki tabel SLA (jalankan pertama!)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=sla-view' style='border-left-color: #00e676;'>📊 sla-view — Lihat semua konfigurasi SLA saat ini</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=sla-update' style='border-left-color: #ffab40;'>✏️ sla-update — Update waktu SLA (via form)</a>";
     echo "</div>";
@@ -579,6 +580,189 @@ if ($command === 'sla-update') {
     echo "<p class='help'>💡 Tips: Gunakan <a href='{$baseUrl}?key={$key}&cmd=sla-view' style='color:#40c4ff;'>sla-view</a> untuk melihat semua konfigurasi saat ini.</p>";
     echo "<br>";
     echo "<a class='btn btn-view' href='{$baseUrl}?key={$key}&cmd=sla-view'>📊 Lihat Semua Config</a>";
+    echo "<a class='back' href='{$baseUrl}?key={$key}'>← Kembali ke Menu</a>";
+    echo "</body></html>";
+    exit;
+}
+
+// ==============================
+// Command khusus: Diagnosa & perbaiki tabel SLA
+// ==============================
+if ($command === 'sla-diagnose') {
+    require __DIR__ . '/../vendor/autoload.php';
+    $app = require_once __DIR__ . '/../bootstrap/app.php';
+    $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+
+    $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
+    $key = urlencode($SECRET_KEY);
+
+    echo "<html><head><title>SLA Diagnose</title>";
+    echo "<style>
+        body { font-family: 'Courier New', monospace; background: #1a1a2e; color: #e0e0e0; padding: 30px; max-width: 900px; margin: 0 auto; }
+        h1 { color: #7c4dff; }
+        .ok { color: #00e676; }
+        .err { color: #ff5252; }
+        .warn { color: #ffab40; }
+        .step { background: #16213e; padding: 12px 16px; margin: 8px 0; border-radius: 6px; border-left: 3px solid #2a3a5e; }
+        .step.success { border-left-color: #00e676; }
+        .step.error { border-left-color: #ff5252; }
+        .step.warning { border-left-color: #ffab40; }
+        .back { display: inline-block; margin-top: 20px; color: #40c4ff; text-decoration: none; padding: 8px 16px; background: #16213e; border-radius: 6px; border-left: 3px solid #7c4dff; }
+        .back:hover { background: #1a2744; }
+        pre { background: #0d1b2a; padding: 10px; border-radius: 4px; overflow-x: auto; }
+    </style></head><body>";
+    echo "<h1>🔧 SLA Diagnose & Fix</h1>";
+
+    // Step 1: Cek tabel sla_configs ada atau tidak
+    echo "<div class='step'>";
+    echo "<strong>Step 1:</strong> Cek tabel sla_configs... ";
+    $tableExists = Schema::hasTable('sla_configs');
+    if ($tableExists) {
+        echo "<span class='ok'>✅ ADA</span>";
+    } else {
+        echo "<span class='err'>❌ TIDAK ADA</span>";
+    }
+    echo "</div>";
+
+    // Step 2: Jalankan migration jika tabel belum ada
+    if (!$tableExists) {
+        echo "<div class='step warning'>";
+        echo "<strong>Step 2:</strong> Menjalankan migration... ";
+        try {
+            $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+            $kernel->call('migrate', ['--force' => true]);
+            echo "<span class='ok'>✅ Migration berhasil</span>";
+            echo "<pre>" . Artisan::output() . "</pre>";
+            $tableExists = Schema::hasTable('sla_configs');
+        } catch (\Exception $e) {
+            echo "<span class='err'>❌ GAGAL: " . htmlspecialchars($e->getMessage()) . "</span>";
+        }
+        echo "</div>";
+    }
+
+    if ($tableExists) {
+        // Step 3: Cek kolom
+        echo "<div class='step'>";
+        echo "<strong>Step 3:</strong> Cek struktur kolom...<br>";
+        $columns = Schema::getColumnListing('sla_configs');
+        echo "Kolom yang ada: <code>" . implode(', ', $columns) . "</code><br>";
+        
+        $hasPriority = in_array('priority', $columns);
+        $hasTier = in_array('tier', $columns);
+        
+        if ($hasPriority) {
+            echo "<span class='ok'>✅ Kolom 'priority' sudah ada (migration terbaru sudah jalan)</span>";
+        } elseif ($hasTier) {
+            echo "<span class='warn'>⚠️ Kolom 'tier' masih ada, kolom 'priority' belum ada</span><br>";
+            echo "Menjalankan migration pending...";
+            try {
+                $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+                $kernel->call('migrate', ['--force' => true]);
+                echo "<br><span class='ok'>✅ Migration berhasil</span>";
+                echo "<pre>" . Artisan::output() . "</pre>";
+                $hasPriority = Schema::hasColumn('sla_configs', 'priority');
+            } catch (\Exception $e) {
+                echo "<br><span class='err'>❌ Migration GAGAL: " . htmlspecialchars($e->getMessage()) . "</span>";
+            }
+        } else {
+            echo "<span class='err'>❌ Kolom 'priority' dan 'tier' tidak ditemukan — struktur tabel rusak</span>";
+        }
+        echo "</div>";
+
+        // Step 4: Cek data global
+        echo "<div class='step'>";
+        echo "<strong>Step 4:</strong> Cek data default global...<br>";
+        
+        if ($hasPriority) {
+            $globalCount = DB::table('sla_configs')->whereNull('sub_unit_id')->count();
+            echo "Data global saat ini: <strong>{$globalCount} baris</strong><br>";
+
+            if ($globalCount === 0) {
+                echo "<span class='warn'>⚠️ Tidak ada data global. Membuat default...</span><br>";
+                $defaults = [
+                    ['priority' => 'Kritis',  'jenis' => 'respon',       'threshold_minutes' => 1],
+                    ['priority' => 'Tinggi',  'jenis' => 'respon',       'threshold_minutes' => 7],
+                    ['priority' => 'Sedang',  'jenis' => 'respon',       'threshold_minutes' => 60],
+                    ['priority' => 'Rendah',  'jenis' => 'respon',       'threshold_minutes' => 60],
+                    ['priority' => 'Kritis',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Tinggi',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Sedang',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Rendah',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                ];
+                foreach ($defaults as $d) {
+                    DB::table('sla_configs')->insert([
+                        'sub_unit_id' => null,
+                        'priority' => $d['priority'],
+                        'jenis' => $d['jenis'],
+                        'threshold_minutes' => $d['threshold_minutes'],
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+                echo "<span class='ok'>✅ 8 baris data default global berhasil dibuat!</span>";
+            } else if ($globalCount < 8) {
+                echo "<span class='warn'>⚠️ Data global kurang dari 8 (seharusnya 4 priority × 2 jenis = 8). Melengkapi...</span><br>";
+                $priorities = ['Kritis', 'Tinggi', 'Sedang', 'Rendah'];
+                $jenisTypes = ['respon', 'penyelesaian'];
+                $added = 0;
+                foreach ($jenisTypes as $jenis) {
+                    foreach ($priorities as $priority) {
+                        $exists = DB::table('sla_configs')
+                            ->whereNull('sub_unit_id')
+                            ->where('priority', $priority)
+                            ->where('jenis', $jenis)
+                            ->exists();
+                        if (!$exists) {
+                            DB::table('sla_configs')->insert([
+                                'sub_unit_id' => null,
+                                'priority' => $priority,
+                                'jenis' => $jenis,
+                                'threshold_minutes' => 60,
+                                'created_at' => now(),
+                                'updated_at' => now(),
+                            ]);
+                            $added++;
+                        }
+                    }
+                }
+                echo "<span class='ok'>✅ {$added} baris ditambahkan. Total sekarang: " . DB::table('sla_configs')->whereNull('sub_unit_id')->count() . "</span>";
+            } else {
+                echo "<span class='ok'>✅ Data global lengkap ({$globalCount} baris)</span>";
+            }
+        } else {
+            echo "<span class='err'>❌ Kolom 'priority' tidak ada — tidak bisa seed data</span>";
+        }
+        echo "</div>";
+
+        // Step 5: Tampilkan data saat ini
+        echo "<div class='step success'>";
+        echo "<strong>Step 5:</strong> Data SLA saat ini:<br>";
+        if ($hasPriority) {
+            $allConfigs = DB::table('sla_configs')->orderBy('sub_unit_id')->orderBy('jenis')->orderBy('priority')->get();
+            echo "<pre>";
+            echo str_pad('ID', 6) . str_pad('SubUnit', 10) . str_pad('Priority', 12) . str_pad('Jenis', 16) . "Menit\n";
+            echo str_repeat('-', 55) . "\n";
+            foreach ($allConfigs as $c) {
+                echo str_pad($c->id, 6) . str_pad($c->sub_unit_id ?? 'Global', 10) . str_pad($c->priority, 12) . str_pad($c->jenis, 16) . $c->threshold_minutes . "\n";
+            }
+            echo "</pre>";
+        }
+        echo "</div>";
+    }
+
+    // Step 6: Clear cache
+    echo "<div class='step'>";
+    echo "<strong>Step 6:</strong> Clear cache... ";
+    try {
+        $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+        $kernel->call('optimize:clear');
+        echo "<span class='ok'>✅ Cache dibersihkan</span>";
+    } catch (\Exception $e) {
+        echo "<span class='warn'>⚠️ " . htmlspecialchars($e->getMessage()) . "</span>";
+    }
+    echo "</div>";
+
+    echo "<br><p class='ok'><strong>Selesai!</strong> Sekarang coba buka halaman <a href='/admin/sla-config' style='color:#40c4ff'>Konfigurasi SLA</a> dan ubah nilainya.</p>";
     echo "<a class='back' href='{$baseUrl}?key={$key}'>← Kembali ke Menu</a>";
     echo "</body></html>";
     exit;

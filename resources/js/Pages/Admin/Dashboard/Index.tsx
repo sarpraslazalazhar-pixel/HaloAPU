@@ -209,7 +209,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
             {/* Daily Chart */}
             <Card className="mb-8">
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-semibold">Grafik Tiket Harian (30 Hari Terakhir)</CardTitle>
+                    <CardTitle className="text-sm font-semibold">Grafik Tiket Harian (7 Hari Terakhir)</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {dailyChartData?.length > 0 ? (

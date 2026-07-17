@@ -38,8 +38,8 @@ class TvDashboardController extends Controller
             ->take(10)
             ->get();
 
-        // ── Daily Chart (30 Hari Terakhir) ──
-        $startDate = now()->subDays(30)->startOfDay();
+        // ── Daily Chart (7 Hari Terakhir) ──
+        $startDate = now()->subDays(6)->startOfDay();
         $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
             ->where('created_at', '>=', $startDate)
             ->groupBy('date', 'unit_id')
@@ -49,7 +49,7 @@ class TvDashboardController extends Controller
         $unitNames = $units->pluck('nama_unit', 'id');
 
         $dates = collect();
-        for ($i = 30; $i >= 0; $i--) {
+        for ($i = 6; $i >= 0; $i--) {
             $dates->push(now()->subDays($i)->format('Y-m-d'));
         }
 

@@ -50,7 +50,7 @@ class WhatsAppChannel
         }
 
         try {
-            $response = Http::timeout(30)->post($gatewayUrl, [
+            $response = Http::asForm()->timeout(30)->post($gatewayUrl, [
                 'api_key' => $apiKey,
                 'number_key' => $numberKey,
                 'phone_no' => $phoneNumber,

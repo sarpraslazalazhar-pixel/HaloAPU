@@ -87,12 +87,14 @@ export default function SlaConfigIndex({ globalConfigs, subUnits }: any) {
         <AdminLayout title="Konfigurasi SLA">
             <Head title="Konfigurasi SLA" />
 
-            <div className="mb-4">
-                <h2 className="text-2xl font-bold">Konfigurasi SLA</h2>
-                <p className="text-sm text-slate-500">Atur threshold SLA respon dan penyelesaian berdasarkan Prioritas.</p>
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                    <div>
+                        <h2 className="text-2xl font-bold">Konfigurasi SLA</h2>
+                        <p className="text-sm text-slate-500">Atur threshold SLA respon dan penyelesaian berdasarkan Prioritas.</p>
+                    </div>
+                    <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
+                </div>
                 {/* Global Default */}
                 <Card>
                     <CardHeader><CardTitle className="text-base">Default Global</CardTitle></CardHeader>

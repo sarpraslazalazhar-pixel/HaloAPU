@@ -450,7 +450,7 @@ if ($command === 'sla-update') {
         } elseif ($minutes < 1) {
             $message = '❌ Waktu (minutes) harus minimal 1';
         } else {
-            DB::table('sla_configs')->updateOrInsert(
+            \App\Models\SlaConfig::updateOrCreate(
                 [
                     'sub_unit_id' => $subUnitId,
                     'priority' => $priority,
@@ -458,7 +458,6 @@ if ($command === 'sla-update') {
                 ],
                 [
                     'threshold_minutes' => $minutes,
-                    'updated_at' => now(),
                 ]
             );
             $scope = $subUnitId === null ? 'Global' : "Sub Unit ID: $subUnitId";
@@ -478,9 +477,9 @@ if ($command === 'sla-update') {
                 $paramKey = "{$jenis}_" . strtolower($priority);
                 $val = $_GET[$paramKey] ?? '';
                 if ($val !== '' && (int)$val >= 1) {
-                    DB::table('sla_configs')->updateOrInsert(
+                    \App\Models\SlaConfig::updateOrCreate(
                         ['sub_unit_id' => $subUnitId, 'priority' => $priority, 'jenis' => $jenis],
-                        ['threshold_minutes' => (int)$val, 'updated_at' => now()]
+                        ['threshold_minutes' => (int)$val]
                     );
                     $count++;
                 }

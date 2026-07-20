@@ -13,7 +13,7 @@ const PIE_COLORS = ['#22c55e', '#ef4444', '#f97316'];
 
 const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
     open: { label: 'Open', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
-    on_proses: { label: 'On Proses', bg: 'from-orange-500 to-orange-600', icon: Loader2, anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
+    on_proses: { label: 'On Proses', bg: 'from-orange-500 to-orange-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
     pending: { label: 'Pending', bg: 'from-zinc-500 to-zinc-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
     solve: { label: 'Selesai', bg: 'from-green-500 to-green-600', icon: CheckCircle, anim: 'group-hover:scale-125 group-hover:opacity-100' },
     reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },

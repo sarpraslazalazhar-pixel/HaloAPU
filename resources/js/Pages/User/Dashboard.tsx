@@ -3,7 +3,7 @@ import { Link, usePage } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
-import { FolderOpen, Loader2, CheckCircle2, XCircle, PlusCircle, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
+import { FolderOpen, Loader2, Clock, CheckCircle2, XCircle, PlusCircle, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
 
 export default function Dashboard({ recentTickets = [], stats }: { recentTickets?: any[], stats?: any }) {
     const { auth } = usePage<any>().props;
@@ -11,7 +11,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
 
     const STATUS_CARDS = [
         { label: 'Tiket Aktif', icon: FolderOpen, count: stats?.aktif || 0, bg: 'from-blue-500 to-blue-600', anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
-        { label: 'Sedang Diproses', icon: Loader2, count: stats?.diproses || 0, bg: 'from-orange-500 to-orange-600', anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
+        { label: 'Sedang Diproses', icon: Clock, count: stats?.diproses || 0, bg: 'from-orange-500 to-orange-600', anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
         { label: 'Selesai', icon: CheckCircle2, count: stats?.selesai || 0, bg: 'from-green-500 to-green-600', anim: 'group-hover:scale-125 group-hover:opacity-100' },
         { label: 'Ditolak', icon: XCircle, count: stats?.ditolak || 0, bg: 'from-red-500 to-red-600', anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
     ];

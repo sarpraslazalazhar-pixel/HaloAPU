@@ -18,7 +18,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
             <style>
                 {`
                 .login-wrapper {
-                  background-image: url('/images/bg-login.png');
+                  background-image: url('${appConfig?.banner_path ? `/storage/${appConfig.banner_path}` : '/images/bg-login.png'}');
                   background-size: cover;
                   background-position: center;
                   min-height: 100vh;

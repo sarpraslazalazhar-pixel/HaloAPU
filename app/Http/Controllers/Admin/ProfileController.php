@@ -16,12 +16,14 @@ class ProfileController extends Controller
 
         $validated = $request->validate([
             'name' => 'required|string|max:100',
+            'username' => 'required|string|max:100|unique:admins,username,' . $admin->id,
             'email' => 'required|email|max:100|unique:admins,email,' . $admin->id,
             'no_wa' => 'nullable|string|max:20',
             'password' => ['nullable', 'confirmed', Password::min(8)],
         ]);
 
         $admin->name = $validated['name'];
+        $admin->username = $validated['username'];
         $admin->email = $validated['email'];
         $admin->no_wa = $validated['no_wa'];
 

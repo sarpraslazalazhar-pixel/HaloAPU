@@ -31,6 +31,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
 
     const { data, setData, put, processing, errors, reset } = useForm({
         name: user?.name || user?.username || '',
+        username: user?.username || '',
         email: user?.email || '',
         no_wa: user?.no_wa || '',
         password: '',
@@ -42,6 +43,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
         if (user) {
             setData({
                 name: user.name || user.username || '',
+                username: user.username || '',
                 email: user.email || '',
                 no_wa: user.no_wa || '',
                 password: '',
@@ -180,6 +182,17 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
                                     placeholder="Masukkan nama lengkap"
                                 />
                                 {errors.name && <p className="text-xs text-destructive mt-1">{errors.name}</p>}
+                            </div>
+
+                            <div>
+                                <Label htmlFor="profile_username">Username <span className="text-destructive">*</span></Label>
+                                <Input
+                                    id="profile_username"
+                                    value={data.username}
+                                    onChange={(e) => setData('username', e.target.value)}
+                                    placeholder="Masukkan username"
+                                />
+                                {errors.username && <p className="text-xs text-destructive mt-1">{errors.username}</p>}
                             </div>
 
                             <div>

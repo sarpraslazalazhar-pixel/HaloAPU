@@ -151,8 +151,12 @@ class TicketController extends Controller
         ]);
 
         // Notifikasi WA (User)
-        $ticket->load('user', 'subUnit');
-        $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
+        try {
+            $ticket->load('user', 'subUnit');
+            $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());
+        }
 
         return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
     }

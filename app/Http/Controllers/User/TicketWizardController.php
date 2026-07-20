@@ -70,7 +70,7 @@ class TicketWizardController extends Controller
             }
         }
 
-        DB::transaction(function () use ($request, $formFields, $slaCalculator) {
+        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator) {
             // 1. Buat tiket
             $ticket = Ticket::create([
                 'user_id' => auth()->id(),
@@ -164,15 +164,23 @@ class TicketWizardController extends Controller
                     'status' => 'open',
                 ]);
             }
-            // 6. Notifikasi WA (User & Admin)
-            $ticket->load('user', 'subUnit'); // ensure relations loaded for notification templates
+
+            return $ticket;
+        });
+
+        // 6. Notifikasi WA & In-App (di luar transaksi agar tidak mengganggu DB)
+        try {
+            $ticket->load('user', 'subUnit');
+            // Notifikasi ke User (database + WA jika punya no_wa)
             $ticket->user->notify(new TicketCreatedUserNotification($ticket));
-            // Gunakan AnonymousNotifiable untuk Admin (receiver WA akan di-set dari dalam Notification)
-            Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
-            // Kirim in-app notification (database) ke semua Admin untuk icon lonceng
+            // Notifikasi ke semua Admin (database + WA jika punya no_wa)
             $admins = \App\Models\Admin::all();
             Notification::send($admins, new TicketCreatedAdminNotification($ticket));
-        });
+            // Fallback: kirim WA ke nomor_wa_utama via AnonymousNotifiable
+            Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: " . $e->getMessage());
+        }
 
         return redirect()->route('tiket.riwayat')->with('success', 'Tiket berhasil diajukan!');
     }

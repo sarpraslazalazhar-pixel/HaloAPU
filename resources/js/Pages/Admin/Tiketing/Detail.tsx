@@ -49,13 +49,34 @@ export default function TicketDetail({ ticket, formFields }: any) {
         }
 
         const value = ticket.form_data?.[field.id];
-        if (value === undefined || value === null) return '-';
+        if (value === undefined || value === null || value === '') return '-';
         if (field.tipe_field === 'nominal_rp') {
             return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
         }
         if (field.tipe_field === 'checkbox' && typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
         if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) return value.join(', ');
-        return String(value);
+        
+        const stringValue = String(value);
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        if (urlRegex.test(stringValue)) {
+            const parts = stringValue.split(urlRegex);
+            return (
+                <>
+                    {parts.map((part, i) => {
+                        if (part.match(/^https?:\/\//)) {
+                            return (
+                                <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                                    {part}
+                                </a>
+                            );
+                        }
+                        return <span key={i}>{part}</span>;
+                    })}
+                </>
+            );
+        }
+        
+        return stringValue;
     };
 
     return (

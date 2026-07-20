@@ -26,6 +26,49 @@ export default function Detail({ ticket, formFields }: DetailProps) {
         router.patch(route('tiket.batal', ticket.id));
     };
 
+    const renderFormValue = (field: any) => {
+        if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
+            const attachment = ticket.attachments?.find((a: any) => a.field_id == field.id);
+            return attachment ? (
+                <AttachmentViewer attachment={attachment} viewRoute="tiket.view" downloadRoute="tiket.download">
+                    <button type="button" className="text-blue-600 hover:underline flex items-center gap-1">
+                        <Eye className="w-4 h-4" /> {attachment.original_name}
+                    </button>
+                </AttachmentViewer>
+            ) : '-';
+        }
+
+        const value = ticket.form_data?.[field.id];
+        if (value === undefined || value === null || value === '') return '-';
+        if (field.tipe_field === 'nominal_rp') {
+            return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
+        }
+        if (field.tipe_field === 'checkbox' && typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
+        if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) return value.join(', ');
+        
+        const stringValue = String(value);
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        if (urlRegex.test(stringValue)) {
+            const parts = stringValue.split(urlRegex);
+            return (
+                <>
+                    {parts.map((part, i) => {
+                        if (part.match(/^https?:\/\//)) {
+                            return (
+                                <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                                    {part}
+                                </a>
+                            );
+                        }
+                        return <span key={i}>{part}</span>;
+                    })}
+                </>
+            );
+        }
+        
+        return stringValue;
+    };
+
     return (
         <UserLayout title={`Tiket #TKT-${ticket.id}`}>
             <div className="max-w-4xl mx-auto py-8 px-4">
@@ -111,21 +154,7 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                                 <div key={field.id}>
                                     <span className="text-sm text-slate-500">{field.label}:</span>
                                     <p className="font-medium mt-1">
-                                        {field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file'
-                                            ? (ticket.attachments?.find((a: any) => a.field_id == field.id)
-                                                ? (
-                                                    <AttachmentViewer attachment={ticket.attachments.find((a: any) => a.field_id == field.id)} viewRoute="tiket.view" downloadRoute="tiket.download">
-                                                        <button type="button" className="text-blue-600 hover:underline flex items-center gap-1">
-                                                            <Eye className="w-4 h-4"/> {ticket.attachments.find((a: any) => a.field_id == field.id).original_name}
-                                                        </button>
-                                                    </AttachmentViewer>
-                                                )
-                                                : '-')
-                                            : ticket.form_data && ticket.form_data[field.id] !== undefined && ticket.form_data[field.id] !== null && ticket.form_data[field.id] !== ''
-                                                ? (field.tipe_field === 'nominal_rp' 
-                                                    ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(ticket.form_data[field.id]) || 0) 
-                                                    : String(ticket.form_data[field.id]))
-                                                : '-'}
+                                        {renderFormValue(field)}
                                     </p>
                                 </div>
                             ))

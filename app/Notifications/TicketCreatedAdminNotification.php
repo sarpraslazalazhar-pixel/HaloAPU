@@ -21,12 +21,23 @@ class TicketCreatedAdminNotification extends Notification
     public function via(object $notifiable): array
     {
         $channels = [];
+
         if ($notifiable instanceof \App\Models\Admin) {
             $channels[] = 'database';
+            // Jika admin punya nomor WA, kirim juga via WhatsApp
+            if (!empty($notifiable->no_wa)) {
+                $channels[] = WhatsAppChannel::class;
+            }
         }
+
         if ($notifiable instanceof \Illuminate\Notifications\AnonymousNotifiable) {
-            $channels[] = \App\Channels\WhatsAppChannel::class;
+            // Fallback: kirim ke nomor_wa_utama jika ada
+            $nomorUtama = \App\Models\SystemConfig::getValue('nomor_wa_utama');
+            if (!empty($nomorUtama)) {
+                $channels[] = WhatsAppChannel::class;
+            }
         }
+
         return $channels;
     }
 
@@ -55,10 +66,16 @@ class TicketCreatedAdminNotification extends Notification
         $message .= "Silakan segera direspon melalui link berikut:\n{$url}\n\n";
         $message .= "Sistem Halo APU";
 
-        $nomorAdmin = class_exists(\App\Models\SystemConfig::class) ? \App\Models\SystemConfig::getValue('nomor_wa_utama') : null;
+        // Tentukan nomor penerima
+        if ($notifiable instanceof \App\Models\Admin) {
+            $receiver = $notifiable->no_wa;
+        } else {
+            // AnonymousNotifiable → ambil nomor_wa_utama
+            $receiver = \App\Models\SystemConfig::getValue('nomor_wa_utama');
+        }
 
         return [
-            'receiver' => $nomorAdmin,
+            'receiver' => $receiver,
             'message' => $message,
         ];
     }

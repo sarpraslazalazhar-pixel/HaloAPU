@@ -51,7 +51,7 @@ class TicketCreatedUserNotification extends Notification
         $message .= "Terima kasih,\nTim Halo APU";
 
         return [
-            'to' => $notifiable->no_wa,
+            'receiver' => $notifiable->no_wa,
             'message' => $message,
         ];
     }

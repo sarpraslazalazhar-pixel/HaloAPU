@@ -354,6 +354,16 @@ if ($command === 'sla-view') {
     $app = require_once __DIR__ . '/../bootstrap/app.php';
     $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+    // Auto-migrate old Kritis to Urgen safely
+    try {
+        DB::table('sla_configs')->where('priority', 'Kritis')->update(['priority' => 'Urgen', 'updated_at' => now()]);
+    } catch (\Exception $e) {
+        // If unique constraint fails (e.g. Urgen already exists), just delete the old Kritis
+        DB::table('sla_configs')->where('priority', 'Kritis')->delete();
+    }
+
+
+
     $configs = DB::table('sla_configs')
         ->leftJoin('sub_units', 'sla_configs.sub_unit_id', '=', 'sub_units.id')
         ->leftJoin('units', 'sub_units.unit_id', '=', 'units.id')
@@ -432,6 +442,16 @@ if ($command === 'sla-update') {
     $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
     $key = urlencode($SECRET_KEY);
     $message = '';
+
+    // Auto-migrate old Kritis to Urgen safely
+    try {
+        DB::table('sla_configs')->where('priority', 'Kritis')->update(['priority' => 'Urgen', 'updated_at' => now()]);
+    } catch (\Exception $e) {
+        // If unique constraint fails (e.g. Urgen already exists), just delete the old Kritis
+        DB::table('sla_configs')->where('priority', 'Kritis')->delete();
+    }
+
+
 
     // Proses update jika ada parameter action=save
     if (($_GET['action'] ?? '') === 'save') {
@@ -624,6 +644,16 @@ if ($command === 'sla-diagnose') {
 
     $baseUrl = strtok($_SERVER['REQUEST_URI'], '?');
     $key = urlencode($SECRET_KEY);
+
+    // Auto-migrate old Kritis to Urgen safely
+    try {
+        DB::table('sla_configs')->where('priority', 'Kritis')->update(['priority' => 'Urgen', 'updated_at' => now()]);
+    } catch (\Exception $e) {
+        // If unique constraint fails (e.g. Urgen already exists), just delete the old Kritis
+        DB::table('sla_configs')->where('priority', 'Kritis')->delete();
+    }
+
+
 
     echo "<html><head><title>SLA Diagnose</title>";
     echo "<style>

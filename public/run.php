@@ -440,7 +440,7 @@ if ($command === 'sla-update') {
         $minutes = (int) ($_GET['minutes'] ?? 0);
         $subUnitId = ($_GET['sub_unit_id'] ?? '') === '' ? null : (int) $_GET['sub_unit_id'];
 
-        $validPriorities = ['Rendah', 'Sedang', 'Tinggi', 'Kritis'];
+        $validPriorities = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'];
         $validJenis = ['respon', 'penyelesaian'];
 
         if (!in_array($priority, $validPriorities)) {
@@ -479,7 +479,7 @@ if ($command === 'sla-update') {
 
     // Proses bulk update jika ada parameter action=bulk-save
     if (($_GET['action'] ?? '') === 'bulk-save') {
-        $priorities = ['Kritis', 'Tinggi', 'Sedang', 'Rendah'];
+        $priorities = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'];
         $jenisTypes = ['respon', 'penyelesaian'];
         $subUnitId = ($_GET['sub_unit_id'] ?? '') === '' ? null : (int) $_GET['sub_unit_id'];
         $count = 0;
@@ -570,12 +570,12 @@ if ($command === 'sla-update') {
     echo "<input type='hidden' name='action' value='bulk-save'>";
     echo "<input type='hidden' name='sub_unit_id' value=''>";
     echo "<table>";
-    echo "<tr><th>Jenis</th><th>Kritis (menit)</th><th>Tinggi (menit)</th><th>Sedang (menit)</th><th>Rendah (menit)</th></tr>";
+    echo "<tr><th>Jenis</th><th>Rendah (menit)</th><th>Sedang (menit)</th><th>Tinggi (menit)</th><th>Urgen (menit)</th></tr>";
 
     foreach (['respon', 'penyelesaian'] as $jenis) {
         $label = $jenis === 'respon' ? 'SLA Respon' : 'SLA Penyelesaian';
         echo "<tr><td><strong>{$label}</strong></td>";
-        foreach (['Kritis', 'Tinggi', 'Sedang', 'Rendah'] as $priority) {
+        foreach (['Rendah', 'Sedang', 'Tinggi', 'Urgen'] as $priority) {
             $paramKey = "{$jenis}_" . strtolower($priority);
             $current = $currentConfigs["{$jenis}_{$priority}"] ?? null;
             $val = $current ? $current->threshold_minutes : '';
@@ -599,7 +599,7 @@ if ($command === 'sla-update') {
         echo "<option value='{$su->id}'>{$su->unit_name} — {$su->sub_unit_name}</option>";
     }
     echo "</select></td></tr>";
-    echo "<tr><td><strong>Priority</strong></td><td><select name='priority'><option value='Kritis'>Kritis</option><option value='Tinggi'>Tinggi</option><option value='Sedang'>Sedang</option><option value='Rendah'>Rendah</option></select></td></tr>";
+    echo "<tr><td><strong>Priority</strong></td><td><select name='priority'><option value='Rendah'>Rendah</option><option value='Sedang'>Sedang</option><option value='Tinggi'>Tinggi</option><option value='Urgen'>Urgen</option></select></td></tr>";
     echo "<tr><td><strong>Jenis</strong></td><td><select name='jenis'><option value='respon'>Respon</option><option value='penyelesaian'>Penyelesaian</option></select></td></tr>";
     echo "<tr><td><strong>Waktu (menit)</strong></td><td><input type='number' name='minutes' min='1' placeholder='contoh: 60'></td></tr>";
     echo "</table>";
@@ -716,14 +716,14 @@ if ($command === 'sla-diagnose') {
             if ($globalCount === 0) {
                 echo "<span class='warn'>⚠️ Tidak ada data global. Membuat default...</span><br>";
                 $defaults = [
-                    ['priority' => 'Kritis',  'jenis' => 'respon',       'threshold_minutes' => 1],
-                    ['priority' => 'Tinggi',  'jenis' => 'respon',       'threshold_minutes' => 7],
-                    ['priority' => 'Sedang',  'jenis' => 'respon',       'threshold_minutes' => 60],
                     ['priority' => 'Rendah',  'jenis' => 'respon',       'threshold_minutes' => 60],
-                    ['priority' => 'Kritis',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
-                    ['priority' => 'Tinggi',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
-                    ['priority' => 'Sedang',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Sedang',  'jenis' => 'respon',       'threshold_minutes' => 60],
+                    ['priority' => 'Tinggi',  'jenis' => 'respon',       'threshold_minutes' => 7],
+                    ['priority' => 'Urgen',   'jenis' => 'respon',       'threshold_minutes' => 1],
                     ['priority' => 'Rendah',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Sedang',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Tinggi',  'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
+                    ['priority' => 'Urgen',   'jenis' => 'penyelesaian', 'threshold_minutes' => 60],
                 ];
                 foreach ($defaults as $d) {
                     DB::table('sla_configs')->insert([
@@ -738,7 +738,7 @@ if ($command === 'sla-diagnose') {
                 echo "<span class='ok'>✅ 8 baris data default global berhasil dibuat!</span>";
             } else if ($globalCount < 8) {
                 echo "<span class='warn'>⚠️ Data global kurang dari 8 (seharusnya 4 priority × 2 jenis = 8). Melengkapi...</span><br>";
-                $priorities = ['Kritis', 'Tinggi', 'Sedang', 'Rendah'];
+                $priorities = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'];
                 $jenisTypes = ['respon', 'penyelesaian'];
                 $added = 0;
                 foreach ($jenisTypes as $jenis) {

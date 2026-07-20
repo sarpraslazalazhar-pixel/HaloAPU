@@ -160,7 +160,7 @@ class TicketController extends Controller
     public function updatePriority(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)
     {
         $request->validate([
-            'priority' => 'required|string|in:Rendah,Sedang,Tinggi,Kritis',
+            'priority' => 'required|string|in:Rendah,Sedang,Tinggi,Urgen',
         ]);
 
         $oldPriority = $ticket->priority;

@@ -164,7 +164,7 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                         <option value="Rendah">Rendah</option>
                                         <option value="Sedang">Sedang</option>
                                         <option value="Tinggi">Tinggi</option>
-                                        <option value="Kritis">Kritis</option>
+                                        <option value="Urgen">Urgen</option>
                                     </select>
                                     {errorsPriority.priority && <p className="text-red-500 text-sm">{errorsPriority.priority}</p>}
                                 </div>
@@ -186,7 +186,7 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm text-slate-500">Prioritas Saat Ini</span>
                                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${
-                                        ticket.priority === 'Kritis' ? 'bg-red-100 text-red-700' :
+                                        ticket.priority === 'Urgen' ? 'bg-red-100 text-red-700' :
                                         ticket.priority === 'Tinggi' ? 'bg-orange-100 text-orange-700' :
                                         ticket.priority === 'Sedang' ? 'bg-yellow-100 text-yellow-700' :
                                         'bg-green-100 text-green-700'

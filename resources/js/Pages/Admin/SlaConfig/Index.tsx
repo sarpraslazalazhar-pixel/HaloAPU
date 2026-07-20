@@ -8,7 +8,7 @@ import { Input } from '@/Components/ui/input';
 import { Checkbox } from '@/Components/ui/checkbox';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/Components/ui/accordion';
 
-const PRIORITIES = ['Kritis', 'Tinggi', 'Sedang', 'Rendah'] as const;
+const PRIORITIES = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'] as const;
 type Priority = typeof PRIORITIES[number];
 
 const JENIS_LABELS: Record<string, string> = {

@@ -33,7 +33,7 @@ class SlaConfigController extends Controller
         $validated = $request->validate([
             'configs' => 'required|array|min:1',
             'configs.*.sub_unit_id' => 'nullable|exists:sub_units,id',
-            'configs.*.priority' => ['required', Rule::in(['Rendah', 'Sedang', 'Tinggi', 'Kritis'])],
+            'configs.*.priority' => ['required', Rule::in(['Rendah', 'Sedang', 'Tinggi', 'Urgen'])],
             'configs.*.jenis' => ['required', Rule::in(['respon', 'penyelesaian'])],
             'configs.*.threshold_minutes' => 'required|integer|min:1',
         ]);

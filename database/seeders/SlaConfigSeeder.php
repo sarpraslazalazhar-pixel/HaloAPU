@@ -10,14 +10,14 @@ class SlaConfigSeeder extends Seeder
     public function run(): void
     {
         $defaults = [
-            ['sub_unit_id' => null, 'priority' => 'Kritis', 'jenis' => 'respon',       'threshold_minutes' => 15],
-            ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'respon',       'threshold_minutes' => 30],
-            ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon',       'threshold_minutes' => 60],
             ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon',       'threshold_minutes' => 120],
-            ['sub_unit_id' => null, 'priority' => 'Kritis', 'jenis' => 'penyelesaian', 'threshold_minutes' => 120],
-            ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'penyelesaian', 'threshold_minutes' => 240],
-            ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'penyelesaian', 'threshold_minutes' => 480],
+            ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon',       'threshold_minutes' => 60],
+            ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'respon',       'threshold_minutes' => 30],
+            ['sub_unit_id' => null, 'priority' => 'Urgen',  'jenis' => 'respon',       'threshold_minutes' => 15],
             ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'penyelesaian', 'threshold_minutes' => 1440],
+            ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'penyelesaian', 'threshold_minutes' => 480],
+            ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'penyelesaian', 'threshold_minutes' => 240],
+            ['sub_unit_id' => null, 'priority' => 'Urgen',  'jenis' => 'penyelesaian', 'threshold_minutes' => 120],
         ];
 
         foreach ($defaults as $config) {

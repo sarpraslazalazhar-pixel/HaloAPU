@@ -23,7 +23,7 @@ class SlaEscalationNotification extends Notification
     public function via(object $notifiable): array
     {
         $priority = strtolower($this->priority);
-        if ($priority === 'tinggi' || $priority === 'kritis') {
+        if ($priority === 'tinggi' || $priority === 'urgen') {
             return ['database', WhatsAppChannel::class];
         }
 

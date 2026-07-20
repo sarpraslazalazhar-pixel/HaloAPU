@@ -284,7 +284,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, da
         <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 text-slate-900 font-sans flex flex-col overflow-hidden">
             <Head title="Live Dashboard Operasional" />
             <Toaster
-                position="top-right"
+                position="top-center"
                 toastOptions={{
                     duration: 4000,
                     style: {

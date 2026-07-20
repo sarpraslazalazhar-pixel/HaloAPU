@@ -125,7 +125,7 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
 
     return (
         <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
-            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+            <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
             {title && <Head title={title} />}
             
             <div className="hidden border-r bg-white dark:bg-zinc-950 md:flex flex-col overflow-hidden">

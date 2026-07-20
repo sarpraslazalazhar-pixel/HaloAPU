@@ -207,7 +207,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
 
     return (
         <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
-            <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
+            <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
             {title && <Head title={title} />}
             
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>

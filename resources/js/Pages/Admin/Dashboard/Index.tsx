@@ -31,7 +31,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
         const params: any = {};
         if (month) params.month = month;
         if (year) params.year = year;
-        router.get(route('admin.dashboard'), params, { });
+        router.get(route('admin.dashboard'), params, {});
     };
 
     const currentSubUnitData = selectedUnit
@@ -39,7 +39,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
         : (subUnitChartData?.['_all'] || []);
 
     const completionRate = totalTickets > 0 ? Math.round((statusCounts?.solve / totalTickets) * 100) : 0;
-    
+
     const totalCsatReviews = csatTrend?.reduce((acc: number, curr: any) => acc + curr.total, 0) || 0;
     const avgCsatRaw = totalCsatReviews > 0 ? csatTrend?.reduce((acc: number, curr: any) => acc + (curr.rata_rata * curr.total), 0) / totalCsatReviews : 0;
     const avgCsat = Math.round(avgCsatRaw * 10) / 10;

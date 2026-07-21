@@ -21,13 +21,14 @@ class DashboardController extends Controller
         $ticketCounts = Ticket::where('user_id', $userId)
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
-            ->pluck('total', 'status');
+            ->pluck('total', 'status')
+            ->mapWithKeys(fn ($item, $key) => [strtolower($key) => $item]);
 
         $stats = [
-            'aktif' => collect($ticketCounts)->except(['selesai', 'ditolak', 'batal', 'dibatalkan'])->sum(),
+            'aktif' => collect($ticketCounts)->except(['solve', 'selesai', 'reject', 'dibatalkan'])->sum(),
             'diproses' => $ticketCounts['on_proses'] ?? 0,
-            'selesai' => $ticketCounts['selesai'] ?? 0,
-            'ditolak' => $ticketCounts['ditolak'] ?? 0,
+            'selesai' => ($ticketCounts['solve'] ?? 0) + ($ticketCounts['selesai'] ?? 0),
+            'ditolak' => $ticketCounts['reject'] ?? 0,
         ];
 
         return inertia('User/Dashboard', [

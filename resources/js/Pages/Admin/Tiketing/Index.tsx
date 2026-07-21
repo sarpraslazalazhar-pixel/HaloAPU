@@ -80,6 +80,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                         resolvedAt={sla.resolved_at}
                         pausedAt={sla.paused_at}
                         totalPausedMinutes={sla.total_paused_minutes}
+                        ticketStatus={t.status}
                     />
                 );
             },

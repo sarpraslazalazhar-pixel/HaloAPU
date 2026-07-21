@@ -2,7 +2,7 @@
 - [x] branch ganti pelanggaran 
 - [x] ubah modul sla menjadi tabel CRUD
 - [ ] unit & sub = layanan & sub layanan
-- [ ] step 1 data pengajuan di hapus dan ambil data dari akun manajemen pengguna
+- [x] step 1 data pengajuan di hapus dan ambil data dari akun manajemen pengguna
 - [ ] master data layanan (kanal, jenis)
 - [ ] master data struktur (Divisi, Sub divisi, jabatan)
 - [ ] master data konfigurasi (form, SLA, remainder, sistem)

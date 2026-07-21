@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
 import { SearchInput } from '@/Components/SearchInput';
 import { Pagination } from '@/Components/Pagination';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/Components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/Components/ui/radio-group';
 import Swal from 'sweetalert2';
 import { Pencil, Trash2 } from 'lucide-react';
@@ -160,14 +160,26 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
                                             value={data.sub_unit_id || ''} 
                                             onValueChange={val => setData('sub_unit_id', val)}
                                         >
-                                            <SelectTrigger>
+                                            <SelectTrigger className="w-full">
                                                 <SelectValue placeholder="Pilih Sub Unit" />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                {subUnits.map(su => (
-                                                    <SelectItem key={su.id} value={su.id.toString()}>
-                                                        {su.unit?.nama_unit} - {su.nama_layanan}
-                                                    </SelectItem>
+                                                {Object.entries(
+                                                    subUnits.reduce((acc, su) => {
+                                                        const unitName = su.unit?.nama_unit || 'Lainnya';
+                                                        if (!acc[unitName]) acc[unitName] = [];
+                                                        acc[unitName].push(su);
+                                                        return acc;
+                                                    }, {} as Record<string, typeof subUnits>)
+                                                ).map(([unitName, items]) => (
+                                                    <SelectGroup key={unitName}>
+                                                        <SelectLabel>{unitName}</SelectLabel>
+                                                        {items.map(su => (
+                                                            <SelectItem key={su.id} value={su.id.toString()}>
+                                                                {su.nama_layanan}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectGroup>
                                                 ))}
                                             </SelectContent>
                                         </Select>
@@ -321,14 +333,26 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
                                     value={data.sub_unit_id || ''} 
                                     onValueChange={val => setData('sub_unit_id', val)}
                                 >
-                                    <SelectTrigger>
+                                    <SelectTrigger className="w-full">
                                         <SelectValue placeholder="Pilih Sub Unit" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {subUnits.map(su => (
-                                            <SelectItem key={su.id} value={su.id.toString()}>
-                                                {su.unit?.nama_unit} - {su.nama_layanan}
-                                            </SelectItem>
+                                        {Object.entries(
+                                            subUnits.reduce((acc, su) => {
+                                                const unitName = su.unit?.nama_unit || 'Lainnya';
+                                                if (!acc[unitName]) acc[unitName] = [];
+                                                acc[unitName].push(su);
+                                                return acc;
+                                            }, {} as Record<string, typeof subUnits>)
+                                        ).map(([unitName, items]) => (
+                                            <SelectGroup key={unitName}>
+                                                <SelectLabel>{unitName}</SelectLabel>
+                                                {items.map(su => (
+                                                    <SelectItem key={su.id} value={su.id.toString()}>
+                                                        {su.nama_layanan}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectGroup>
                                         ))}
                                     </SelectContent>
                                 </Select>

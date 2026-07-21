@@ -27,7 +27,7 @@ class DashboardController extends Controller
             'open' => (clone $baseQuery)->where('status', 'open')->count(),
             'on_proses' => (clone $baseQuery)->where('status', 'on_proses')->count(),
             'pending' => (clone $baseQuery)->where('status', 'pending')->count(),
-            'solve' => (clone $baseQuery)->where('status', 'solve')->count(),
+            'solve' => (clone $baseQuery)->whereIn('status', ['solve', 'selesai'])->count(),
             'reject' => (clone $baseQuery)->where('status', 'reject')->count(),
         ];
 
@@ -136,8 +136,8 @@ class DashboardController extends Controller
             ->select(
                 DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
                 DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN status = 'Selesai' THEN 1 ELSE 0 END) as selesai"),
-                DB::raw("SUM(CASE WHEN status NOT IN ('Selesai', 'Solve') THEN 1 ELSE 0 END) as aktif"),
+                DB::raw("SUM(CASE WHEN status IN ('Selesai', 'Solve', 'selesai', 'solve') THEN 1 ELSE 0 END) as selesai"),
+                DB::raw("SUM(CASE WHEN status NOT IN ('Selesai', 'Solve', 'selesai', 'solve') THEN 1 ELSE 0 END) as aktif"),
             )
             ->where('created_at', '>=', now()->subYear())
             ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))

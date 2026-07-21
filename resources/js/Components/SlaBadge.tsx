@@ -16,6 +16,7 @@ interface SlaBadgeProps {
     resolvedAt: string | null;
     pausedAt: string | null;
     totalPausedMinutes: number;
+    ticketStatus?: string;
 }
 
 export default function SlaBadge({
@@ -26,10 +27,13 @@ export default function SlaBadge({
     resolvedAt,
     pausedAt,
     totalPausedMinutes,
+    ticketStatus,
 }: SlaBadgeProps) {
     const getStatus = () => {
-        if (resolvedAt) return { label: 'Selesai', color: 'bg-gray-500 text-white' };
-        if (isBreached) return { label: 'Breach', color: 'bg-red-600 text-white' };
+        const tStatus = ticketStatus?.toLowerCase();
+        if (tStatus === 'dibatalkan' || tStatus === 'batal') return { label: 'Batal', color: 'bg-gray-500 text-white' };
+        if (resolvedAt) return { label: 'Selesai', color: 'bg-[#0d6efd] text-white' };
+        if (isBreached) return { label: 'Pelanggaran', color: 'bg-red-600 text-white' };
         
         if (deadline) {
             const now = new Date();
@@ -37,7 +41,7 @@ export default function SlaBadge({
             const remaining = dl.getTime() - now.getTime();
 
             if (remaining <= 0) {
-                return { label: 'Breach', color: 'bg-red-600 text-white' };
+                return { label: 'Pelanggaran', color: 'bg-red-600 text-white' };
             }
         }
 

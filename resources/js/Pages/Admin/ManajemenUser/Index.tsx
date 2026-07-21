@@ -89,12 +89,12 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
 
     // Filter unit organisasi berdasarkan divisi yang dipilih di form
     const filteredUnitOrgList = data.divisi_id
-        ? unitOrgList?.filter((u) => u.divisi_id === Number(data.divisi_id))
+        ? unitOrgList?.filter((u) => String(u.divisi_id) === String(data.divisi_id))
         : unitOrgList;
 
     // Filter unit organisasi berdasarkan divisi yang dipilih di filter
     const filteredUnitOrgFilter = divisiFilter
-        ? unitOrgList?.filter((u) => u.divisi_id === Number(divisiFilter))
+        ? unitOrgList?.filter((u) => String(u.divisi_id) === String(divisiFilter))
         : unitOrgList;
 
     const openCreate = () => {

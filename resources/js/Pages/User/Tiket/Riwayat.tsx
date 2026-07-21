@@ -10,6 +10,7 @@ import { DataTable } from '@/Components/DataTable';
 import { Pagination } from '@/Components/Pagination';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { Search, X, ExternalLink } from 'lucide-react';
+import { formatTicketId } from '@/lib/utils';
 
 interface RiwayatProps {
     tickets: any;
@@ -18,7 +19,7 @@ interface RiwayatProps {
 }
 
 const columns = [
-    { key: 'id', header: 'No. Tiket', render: (t: any) => `#TKT-${t.id}` },
+    { key: 'id', header: 'No. Tiket', render: (t: any) => `#TKT-${formatTicketId(t.id)}` },
     { key: 'unit', header: 'Unit', render: (t: any) => t.unit?.nama_unit || '-' },
     { key: 'sub_unit', header: 'Layanan', render: (t: any) => t.sub_unit?.nama_layanan || '-' },
     { key: 'status', header: 'Status', render: (t: any) => <StatusBadge status={t.status} /> },

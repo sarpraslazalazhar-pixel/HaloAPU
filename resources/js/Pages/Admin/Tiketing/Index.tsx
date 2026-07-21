@@ -8,6 +8,7 @@ import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
 import { Eye } from 'lucide-react';
+import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
     { value: 'open', label: 'Baru' },
@@ -85,7 +86,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                 );
             },
         },
-        { key: 'id', header: 'ID Tiket', render: (t: Ticket) => `#TKT-${t.id}` },
+        { key: 'id', header: 'ID Tiket', render: (t: Ticket) => `#TKT-${formatTicketId(t.id)}` },
         { key: 'created_at', header: 'Tgl Pengajuan', render: (t: Ticket) => new Date(t.created_at).toLocaleDateString('id-ID') },
         {
             key: 'user',

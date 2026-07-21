@@ -6,13 +6,13 @@ import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
 import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
-import { formatDateId } from '@/lib/utils';
+import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye } from 'lucide-react';
 
 const validTransitions: Record<string, string[]> = {
     open: ['on_proses', 'reject', 'pending'],
-    on_proses: ['solve', 'pending'],
+    on_proses: ['solve', 'pending', 'reject'],
     pending: ['on_proses'],
 };
 
@@ -88,15 +88,15 @@ export default function TicketDetail({ ticket, formFields }: any) {
     };
 
     return (
-        <AdminLayout title={`Detail Tiket #TKT-${ticket.id}`}>
-            <Head title={`Tiket #TKT-${ticket.id}`} />
+        <AdminLayout title={`Detail Tiket #TKT-${formatTicketId(ticket.id)}`}>
+            <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
             <div className="flex items-center gap-3 mb-6">
                 <Button variant="outline" size="sm" onClick={() => router.get(route('admin.tiket.index'))}>
                     <ArrowLeft className="w-4 h-4 mr-1" /> Kembali
                 </Button>
                 <h1 className="text-2xl font-bold flex items-center gap-3">
-                    #TKT-{ticket.id} <StatusBadge status={ticket.status} />
+                    #TKT-{formatTicketId(ticket.id)} <StatusBadge status={ticket.status} />
                 </h1>
             </div>
 

@@ -21,3 +21,12 @@ export function formatDateId(dateString: string | null | undefined): string {
         return '-';
     }
 }
+
+export function formatTicketId(id: string | number | null | undefined): string {
+    if (!id) return '-';
+    const str = String(id);
+    if (str.length === 9) {
+        return str.replace(/(\d{3})(\d{3})(\d{3})/, '$1-$2-$3');
+    }
+    return str;
+}

@@ -4,6 +4,7 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Star } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import { formatTicketId } from '@/lib/utils';
 
 export default function CsatIndex({ csats, stats, csatPerUnit, filters, units, subUnits }: any) {
     const applyFilter = (key: string, value: string) => {
@@ -144,7 +145,7 @@ export default function CsatIndex({ csats, stats, csatPerUnit, filters, units, s
                                 <tbody>
                                     {csats?.data?.map((csat: any) => (
                                         <tr key={csat.id} className="border-b last:border-0">
-                                            <td className="py-2">#TKT-{csat.ticket_id}</td>
+                                            <td className="py-2">#TKT-{formatTicketId(csat.ticket_id)}</td>
                                             <td className="py-2">{csat.user?.username || '-'}</td>
                                             <td className="py-2">{csat.ticket?.sub_unit?.unit?.nama_unit || '-'}</td>
                                             <td className="py-2">

@@ -6,10 +6,35 @@ use Illuminate\Database\Eloquent\Model;
 
 class Ticket extends Model
 {
+    public $incrementing = false;
+    protected $keyType = 'integer';
+
+    protected static function boot()
+    {
+        parent::boot();
+
+        static::creating(function ($model) {
+            if (empty($model->{$model->getKeyName()})) {
+                do {
+                    $id = random_int(100000000, 999999999);
+                } while (self::where($model->getKeyName(), $id)->exists());
+                $model->{$model->getKeyName()} = $id;
+            }
+        });
+    }
     protected $fillable = [
         'user_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
         'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id'
     ];
+
+    public function getFormattedIdAttribute()
+    {
+        $id = (string) $this->id;
+        if (strlen($id) === 9) {
+            return substr($id, 0, 3) . '-' . substr($id, 3, 3) . '-' . substr($id, 6, 3);
+        }
+        return $id;
+    }
 
     protected $casts = [
         'form_data' => 'array',

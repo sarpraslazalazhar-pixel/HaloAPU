@@ -8,6 +8,7 @@ import MonthlyUnitChart from '@/Components/Charts/MonthlyUnitChart';
 import SubUnitChart from '@/Components/Charts/SubUnitChart';
 import { AlertTriangle, Eye, Clock, Folder, Loader2, RotateCw, CheckCircle, XCircle, ChevronDown, Calendar, PlusCircle, Star } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import { formatTicketId } from '@/lib/utils';
 
 const PIE_COLORS = ['#22c55e', '#ef4444', '#f97316'];
 
@@ -122,7 +123,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                 {followUpTickets.slice(0, 5).map((t: any) => (
                                     <div key={t.id} className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50">
                                         <div className="flex items-center gap-3 min-w-0">
-                                            <span className="shrink-0 font-semibold text-foreground">#TKT-{t.id}</span>
+                                            <span className="shrink-0 font-semibold text-foreground">#TKT-{formatTicketId(t.id)}</span>
                                             <StatusBadge status={t.status} />
                                             <span className="text-muted-foreground truncate">{t.user?.username || '-'}</span>
                                             <span className="hidden md:inline text-xs text-muted-foreground/60 truncate">{t.unit?.nama_unit} / {t.sub_unit?.nama_layanan}</span>

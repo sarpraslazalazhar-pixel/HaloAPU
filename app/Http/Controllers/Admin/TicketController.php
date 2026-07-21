@@ -80,7 +80,7 @@ class TicketController extends Controller
     {
         $validTransitions = [
             'open' => ['on_proses', 'reject', 'pending'],
-            'on_proses' => ['solve', 'pending'],
+            'on_proses' => ['solve', 'pending', 'reject'],
             'pending' => ['on_proses'],
         ];
 

@@ -3,6 +3,7 @@ import { Head, Link } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Star } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
+import { formatTicketId } from '@/lib/utils';
 
 interface CsatItem {
     id: number;
@@ -32,7 +33,7 @@ export default function Riwayat({ csats }: { csats: any }) {
                                 <CardHeader className="pb-2">
                                     <div className="flex items-center justify-between">
                                         <CardTitle className="text-base">
-                                            Tiket #TKT-{csat.ticket.id}
+                                            Tiket #TKT-{formatTicketId(csat.ticket.id)}
                                             {csat.ticket.sub_unit && (
                                                 <span className="text-sm font-normal text-muted-foreground ml-2">
                                                     {csat.ticket.sub_unit.nama_layanan}

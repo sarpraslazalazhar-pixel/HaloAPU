@@ -6,7 +6,7 @@ import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
-import { formatDateId } from '@/lib/utils';
+import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, XCircle, Eye } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
@@ -75,14 +75,14 @@ export default function Detail({ ticket, formFields }: DetailProps) {
     };
 
     return (
-        <UserLayout title={`Tiket #TKT-${ticket.id}`}>
+        <UserLayout title={`Tiket #TKT-${formatTicketId(ticket.id)}`}>
             <div className="max-w-4xl mx-auto py-8 px-4">
-                <Head title={`Tiket #TKT-${ticket.id}`} />
+                <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
             <div className="flex justify-between items-center mb-6">
                 <div>
                     <h1 className="text-2xl font-bold flex items-center gap-3">
-                        #TKT-{ticket.id}
+                        #TKT-{formatTicketId(ticket.id)}
                         <StatusBadge status={ticket.status} />
                     </h1>
                     <p className="text-slate-500 mt-1">Dibuat pada {formatDateId(ticket.created_at)}</p>

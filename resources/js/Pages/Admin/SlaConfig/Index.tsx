@@ -1,256 +1,393 @@
-import React from 'react';
-import { useForm, router } from '@inertiajs/react';
+import React, { useState } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import { Head } from '@inertiajs/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
+import { useForm } from '@inertiajs/react';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
-import { Checkbox } from '@/Components/ui/checkbox';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/Components/ui/accordion';
+import { Label } from '@/Components/ui/label';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
+import { SearchInput } from '@/Components/SearchInput';
+import { Pagination } from '@/Components/Pagination';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/Components/ui/select';
+import { RadioGroup, RadioGroupItem } from '@/Components/ui/radio-group';
+import Swal from 'sweetalert2';
+import { Pencil, Trash2 } from 'lucide-react';
+import { Head } from '@inertiajs/react';
 
-const PRIORITIES = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'] as const;
-type Priority = typeof PRIORITIES[number];
-
-const JENIS_LABELS: Record<string, string> = {
-    respon: 'SLA Respon',
-    penyelesaian: 'SLA Penyelesaian',
-};
-
-interface SlaConfigItem {
-    sub_unit_id: number | null;
-    priority: Priority;
-    jenis: 'respon' | 'penyelesaian';
-    threshold_minutes: number;
+interface SubUnit {
+    id: number;
+    nama_layanan: string;
+    unit?: { nama_unit: string };
 }
 
-export default function SlaConfigIndex({ globalConfigs, subUnits }: any) {
-    const { data, setData, put, processing, errors, transform } = useForm({
-        configs: buildInitialConfigs(globalConfigs || [], subUnits || []),
+interface SlaConfig {
+    id: number;
+    sub_unit_id: number | null;
+    jenis: string;
+    priority: string;
+    threshold_minutes: number;
+    sub_unit: SubUnit | null;
+}
+
+const PRIORITIES = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'];
+const JENIS_OPTIONS = [
+    { value: 'respon', label: 'Respon' },
+    { value: 'penyelesaian', label: 'Penyelesaian' }
+];
+
+export default function SlaConfigIndex({ configs, subUnits, filters }: { configs: any; subUnits: SubUnit[]; filters?: { search?: string } }) {
+    const [isAddOpen, setIsAddOpen] = useState(false);
+    const [editConfig, setEditConfig] = useState<SlaConfig | null>(null);
+    const [tingkat, setTingkat] = useState<'global' | 'spesifik'>('global');
+
+    const { data, setData, post, put, delete: destroy, reset, errors, transform } = useForm<any>({
+        sub_unit_id: '',
+        jenis: '',
+        priority: '',
+        threshold_minutes: 60,
     });
 
-    const [overrides, setOverrides] = React.useState<Record<string, boolean>>(() => {
-        const map: Record<string, boolean> = {};
-        (subUnits || []).forEach((su: any) => {
-            (su.sla_configs || []).forEach((sc: any) => {
-                map[`${su.id}_${sc.priority}_${sc.jenis}`] = true;
-            });
+    const handleAdd = (e: React.FormEvent) => {
+        e.preventDefault();
+        
+        transform((formData: any) => ({
+            ...formData,
+            sub_unit_id: tingkat === 'global' ? null : formData.sub_unit_id
+        }));
+
+        post(route('admin.sla-config.store'), {
+            onSuccess: () => {
+                setIsAddOpen(false);
+                reset();
+                setTingkat('global');
+            }
         });
-        return map;
-    });
-
-    const getPriorityValue = (subUnitId: number | null, priority: Priority, jenis: string): number => {
-        const item = data.configs.find(
-            c => c.sub_unit_id === subUnitId && c.priority === priority && c.jenis === jenis
-        );
-        return item?.threshold_minutes ?? 0;
     };
 
-    const setPriorityValue = (subUnitId: number | null, priority: Priority, jenis: string, value: number) => {
-        setData('configs', data.configs.map(c =>
-            c.sub_unit_id === subUnitId && c.priority === priority && c.jenis === jenis
-                ? { ...c, threshold_minutes: value }
-                : c
-        ));
-    };
+    const handleEdit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (editConfig) {
+            transform((formData: any) => ({
+                ...formData,
+                sub_unit_id: tingkat === 'global' ? null : formData.sub_unit_id
+            }));
 
-    const toggleOverride = (subUnitId: number, priority: Priority, jenis: string, checked: boolean) => {
-        const key = `${subUnitId}_${priority}_${jenis}`;
-        setOverrides(prev => ({ ...prev, [key]: checked }));
-
-        if (checked) {
-            const globalVal = getPriorityValue(null, priority, jenis);
-            setData('configs', data.configs.map(c =>
-                c.sub_unit_id === subUnitId && c.priority === priority && c.jenis === jenis
-                    ? { ...c, threshold_minutes: globalVal }
-                    : c
-            ));
-        } else {
-            setData('configs', data.configs.filter(c =>
-                !(c.sub_unit_id === subUnitId && c.priority === priority && c.jenis === jenis)
-            ));
+            put(route('admin.sla-config.update', editConfig.id), {
+                onSuccess: () => {
+                    setEditConfig(null);
+                    reset();
+                    setTingkat('global');
+                }
+            });
         }
     };
 
-    transform((data) => ({
-        ...data,
-        configs: data.configs.filter(c => 
-            c.sub_unit_id === null || overrides[`${c.sub_unit_id}_${c.priority}_${c.jenis}`]
-        )
-    }));
+    const handleDelete = (id: number) => {
+        Swal.fire({
+            title: 'Yakin hapus konfigurasi ini?',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: 'Ya, Hapus',
+            cancelButtonText: 'Batal'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                destroy(route('admin.sla-config.destroy', id));
+            }
+        });
+    };
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        put(route('admin.sla-config.update'));
+    const openEdit = (config: SlaConfig) => {
+        setEditConfig(config);
+        setTingkat(config.sub_unit_id === null ? 'global' : 'spesifik');
+        setData({
+            sub_unit_id: config.sub_unit_id ? config.sub_unit_id.toString() : '',
+            jenis: config.jenis,
+            priority: config.priority,
+            threshold_minutes: config.threshold_minutes,
+        });
     };
 
     return (
         <AdminLayout title="Konfigurasi SLA">
             <Head title="Konfigurasi SLA" />
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-                    <div>
-                        <h2 className="text-2xl font-bold">Konfigurasi SLA</h2>
-                        <p className="text-sm text-slate-500">Atur threshold SLA respon dan penyelesaian berdasarkan Prioritas.</p>
-                    </div>
-                    <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
-                </div>
-                {/* Global Default */}
-                <Card>
-                    <CardHeader><CardTitle className="text-base">Default Global</CardTitle></CardHeader>
-                    <CardContent>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm min-w-[600px]">
-                                <thead>
-                                    <tr className="border-b">
-                                        <th className="text-left py-2">Jenis</th>
-                                        {PRIORITIES.map(p => <th key={p} className="text-center py-2">{p} (menit)</th>)}
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {['respon', 'penyelesaian'].map(jenis => (
-                                        <tr key={jenis} className="border-b">
-                                            <td className="py-2 font-medium">{JENIS_LABELS[jenis]}</td>
-                                            {PRIORITIES.map(priority => (
-                                                <td key={priority} className="py-2 text-center">
-                                                    <Input
-                                                        type="number"
-                                                        min={1}
-                                                        className="w-24 mx-auto text-center"
-                                                        value={getPriorityValue(null, priority, jenis)}
-                                                        onChange={e => setPriorityValue(null, priority, jenis, parseInt(e.target.value) || 0)}
-                                                    />
-                                                </td>
-                                            ))}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        </div>
-                        {errors.configs && <p className="text-sm text-destructive mt-2">{errors.configs}</p>}
-                    </CardContent>
-                </Card>
-
-                {/* Per Sub Unit */}
-                <Accordion type="multiple" className="space-y-2">
-                    {(subUnits || []).map((su: any) => (
-                        <AccordionItem key={su.id} value={`sub-${su.id}`}>
-                            <AccordionTrigger className="text-base font-medium px-4 hover:no-underline">
-                                {su.unit?.nama_unit} — {su.nama_layanan}
-                            </AccordionTrigger>
-                            <AccordionContent className="px-4 pb-4">
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm min-w-[700px]">
-                                        <thead>
-                                            <tr className="border-b">
-                                                <th className="text-left py-2">Jenis</th>
-                                                {PRIORITIES.map(p => (
-                                                    <th key={p} className="text-center py-2">{p} (menit)</th>
-                                                ))}
-                                                <th className="text-center py-2 w-24">Override Semua</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {['respon', 'penyelesaian'].map((jenis, idx) => (
-                                                <tr key={jenis} className="border-b">
-                                                    <td className="py-2 font-medium">{JENIS_LABELS[jenis]}</td>
-                                                    {PRIORITIES.map(priority => {
-                                                        const isOverridden = overrides[`${su.id}_${priority}_${jenis}`] ?? false;
-                                                        return (
-                                                            <td key={priority} className="py-2 text-center">
-                                                                <div className="flex items-center justify-center gap-2">
-                                                                    <Checkbox
-                                                                        checked={isOverridden}
-                                                                        onCheckedChange={(checked) => toggleOverride(su.id, priority, jenis, !!checked)}
-                                                                        title="Override prioritas ini"
-                                                                    />
-                                                                    {isOverridden ? (
-                                                                        <Input
-                                                                            type="number"
-                                                                            min={1}
-                                                                            className="w-20 text-center h-8"
-                                                                            value={getPriorityValue(su.id, priority, jenis)}
-                                                                            onChange={e => setPriorityValue(su.id, priority, jenis, parseInt(e.target.value) || 0)}
-                                                                        />
-                                                                    ) : (
-                                                                        <span className="text-slate-400 w-20 inline-block">—</span>
-                                                                    )}
-                                                                </div>
-                                                            </td>
-                                                        );
-                                                    })}
-                                                    {idx === 0 && (
-                                                        <td className="py-2 text-center" rowSpan={2}>
-                                                            <Button 
-                                                                type="button" 
-                                                                variant="outline" 
-                                                                size="sm"
-                                                                onClick={() => {
-                                                                    // Toggle all for this sub unit
-                                                                    const anyChecked = PRIORITIES.some(p => overrides[`${su.id}_${p}_respon`] || overrides[`${su.id}_${p}_penyelesaian`]);
-                                                                    PRIORITIES.forEach(p => {
-                                                                        toggleOverride(su.id, p, 'respon', !anyChecked);
-                                                                        toggleOverride(su.id, p, 'penyelesaian', !anyChecked);
-                                                                    });
-                                                                }}
-                                                            >
-                                                                Toggle All
-                                                            </Button>
-                                                        </td>
-                                                    )}
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
+                <h2 className="text-2xl font-bold">Konfigurasi SLA</h2>
+                
+                <div className="flex items-center gap-2">
+                    <SearchInput 
+                        placeholder="Cari SLA..." 
+                    />
+                    
+                    <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
+                        <DialogTrigger asChild>
+                            <Button onClick={() => { reset(); setTingkat('global'); }}>Tambah Aturan SLA</Button>
+                        </DialogTrigger>
+                        <DialogContent>
+                            <DialogHeader>
+                                <DialogTitle>Tambah Aturan SLA</DialogTitle>
+                            </DialogHeader>
+                            <form onSubmit={handleAdd} className="space-y-4">
+                                {errors.message && (
+                                    <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+                                        {errors.message}
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    <Label>Tingkat Pengaturan</Label>
+                                    <RadioGroup 
+                                        value={tingkat} 
+                                        onValueChange={(val: 'global' | 'spesifik') => setTingkat(val)} 
+                                        className="flex gap-4"
+                                    >
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="global" id="r1" />
+                                            <Label htmlFor="r1">Default Global</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="spesifik" id="r2" />
+                                            <Label htmlFor="r2">Spesifik Sub Unit</Label>
+                                        </div>
+                                    </RadioGroup>
                                 </div>
-                            </AccordionContent>
-                        </AccordionItem>
-                    ))}
-                </Accordion>
 
-                <div className="flex justify-end">
-                    <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
+                                {tingkat === 'spesifik' && (
+                                    <div className="space-y-2">
+                                        <Label>Sub Unit</Label>
+                                        <Select 
+                                            value={data.sub_unit_id || ''} 
+                                            onValueChange={val => setData('sub_unit_id', val)}
+                                        >
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Pilih Sub Unit" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {subUnits.map(su => (
+                                                    <SelectItem key={su.id} value={su.id.toString()}>
+                                                        {su.unit?.nama_unit} - {su.nama_layanan}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {errors.sub_unit_id && <p className="text-red-500 text-sm">{errors.sub_unit_id}</p>}
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <Label>Jenis SLA</Label>
+                                    <Select 
+                                        value={data.jenis} 
+                                        onValueChange={val => setData('jenis', val)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih Jenis" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {JENIS_OPTIONS.map(j => (
+                                                <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.jenis && <p className="text-red-500 text-sm">{errors.jenis}</p>}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Prioritas</Label>
+                                    <Select 
+                                        value={data.priority} 
+                                        onValueChange={val => setData('priority', val)}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Pilih Prioritas" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {PRIORITIES.map(p => (
+                                                <SelectItem key={p} value={p}>{p}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    {errors.priority && <p className="text-red-500 text-sm">{errors.priority}</p>}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <Label>Target Waktu (Menit)</Label>
+                                    <Input 
+                                        type="number" 
+                                        min={1} 
+                                        value={data.threshold_minutes} 
+                                        onChange={e => setData('threshold_minutes', parseInt(e.target.value) || 0)} 
+                                    />
+                                    {errors.threshold_minutes && <p className="text-red-500 text-sm">{errors.threshold_minutes}</p>}
+                                </div>
+
+                                <Button type="submit" className="w-full">Simpan</Button>
+                            </form>
+                        </DialogContent>
+                    </Dialog>
                 </div>
-            </form>
+            </div>
+
+            <div className="bg-white rounded-lg shadow dark:bg-slate-900 border overflow-hidden">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead>Sub Unit</TableHead>
+                            <TableHead>Jenis SLA</TableHead>
+                            <TableHead>Prioritas</TableHead>
+                            <TableHead>Target Waktu (Menit)</TableHead>
+                            <TableHead className="w-[100px] text-right">Aksi</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {configs.data.length > 0 ? (
+                            configs.data.map((config: SlaConfig) => (
+                                <TableRow key={config.id}>
+                                    <TableCell className="font-medium">
+                                        {config.sub_unit_id === null ? (
+                                            <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">Default Global</span>
+                                        ) : (
+                                            <span>
+                                                {config.sub_unit?.unit?.nama_unit} - {config.sub_unit?.nama_layanan}
+                                            </span>
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="capitalize">{config.jenis}</TableCell>
+                                    <TableCell>{config.priority}</TableCell>
+                                    <TableCell>{config.threshold_minutes} Menit</TableCell>
+                                    <TableCell className="text-right">
+                                        <div className="flex items-center justify-end gap-2">
+                                            <Button variant="outline" size="icon" onClick={() => openEdit(config)}>
+                                                <Pencil className="w-4 h-4" />
+                                            </Button>
+                                            <Button variant="destructive" size="icon" onClick={() => handleDelete(config.id)}>
+                                                <Trash2 className="w-4 h-4" />
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={5} className="h-24 text-center">
+                                    Tidak ada data SLA.
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </div>
+
+            {configs.total > configs.per_page && (
+                <div className="mt-4">
+                    <Pagination links={configs.links} />
+                </div>
+            )}
+
+            <Dialog open={!!editConfig} onOpenChange={(open) => !open && setEditConfig(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Aturan SLA</DialogTitle>
+                    </DialogHeader>
+                    <form onSubmit={handleEdit} className="space-y-4">
+                        {errors.message && (
+                            <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+                                {errors.message}
+                            </div>
+                        )}
+                        <div className="space-y-2">
+                            <Label>Tingkat Pengaturan</Label>
+                            <RadioGroup 
+                                value={tingkat} 
+                                onValueChange={(val: 'global' | 'spesifik') => setTingkat(val)} 
+                                className="flex gap-4"
+                            >
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="global" id="r3" />
+                                    <Label htmlFor="r3">Default Global</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <RadioGroupItem value="spesifik" id="r4" />
+                                    <Label htmlFor="r4">Spesifik Sub Unit</Label>
+                                </div>
+                            </RadioGroup>
+                        </div>
+
+                        {tingkat === 'spesifik' && (
+                            <div className="space-y-2">
+                                <Label>Sub Unit</Label>
+                                <Select 
+                                    value={data.sub_unit_id || ''} 
+                                    onValueChange={val => setData('sub_unit_id', val)}
+                                >
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Pilih Sub Unit" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {subUnits.map(su => (
+                                            <SelectItem key={su.id} value={su.id.toString()}>
+                                                {su.unit?.nama_unit} - {su.nama_layanan}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {errors.sub_unit_id && <p className="text-red-500 text-sm">{errors.sub_unit_id}</p>}
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            <Label>Jenis SLA</Label>
+                            <Select 
+                                value={data.jenis} 
+                                onValueChange={val => setData('jenis', val)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Pilih Jenis" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {JENIS_OPTIONS.map(j => (
+                                        <SelectItem key={j.value} value={j.value}>{j.label}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {errors.jenis && <p className="text-red-500 text-sm">{errors.jenis}</p>}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Prioritas</Label>
+                            <Select 
+                                value={data.priority} 
+                                onValueChange={val => setData('priority', val)}
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Pilih Prioritas" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {PRIORITIES.map(p => (
+                                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            {errors.priority && <p className="text-red-500 text-sm">{errors.priority}</p>}
+                        </div>
+
+                        <div className="space-y-2">
+                            <Label>Target Waktu (Menit)</Label>
+                            <Input 
+                                type="number" 
+                                min={1} 
+                                value={data.threshold_minutes} 
+                                onChange={e => setData('threshold_minutes', parseInt(e.target.value) || 0)} 
+                            />
+                            {errors.threshold_minutes && <p className="text-red-500 text-sm">{errors.threshold_minutes}</p>}
+                        </div>
+
+                        <Button type="submit" className="w-full">Update</Button>
+                    </form>
+                </DialogContent>
+            </Dialog>
+
         </AdminLayout>
     );
-}
-
-function buildInitialConfigs(globalConfigs: any[], subUnits: any[]): SlaConfigItem[] {
-    const configs: SlaConfigItem[] = [];
-
-    const pushIfMissing = (subUnitId: number | null, priority: Priority, jenis: string) => {
-        const exists = configs.some(c => c.sub_unit_id === subUnitId && c.priority === priority && c.jenis === jenis);
-        if (!exists) {
-            configs.push({
-                sub_unit_id: subUnitId,
-                priority,
-                jenis: jenis as 'respon' | 'penyelesaian',
-                threshold_minutes: 60,
-            });
-        }
-    };
-
-    globalConfigs?.forEach((gc: any) => {
-        pushIfMissing(null, gc.priority, gc.jenis);
-        const idx = configs.findIndex(c => c.sub_unit_id === null && c.priority === gc.priority && c.jenis === gc.jenis);
-        if (idx >= 0) configs[idx].threshold_minutes = gc.threshold_minutes;
-    });
-
-    [null, ...(subUnits || []).map((s: any) => s.id)].forEach(suId => {
-        PRIORITIES.forEach(priority => {
-            ['respon', 'penyelesaian'].forEach(jenis => {
-                pushIfMissing(suId, priority, jenis);
-            });
-        });
-    });
-
-    subUnits?.forEach((su: any) => {
-        (su.sla_configs || []).forEach((sc: any) => {
-            const idx = configs.findIndex(c => c.sub_unit_id === su.id && c.priority === sc.priority && c.jenis === sc.jenis);
-            if (idx >= 0) configs[idx].threshold_minutes = sc.threshold_minutes;
-        });
-    });
-
-    return configs;
 }

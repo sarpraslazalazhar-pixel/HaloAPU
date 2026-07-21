@@ -92,6 +92,22 @@ class SlaCalculator
         return $date->copy()->setTimeFromTimeString($hours[1]);
     }
 
+    public function isWithinWorkingHours(Carbon $date): bool
+    {
+        if (!$this->isWorkingDay($date)) {
+            return false;
+        }
+
+        $start = $this->getWorkStart($date);
+        $end = $this->getWorkEnd($date);
+
+        if (!$start || !$end) {
+            return false;
+        }
+
+        return $date->between($start, $end);
+    }
+
     public function calculateResponseDeadline(Ticket $ticket): Carbon
     {
         $subUnitId = $ticket->sub_unit_id;

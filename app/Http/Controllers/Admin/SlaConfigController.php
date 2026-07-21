@@ -11,51 +11,84 @@ use Inertia\Inertia;
 
 class SlaConfigController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $globalConfigs = SlaConfig::whereNull('sub_unit_id')
-            ->orderBy('jenis')
-            ->orderBy('priority')
-            ->get();
+        $query = SlaConfig::with('subUnit.unit')->orderBy('id', 'desc');
 
-        $subUnits = SubUnit::with(['unit', 'slaConfigs' => function ($q) {
-            $q->orderBy('jenis')->orderBy('priority');
-        }])->get();
+        if ($request->has('search') && $request->search != '') {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('jenis', 'like', "%{$search}%")
+                  ->orWhere('priority', 'like', "%{$search}%")
+                  ->orWhereHas('subUnit', function ($sq) use ($search) {
+                      $sq->where('nama_layanan', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        $configs = $query->paginate(10)->withQueryString();
+        $subUnits = SubUnit::with('unit')->get();
 
         return Inertia::render('Admin/SlaConfig/Index', [
-            'globalConfigs' => $globalConfigs,
+            'configs' => $configs,
             'subUnits' => $subUnits,
+            'filters' => $request->only('search'),
         ]);
     }
 
-    public function update(Request $request)
+    public function store(Request $request)
     {
         $validated = $request->validate([
-            'configs' => 'required|array|min:1',
-            'configs.*.sub_unit_id' => 'nullable|exists:sub_units,id',
-            'configs.*.priority' => ['required', Rule::in(['Rendah', 'Sedang', 'Tinggi', 'Urgen'])],
-            'configs.*.jenis' => ['required', Rule::in(['respon', 'penyelesaian'])],
-            'configs.*.threshold_minutes' => 'required|integer|min:1',
+            'sub_unit_id' => 'nullable|exists:sub_units,id',
+            'priority' => ['required', Rule::in(['Rendah', 'Sedang', 'Tinggi', 'Urgen'])],
+            'jenis' => ['required', Rule::in(['respon', 'penyelesaian'])],
+            'threshold_minutes' => 'required|integer|min:1',
         ]);
 
-        $keepIds = [];
-        foreach ($validated['configs'] as $config) {
-            $record = SlaConfig::updateOrCreate(
-                [
-                    'sub_unit_id' => $config['sub_unit_id'],
-                    'priority' => $config['priority'],
-                    'jenis' => $config['jenis'],
-                ],
-                [
-                    'threshold_minutes' => $config['threshold_minutes'],
-                ]
-            );
-            $keepIds[] = $record->id;
+        // Validasi Unique
+        $exists = SlaConfig::where('sub_unit_id', $validated['sub_unit_id'])
+            ->where('priority', $validated['priority'])
+            ->where('jenis', $validated['jenis'])
+            ->exists();
+
+        if ($exists) {
+            return back()->withErrors(['message' => 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.']);
         }
 
-        // Hapus konfigurasi yang tidak ada di payload (misalnya karena override dihapus)
-        SlaConfig::whereNotIn('id', $keepIds)->delete();
+        SlaConfig::create($validated);
 
-        return back()->with('success', 'Konfigurasi SLA berhasil disimpan.');
+        return back()->with('success', 'Konfigurasi SLA berhasil ditambahkan.');
+    }
+
+    public function update(Request $request, SlaConfig $sla_config)
+    {
+        $validated = $request->validate([
+            'sub_unit_id' => 'nullable|exists:sub_units,id',
+            'priority' => ['required', Rule::in(['Rendah', 'Sedang', 'Tinggi', 'Urgen'])],
+            'jenis' => ['required', Rule::in(['respon', 'penyelesaian'])],
+            'threshold_minutes' => 'required|integer|min:1',
+        ]);
+
+        // Validasi Unique kecuali ID sendiri
+        $exists = SlaConfig::where('sub_unit_id', $validated['sub_unit_id'])
+            ->where('priority', $validated['priority'])
+            ->where('jenis', $validated['jenis'])
+            ->where('id', '!=', $sla_config->id)
+            ->exists();
+
+        if ($exists) {
+            return back()->withErrors(['message' => 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.']);
+        }
+
+        $sla_config->update($validated);
+
+        return back()->with('success', 'Konfigurasi SLA berhasil diperbarui.');
+    }
+
+    public function destroy(SlaConfig $sla_config)
+    {
+        $sla_config->delete();
+
+        return back()->with('success', 'Konfigurasi SLA berhasil dihapus.');
     }
 }

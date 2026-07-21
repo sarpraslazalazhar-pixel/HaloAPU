@@ -10,9 +10,9 @@ import { DateRangePicker } from '@/Components/ui/date-range-picker';
 import { Eye } from 'lucide-react';
 
 const STATUS_LIST = [
-    { value: 'open', label: 'Open' },
-    { value: 'on_proses', label: 'On Proses' },
-    { value: 'pending', label: 'Pending' },
+    { value: 'open', label: 'Baru' },
+    { value: 'on_proses', label: 'Diproses' },
+    { value: 'pending', label: 'Tertunda' },
     { value: 'solve', label: 'Selesai' },
     { value: 'reject', label: 'Ditolak' },
     { value: 'dibatalkan', label: 'Dibatalkan' },

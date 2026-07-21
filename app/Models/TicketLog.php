@@ -25,4 +25,9 @@ class TicketLog extends Model
     {
         return $this->belongsTo(Admin::class);
     }
+
+    public function attachments()
+    {
+        return $this->hasMany(TicketAttachment::class, 'ticket_log_id');
+    }
 }

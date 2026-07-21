@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
@@ -18,6 +18,7 @@ interface DetailProps {
 }
 
 export default function Detail({ ticket, formFields }: DetailProps) {
+    const { data: replyData, setData: setReplyData, post: postReply, processing: processingReply, errors: errorsReply, reset: resetReply } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
     const [showConfirm, setShowConfirm] = useState(false);
     const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
     const canCancel = ticket.status === 'open';
@@ -28,13 +29,17 @@ export default function Detail({ ticket, formFields }: DetailProps) {
 
     const renderFormValue = (field: any) => {
         if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
-            const attachment = ticket.attachments?.find((a: any) => a.field_id == field.id);
-            return attachment ? (
-                <AttachmentViewer attachment={attachment} viewRoute="tiket.view" downloadRoute="tiket.download">
-                    <button type="button" className="text-blue-600 hover:underline flex items-center gap-1">
-                        <Eye className="w-4 h-4" /> {attachment.original_name}
-                    </button>
-                </AttachmentViewer>
+            const fieldAttachments = ticket.attachments?.filter((a: any) => a.field_id == field.id);
+            return fieldAttachments && fieldAttachments.length > 0 ? (
+                <div className="flex flex-col gap-2 mt-1">
+                    {fieldAttachments.map((attachment: any, idx: number) => (
+                        <AttachmentViewer key={idx} attachment={attachment} viewRoute="tiket.view" downloadRoute="tiket.download">
+                            <button type="button" className="text-blue-600 hover:underline flex items-center gap-1 text-sm text-left">
+                                <Eye className="w-4 h-4 flex-shrink-0" /> <span className="truncate">{attachment.original_name}</span>
+                            </button>
+                        </AttachmentViewer>
+                    ))}
+                </div>
             ) : '-';
         }
 
@@ -188,6 +193,61 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                         </CardHeader>
                         <CardContent>
                             <TicketTimeline logs={ticket.logs} />
+                        </CardContent>
+                    </Card>
+                )}
+
+                {ticket.status !== 'solve' && ticket.status !== 'reject' && ticket.status !== 'dibatalkan' && (
+                    <Card className="md:col-span-2">
+                        <CardHeader>
+                            <CardTitle>Balas Tiket</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <form onSubmit={(e) => {
+                                e.preventDefault();
+                                postReply(route('tiket.reply', ticket.id), { onSuccess: () => resetReply() });
+                            }} className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Catatan <span className="text-red-500">*</span></label>
+                                    <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={replyData.catatan} onChange={e => setReplyData('catatan', e.target.value)} placeholder="Tulis balasan Anda di sini..." required />
+                                    {errorsReply.catatan && <p className="text-red-500 text-sm">{errorsReply.catatan}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
+                                    <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file (JPG, PNG, PDF, DOC, DOCX).</p>
+                                    <input
+                                        type="file"
+                                        multiple
+                                        accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        onChange={e => {
+                                            const files = Array.from(e.target.files || []);
+                                            if (replyData.general_attachments.length + files.length > 3) {
+                                                alert('Maksimal hanya 3 lampiran.');
+                                                return;
+                                            }
+                                            const validFiles = files.filter(f => {
+                                                if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
+                                                return true;
+                                            });
+                                            setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                    {errorsReply.general_attachments && <p className="text-red-500 text-sm">{errorsReply.general_attachments}</p>}
+                                    {replyData.general_attachments.length > 0 && (
+                                        <div className="mt-2 space-y-2">
+                                            {replyData.general_attachments.map((file, idx) => (
+                                                <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
+                                                    <span className="truncate max-w-[200px]">{file.name}</span>
+                                                    <button type="button" onClick={() => setReplyData('general_attachments', replyData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500">Hapus</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <Button type="submit" disabled={processingReply}>Kirim Balasan</Button>
+                            </form>
                         </CardContent>
                     </Card>
                 )}

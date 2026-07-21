@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import mammoth from 'mammoth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
 import { ZoomIn, ZoomOut, Maximize, FileText, Download, ExternalLink } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
@@ -21,6 +22,27 @@ export function AttachmentViewer({ attachment, viewRoute, downloadRoute, childre
     const viewUrl = route(viewRoute, attachment.id);
     const downloadUrl = route(downloadRoute, attachment.id);
     const isPdf = /\.pdf$/i.test(attachment.original_name);
+    const isDocx = /\.docx$/i.test(attachment.original_name);
+
+    const [docxHtml, setDocxHtml] = useState<string | null>(null);
+    const [docxLoading, setDocxLoading] = useState(false);
+
+    useEffect(() => {
+        if (isDocx) {
+            setDocxLoading(true);
+            fetch(viewUrl)
+                .then(res => res.arrayBuffer())
+                .then(buffer => mammoth.convertToHtml({ arrayBuffer: buffer }))
+                .then(result => {
+                    setDocxHtml(result.value);
+                    setDocxLoading(false);
+                })
+                .catch(err => {
+                    console.error('Error rendering docx', err);
+                    setDocxLoading(false);
+                });
+        }
+    }, [isDocx, viewUrl]);
 
     const handleZoomIn = () => setScale(s => Math.min(s + 0.5, 5));
     const handleZoomOut = () => setScale(s => Math.max(s - 0.5, 0.5));
@@ -71,6 +93,25 @@ export function AttachmentViewer({ attachment, viewRoute, downloadRoute, childre
                     ) : isPdf ? (
                         <div className="flex-1 w-full h-full">
                              <iframe src={viewUrl} className="w-full h-full border-0" title={attachment.original_name} />
+                        </div>
+                    ) : isDocx ? (
+                        <div className="flex-1 w-full h-full bg-white overflow-auto p-8 prose max-w-none">
+                            {docxLoading ? (
+                                <div className="flex justify-center items-center h-full">
+                                    <p className="text-slate-500">Memuat dokumen...</p>
+                                </div>
+                            ) : docxHtml ? (
+                                <div dangerouslySetInnerHTML={{ __html: docxHtml }} />
+                            ) : (
+                                <div className="flex justify-center items-center h-full text-center">
+                                    <div>
+                                        <p className="font-medium text-slate-700 text-lg">Gagal memuat pratinjau</p>
+                                        <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-5 py-2.5 mt-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium">
+                                            <Download className="w-4 h-4" /> Download File
+                                        </a>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="flex-1 flex flex-col items-center justify-center p-8 gap-4 bg-white">

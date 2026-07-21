@@ -26,8 +26,6 @@ class TicketWizardController extends Controller
     public function create()
     {
         return Inertia::render('User/Tiket/Wizard', [
-            'divisiList' => OrgDivisi::orderBy('nama_divisi')->get(),
-            'jabatanList' => OrgJabatan::orderBy('urutan')->orderBy('id')->get(),
             'unitList' => Unit::where('aktif', true)->orderBy('nama_unit')->get(),
         ]);
     }
@@ -43,14 +41,14 @@ class TicketWizardController extends Controller
 
         // Validasi dasar
         $request->validate([
-            'divisi_id' => 'required|exists:org_divisi,id',
-            'org_unit_id' => 'required|exists:org_unit,id',
-            'jabatan_id' => 'required|exists:org_jabatan,id',
             'unit_id' => 'required|exists:units,id',
             'sub_unit_id' => 'required|exists:sub_units,id',
             'form_data' => 'required|array',
             'attachments' => 'nullable|array',
-            'attachments.*' => 'file|max:2048', // max 2MB per file
+            'attachments.*' => 'nullable|array|max:3',
+            'attachments.*.*' => 'file|max:3072', // max 3MB per file
+            'general_attachments' => 'nullable|array|max:3',
+            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
         // Validasi form_data berdasarkan form_fields yang wajib (hanya yg visible)
@@ -71,47 +69,80 @@ class TicketWizardController extends Controller
         }
 
         $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator) {
+            $isWorkingHours = $slaCalculator->isWithinWorkingHours(now());
+            $initialStatus = $isWorkingHours ? 'open' : 'pending';
+
+            $user = auth()->user();
+
             // 1. Buat tiket
             $ticket = Ticket::create([
-                'user_id' => auth()->id(),
-                'divisi_id' => $request->divisi_id,
-                'org_unit_id' => $request->org_unit_id,
-                'jabatan_id' => $request->jabatan_id,
+                'user_id' => $user->id,
+                'divisi_id' => $user->divisi_id,
+                'org_unit_id' => $user->org_unit_id,
+                'jabatan_id' => $user->jabatan_id,
                 'unit_id' => $request->unit_id,
                 'sub_unit_id' => $request->sub_unit_id,
                 'form_data' => $request->form_data,
-                'status' => 'open',
+                'status' => $initialStatus,
             ]);
 
             // 2. Simpan attachments
             $uploadedFiles = $request->file('attachments');
             if (!empty($uploadedFiles) && is_array($uploadedFiles)) {
-                foreach ($uploadedFiles as $fieldId => $file) {
-                    if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) {
-                        \Log::error("Invalid file upload for field $fieldId", [
-                            'is_file' => $file ? is_a($file, \Illuminate\Http\UploadedFile::class) : false,
-                            'valid' => $file ? $file->isValid() : false
-                        ]);
-                        continue;
-                    }
+                foreach ($uploadedFiles as $fieldId => $filesArray) {
+                    if (!is_array($filesArray)) continue;
+                    $field = $formFields->firstWhere('id', $fieldId);
+                    
+                    foreach ($filesArray as $file) {
+                        if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) {
+                            \Log::error("Invalid file upload for field $fieldId", [
+                                'is_file' => $file ? is_a($file, \Illuminate\Http\UploadedFile::class) : false,
+                                'valid' => $file ? $file->isValid() : false
+                            ]);
+                            continue;
+                        }
 
-                    // Bypass getRealPath() bug in Windows by passing string path
+                        // Bypass getRealPath() bug in Windows by passing string path
+                        $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                            "ticket-attachments/{$ticket->id}",
+                            $file->getPathname(),
+                            $file->hashName()
+                        );
+
+                        TicketAttachment::create([
+                            'ticket_id' => $ticket->id,
+                            'field_id' => $fieldId,
+                            'file_path' => $path,
+                            'original_name' => $file->getClientOriginalName(),
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                            'wajib' => $field ? $field->wajib : false,
+                        ]);
+                    }
+                }
+            }
+
+            // Simpan general attachments
+            $generalFiles = $request->file('general_attachments');
+            if (!empty($generalFiles) && is_array($generalFiles)) {
+                foreach ($generalFiles as $file) {
+                    if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+
                     $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
                         "ticket-attachments/{$ticket->id}",
                         $file->getPathname(),
                         $file->hashName()
                     );
 
-                    $field = $formFields->firstWhere('id', $fieldId);
-
                     TicketAttachment::create([
                         'ticket_id' => $ticket->id,
-                        'field_id' => $fieldId,
+                        'field_id' => null,
+                        'ticket_log_id' => null,
                         'file_path' => $path,
                         'original_name' => $file->getClientOriginalName(),
                         'mime_type' => $file->getMimeType(),
                         'file_size' => $file->getSize(),
-                        'wajib' => $field ? $field->wajib : false,
+                        'wajib' => false,
                     ]);
                 }
             }

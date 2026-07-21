@@ -138,7 +138,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
                         </ReactCrop>
                         <div className="flex gap-2 w-full justify-end">
                             <Button type="button" variant="outline" onClick={() => setImgSrc('')}>Batal</Button>
-                            <Button type="button" onClick={handleCropComplete}>Terapkan & Upload</Button>
+                            <Button type="button" onClick={handleCropComplete}>Terapkan & Unggah</Button>
                         </div>
                     </div>
                 ) : (

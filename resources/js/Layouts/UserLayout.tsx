@@ -36,7 +36,7 @@ interface NavItem {
 }
 
 const userNavItems: NavItem[] = [
-    { label: 'Dashboard', icon: LayoutDashboard, route: '/dashboard' },
+    { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
     { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
     { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
     { label: 'CSAT', icon: Star, route: '/csat/riwayat' },
@@ -117,7 +117,7 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
     );
 
     const bottomNavItems: BottomNavItem[] = [
-        { label: 'Dashboard', icon: LayoutDashboard, route: '/dashboard' },
+        { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
         { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
         { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
         { label: 'CSAT', icon: Star, route: '/csat/riwayat' },
@@ -160,7 +160,7 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
                             <div className="border-t my-1" />
                             <DropdownMenuItem onClick={() => setProfileOpen(true)} className="cursor-pointer">
                                 <User className="h-4 w-4 mr-2" />
-                                Edit Profil
+                                Ubah Profil
                             </DropdownMenuItem>
                             <DropdownMenuItem className="p-0">
                                 <Link href="/logout" method="post" as="button" className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md">

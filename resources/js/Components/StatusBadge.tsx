@@ -11,9 +11,9 @@ const statusStyles: Record<string, string> = {
 };
 
 const statusLabels: Record<string, string> = {
-    open: 'Open',
-    on_proses: 'On Proses',
-    pending: 'Pending',
+    open: 'Baru',
+    on_proses: 'Diproses',
+    pending: 'Tertunda',
     solve: 'Selesai',
     reject: 'Ditolak',
     dibatalkan: 'Dibatalkan',

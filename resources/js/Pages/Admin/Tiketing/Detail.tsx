@@ -17,18 +17,22 @@ const validTransitions: Record<string, string[]> = {
 };
 
 const statusLabels: Record<string, string> = {
-    open: 'Open', on_proses: 'On Proses', pending: 'Pending', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan',
+    open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan',
 };
 
 export default function TicketDetail({ ticket, formFields }: any) {
-    const { data: statusData, setData: setStatusData, patch: patchStatus, processing: processingStatus, errors: errorsStatus } = useForm({ status: '', catatan: '' });
+    const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
     const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
 
     const transitions = validTransitions[ticket.status] || [];
 
     const handleStatusSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        patchStatus(route('admin.tiket.status', ticket.id));
+        postStatus(route('admin.tiket.status', ticket.id), {
+            onSuccess: () => {
+                resetStatus();
+            }
+        });
     };
 
     const handlePrioritySubmit = (e: React.FormEvent) => {
@@ -38,13 +42,17 @@ export default function TicketDetail({ ticket, formFields }: any) {
 
     const renderFormValue = (field: any) => {
         if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
-            const attachment = ticket.attachments?.find((a: any) => a.field_id == field.id);
-            return attachment ? (
-                <AttachmentViewer attachment={attachment} viewRoute="admin.tiket.view" downloadRoute="admin.tiket.download">
-                    <button type="button" className="text-blue-600 hover:underline flex items-center gap-1">
-                        <Eye className="w-4 h-4" /> {attachment.original_name}
-                    </button>
-                </AttachmentViewer>
+            const fieldAttachments = ticket.attachments?.filter((a: any) => a.field_id == field.id);
+            return fieldAttachments && fieldAttachments.length > 0 ? (
+                <div className="flex flex-col gap-2 mt-1">
+                    {fieldAttachments.map((attachment: any, idx: number) => (
+                        <AttachmentViewer key={idx} attachment={attachment} viewRoute="admin.tiket.view" downloadRoute="admin.tiket.download">
+                            <button type="button" className="text-blue-600 hover:underline flex items-center gap-1 text-sm text-left">
+                                <Eye className="w-4 h-4 flex-shrink-0" /> <span className="truncate">{attachment.original_name}</span>
+                            </button>
+                        </AttachmentViewer>
+                    ))}
+                </div>
             ) : '-';
         }
 
@@ -135,7 +143,7 @@ export default function TicketDetail({ ticket, formFields }: any) {
                         <Card>
                             <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
                             <CardContent>
-                                <TicketTimeline logs={ticket.logs} />
+                                <TicketTimeline logs={ticket.logs} downloadRoute="admin.tiket.download" />
                             </CardContent>
                         </Card>
                     )}
@@ -165,6 +173,40 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                         <label className="text-sm font-medium">Catatan Admin <span className="text-red-500">*</span></label>
                                         <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={statusData.catatan} onChange={e => setStatusData('catatan', e.target.value)} placeholder="Wajib diisi..." />
                                         {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
+                                        <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file (JPG, PNG, PDF, DOC, DOCX).</p>
+                                        <input
+                                            type="file"
+                                            multiple
+                                            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                                            className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                            onChange={e => {
+                                                const files = Array.from(e.target.files || []);
+                                                if (statusData.general_attachments.length + files.length > 3) {
+                                                    alert('Maksimal hanya 3 lampiran.');
+                                                    return;
+                                                }
+                                                const validFiles = files.filter(f => {
+                                                    if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
+                                                    return true;
+                                                });
+                                                setStatusData('general_attachments', [...statusData.general_attachments, ...validFiles]);
+                                                e.target.value = '';
+                                            }}
+                                        />
+                                        {errorsStatus.general_attachments && <p className="text-red-500 text-sm">{errorsStatus.general_attachments}</p>}
+                                        {statusData.general_attachments.length > 0 && (
+                                            <div className="mt-2 space-y-2">
+                                                {statusData.general_attachments.map((file, idx) => (
+                                                    <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
+                                                        <span className="truncate max-w-[200px]">{file.name}</span>
+                                                        <button type="button" onClick={() => setStatusData('general_attachments', statusData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500">Hapus</button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
                                     <Button type="submit" className="w-full" disabled={processingStatus}>Simpan Perubahan Status</Button>
                                 </form>

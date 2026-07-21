@@ -87,6 +87,8 @@ class TicketController extends Controller
         $request->validate([
             'status' => 'required|string',
             'catatan' => 'required|string|max:1000',
+            'general_attachments' => 'nullable|array|max:3',
+            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
         $newStatus = $request->status;
@@ -143,12 +145,36 @@ class TicketController extends Controller
             $ticket->booking->update(['status' => $newStatus]);
         }
 
-        TicketLog::create([
+        $log = TicketLog::create([
             'ticket_id' => $ticket->id,
             'admin_id' => auth('admin')->id(),
             'aksi' => $newStatus,
             'catatan' => $request->catatan,
         ]);
+
+        $generalFiles = $request->file('general_attachments');
+        if (!empty($generalFiles) && is_array($generalFiles)) {
+            foreach ($generalFiles as $file) {
+                if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+
+                $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                    "ticket-attachments/{$ticket->id}",
+                    $file->getPathname(),
+                    $file->hashName()
+                );
+
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'field_id' => null,
+                    'ticket_log_id' => $log->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'wajib' => false,
+                ]);
+            }
+        }
 
         // Notifikasi WA (User)
         try {

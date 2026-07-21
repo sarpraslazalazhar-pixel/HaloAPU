@@ -50,7 +50,7 @@ interface NavItem {
 }
 
 const adminNavItems: NavItem[] = [
-    { label: 'Dashboard', icon: LayoutDashboard, route: '/admin/dashboard' },
+    { label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
     { label: 'Tiketing', icon: Ticket, route: '/admin/tiket' },
     { 
         label: 'Master Data', 
@@ -68,8 +68,8 @@ const adminNavItems: NavItem[] = [
     { label: 'Reminder', icon: Bell, route: '/admin/reminder-config' },
     { label: 'CSAT', icon: Star, route: '/admin/csat' },
     { label: 'Konfigurasi', icon: Settings, route: '/admin/konfigurasi' },
-    { label: 'Admin Mgt', icon: Shield, route: '/admin/manajemen-admin' },
-    { label: 'User Mgt', icon: Users, route: '/admin/manajemen-user' },
+    { label: 'Manajemen Admin', icon: Shield, route: '/admin/manajemen-admin' },
+    { label: 'Manajemen Pengguna', icon: Users, route: '/admin/manajemen-user' },
 ];
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -198,7 +198,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     );
 
     const bottomNavItems: BottomNavItem[] = [
-        { label: 'Dashboard', icon: LayoutDashboard, route: '/admin/dashboard' },
+        { label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
         { label: 'Tiket', icon: Ticket, route: '/admin/tiket' },
         { label: 'Monitor', icon: Grid3X3, route: '/admin/monitor' },
         { label: 'CSAT', icon: Star, route: '/admin/csat' },
@@ -249,7 +249,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
                             <div className="border-t my-1" />
                             <DropdownMenuItem onClick={() => setProfileOpen(true)} className="cursor-pointer">
                                 <User className="h-4 w-4 mr-2" />
-                                Edit Profil
+                                Ubah Profil
                             </DropdownMenuItem>
                             <DropdownMenuItem className="p-0">
                                 <Link href="/admin/logout" method="post" as="button" className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 dark:hover:bg-red-950/30 rounded-md">

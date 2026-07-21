@@ -163,6 +163,12 @@ class DashboardController extends Controller
 
         $responseBreach = (clone $slaQuery)->where('is_response_breached', true)->count();
         $resolutionBreach = (clone $slaQuery)->where('is_resolution_breached', true)->count();
+        
+        $totalWarning = (clone $slaQuery)
+            ->whereNull('resolved_at')
+            ->where('is_resolution_breached', false)
+            ->where('sla_resolution_deadline', '<=', now()->addDay())
+            ->count();
 
         $responseCompliance = $totalResponded > 0
             ? round((($totalResponded - $responseBreach) / $totalResponded) * 100, 1)
@@ -174,8 +180,8 @@ class DashboardController extends Controller
 
         $slaPieChartData = [
             ['name' => 'Dalam SLA', 'value' => max(0, $totalAll - $responseBreach - $resolutionBreach)],
-            ['name' => 'Breach Respon', 'value' => $responseBreach],
-            ['name' => 'Breach Penyelesaian', 'value' => $resolutionBreach],
+            ['name' => 'Pelanggaran Respon', 'value' => $responseBreach],
+            ['name' => 'Pelanggaran Penyelesaian', 'value' => $resolutionBreach],
         ];
 
         $slaBarChartData = DB::table('ticket_sla_tracking')
@@ -245,6 +251,7 @@ class DashboardController extends Controller
                 'responseCompliance' => $responseCompliance,
                 'resolutionCompliance' => $resolutionCompliance,
                 'totalBreach' => $responseBreach + $resolutionBreach,
+                'totalWarning' => $totalWarning,
                 'totalAll' => $totalAll,
             ],
             'slaPieChartData' => $slaPieChartData,

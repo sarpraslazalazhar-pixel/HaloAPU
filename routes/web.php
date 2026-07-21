@@ -61,6 +61,7 @@ Route::middleware('auth')->group(function () {
     // Ticket History
     Route::get('/tiket/riwayat', [\App\Http\Controllers\User\TicketHistoryController::class, 'index'])->name('tiket.riwayat');
     Route::get('/tiket/{ticket}', [\App\Http\Controllers\User\TicketHistoryController::class, 'show'])->name('tiket.show');
+    Route::post('/tiket/{ticket}/reply', [\App\Http\Controllers\User\TicketHistoryController::class, 'reply'])->name('tiket.reply');
     Route::patch('/tiket/{ticket}/batal', [\App\Http\Controllers\User\TicketHistoryController::class, 'cancel'])->name('tiket.batal');
     Route::get('/tiket/download/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'download'])->name('tiket.download');
     Route::get('/tiket/view/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'viewAttachment'])->name('tiket.view');
@@ -148,8 +149,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         // SLA Config
-        Route::get('sla-config', [\App\Http\Controllers\Admin\SlaConfigController::class, 'index'])->name('sla-config.index');
-        Route::put('sla-config', [\App\Http\Controllers\Admin\SlaConfigController::class, 'update'])->name('sla-config.update');
+        Route::resource('sla-config', \App\Http\Controllers\Admin\SlaConfigController::class)->except(['create', 'edit', 'show']);
 
         // Reminder Config
         Route::get('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'index'])->name('reminder-config.index');

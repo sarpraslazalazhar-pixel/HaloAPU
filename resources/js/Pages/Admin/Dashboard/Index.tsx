@@ -6,15 +6,15 @@ import { Button } from '@/Components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import MonthlyUnitChart from '@/Components/Charts/MonthlyUnitChart';
 import SubUnitChart from '@/Components/Charts/SubUnitChart';
-import { AlertTriangle, Eye, Clock, Folder, Loader2, RotateCw, CheckCircle, XCircle, ChevronDown, Calendar } from 'lucide-react';
+import { AlertTriangle, Eye, Clock, Folder, Loader2, RotateCw, CheckCircle, XCircle, ChevronDown, Calendar, PlusCircle, Star } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
 
 const PIE_COLORS = ['#22c55e', '#ef4444', '#f97316'];
 
 const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
-    open: { label: 'Open', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
-    on_proses: { label: 'On Proses', bg: 'from-orange-500 to-orange-600', icon: RotateCw, anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
-    pending: { label: 'Pending', bg: 'from-zinc-500 to-zinc-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
+    open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
+    on_proses: { label: 'Diproses', bg: 'from-orange-500 to-orange-600', icon: RotateCw, anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
+    pending: { label: 'Tertunda', bg: 'from-zinc-500 to-zinc-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
     solve: { label: 'Selesai', bg: 'from-green-500 to-green-600', icon: CheckCircle, anim: 'group-hover:scale-125 group-hover:opacity-100' },
     reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
 };
@@ -37,6 +37,18 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
     const currentSubUnitData = selectedUnit
         ? (subUnitChartData?.[selectedUnit] || [])
         : (subUnitChartData?.['_all'] || []);
+
+    const completionRate = totalTickets > 0 ? Math.round((statusCounts?.solve / totalTickets) * 100) : 0;
+    
+    const totalCsatReviews = csatTrend?.reduce((acc: number, curr: any) => acc + curr.total, 0) || 0;
+    const avgCsatRaw = totalCsatReviews > 0 ? csatTrend?.reduce((acc: number, curr: any) => acc + (curr.rata_rata * curr.total), 0) / totalCsatReviews : 0;
+    const avgCsat = Math.round(avgCsatRaw * 10) / 10;
+
+    const bars = [
+        { label: 'Tiket Masuk', count: statusCounts?.open || 0, color: 'bg-amber-400', icon: Folder },
+        { label: 'Diproses', count: statusCounts?.on_proses || 0, color: 'bg-sky-500', icon: RotateCw },
+        { label: 'Tertunda', count: statusCounts?.pending || 0, color: 'bg-cyan-400', icon: Clock },
+    ];
 
     const months = [
         { value: '', label: 'Semua Bulan' },
@@ -107,7 +119,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                     <CardContent>
                         {followUpTickets?.length > 0 ? (
                             <div className="space-y-2">
-                                {followUpTickets.map((t: any) => (
+                                {followUpTickets.slice(0, 5).map((t: any) => (
                                     <div key={t.id} className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50">
                                         <div className="flex items-center gap-3 min-w-0">
                                             <span className="shrink-0 font-semibold text-foreground">#TKT-{t.id}</span>
@@ -130,40 +142,84 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                     </CardContent>
                 </Card>
 
-                <Card>
+                <Card className="flex flex-col">
                     <CardHeader className="pb-3">
-                        <div className="flex items-center gap-2">
-                            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 dark:bg-blue-950/30">
-                                <Folder className="h-4 w-4 text-blue-500" />
-                            </div>
-                            <CardTitle className="text-sm font-semibold">Top Pengaju Tiket</CardTitle>
-                        </div>
+                        <CardTitle className="text-lg font-bold">Ringkasan Status</CardTitle>
                     </CardHeader>
-                    <CardContent>
-                        {topUsers?.length > 0 ? (
-                            <div className="space-y-2">
-                                {topUsers.map((u: any, i: number) => (
-                                    <div key={u.id} className="flex items-center gap-3 rounded-lg border p-3 text-sm">
-                                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                                            i === 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400' :
-                                            i === 1 ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400' :
-                                            i === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/40 dark:text-orange-400' :
-                                            'bg-muted text-muted-foreground'
-                                        }`}>{i + 1}</span>
-                                        <div className="min-w-0 flex-1">
-                                            <p className="font-medium truncate">{u.username}</p>
-                                            <p className="text-xs text-muted-foreground">{u.nama_divisi || '-'}</p>
+                    <CardContent className="flex-1 flex flex-col">
+                        <div className="flex items-center gap-4 rounded-lg border bg-slate-50/50 p-4 dark:bg-slate-900/50">
+                            <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 shrink-0">
+                                <svg className="absolute h-full w-full -rotate-90 transform text-emerald-500" viewBox="0 0 100 100">
+                                    <circle className="text-emerald-500/20" strokeWidth="10" stroke="currentColor" fill="transparent" r="40" cx="50" cy="50" />
+                                    <circle className="text-emerald-500 transition-all duration-1000 ease-in-out" strokeWidth="10" strokeDasharray="251.2" strokeDashoffset={251.2 - (251.2 * completionRate) / 100} strokeLinecap="round" stroke="currentColor" fill="transparent" r="40" cx="50" cy="50" />
+                                </svg>
+                                <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{completionRate}%</span>
+                            </div>
+                            <div>
+                                <p className="font-semibold text-sm">Tingkat Penyelesaian</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Persentase permohonan selesai.</p>
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 mt-6">
+                            {bars.map(bar => {
+                                const percent = totalTickets > 0 ? (bar.count / totalTickets) * 100 : 0;
+                                return (
+                                    <div key={bar.label} className="space-y-2">
+                                        <div className="flex items-center justify-between text-xs font-bold">
+                                            <div className={`flex items-center gap-1.5 ${bar.color.replace('bg-', 'text-')}`}>
+                                                <bar.icon className="w-3.5 h-3.5" />
+                                                <span>{bar.label}</span>
+                                            </div>
+                                            <span className="text-foreground">{bar.count}</span>
                                         </div>
-                                        <span className="text-lg font-bold text-foreground">{u.total_tiket}</span>
+                                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                                            <div className={`h-full rounded-full ${bar.color}`} style={{ width: `${percent}%` }} />
+                                        </div>
                                     </div>
-                                ))}
+                                )
+                            })}
+                        </div>
+
+                        <div className="mt-6 border-t pt-5">
+                            <div className="flex items-center gap-1.5 mb-3 text-sm font-bold text-foreground">
+                                <AlertTriangle className="h-4 w-4 text-red-500" />
+                                Status SLA Aktif
                             </div>
-                        ) : (
-                            <div className="flex flex-col items-center gap-2 py-8 text-center">
-                                <Folder className="h-8 w-8 text-muted-foreground/40" />
-                                <p className="text-sm text-muted-foreground">Belum ada data tiket.</p>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-center dark:border-red-900/50 dark:bg-red-950/20">
+                                    <p className="text-4xl font-bold text-red-600">{slaStats?.totalBreach || 0}</p>
+                                    <p className="mt-1 flex items-center justify-center gap-1 text-[10px] font-bold text-red-500 uppercase tracking-wider">
+                                        🔥 PELANGGARAN SLA
+                                    </p>
+                                </div>
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center dark:border-amber-900/50 dark:bg-amber-950/20">
+                                    <p className="text-4xl font-bold text-amber-600">{slaStats?.totalWarning || 0}</p>
+                                    <p className="mt-1 flex items-center justify-center gap-1 text-[10px] font-bold text-amber-600 uppercase tracking-wider">
+                                        ⚠️ Warning (H-1)
+                                    </p>
+                                </div>
                             </div>
-                        )}
+                        </div>
+
+                        <div className="mt-6 border-t pt-5">
+                            <div className="flex items-center gap-1.5 mb-3 text-sm font-bold text-foreground">
+                                <Star className="h-4 w-4 text-amber-400" />
+                                Customer Satisfaction (CSAT)
+                            </div>
+                            <div className="flex items-center gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900/30 dark:bg-amber-950/10">
+                                <div className="text-center shrink-0">
+                                    <p className="text-4xl font-bold text-amber-500">{avgCsat || 0}</p>
+                                    <p className="text-[10px] font-bold text-amber-600 mt-1">dari 5.0</p>
+                                </div>
+                                <div className="space-y-1.5 border-l border-amber-200 pl-4 py-1 dark:border-amber-800/50 flex-1">
+                                    <div className="flex text-amber-400">
+                                        {[1, 2, 3, 4, 5].map(i => <Star key={i} className={`h-4 w-4 ${i <= Math.round(avgCsat) ? 'fill-current' : 'text-amber-200 dark:text-amber-900'}`} />)}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Berdasarkan {totalCsatReviews} ulasan pengguna</p>
+                                </div>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
@@ -341,7 +397,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardContent className="p-5">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <p className="text-sm text-muted-foreground">Total Breach</p>
+                                    <p className="text-sm text-muted-foreground">Total Pelanggaran</p>
                                     <p className="mt-2 text-3xl font-bold text-red-500">{slaStats?.totalBreach ?? 0}</p>
                                     <p className="text-xs text-muted-foreground mt-0.5">dari {slaStats?.totalAll ?? 0} tiket</p>
                                 </div>
@@ -416,7 +472,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                 yAxis: { type: 'value' },
                                 series: [
                                     { name: 'Dalam SLA', type: 'bar', stack: 'total', itemStyle: { color: '#22c55e' }, data: slaBarChartData.map((d: any) => d.dalam_sla) },
-                                    { name: 'Breach', type: 'bar', stack: 'total', itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] }, data: slaBarChartData.map((d: any) => d.breach) }
+                                    { name: 'Pelanggaran', type: 'bar', stack: 'total', itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] }, data: slaBarChartData.map((d: any) => d.breach) }
                                 ]
                             }} style={{ height: 300, width: '100%' }} />
                         </CardContent>

@@ -7,9 +7,14 @@ use Illuminate\Database\Eloquent\Model;
 class TicketAttachment extends Model
 {
     protected $fillable = [
-        'ticket_id', 'field_id', 'file_path', 'original_name',
+        'ticket_id', 'field_id', 'ticket_log_id', 'file_path', 'original_name',
         'mime_type', 'file_size', 'wajib'
     ];
+
+    public function log()
+    {
+        return $this->belongsTo(TicketLog::class, 'ticket_log_id');
+    }
 
     public function ticket()
     {

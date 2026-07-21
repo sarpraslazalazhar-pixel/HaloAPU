@@ -971,7 +971,8 @@ $allowed = [
     'simulate:sla-and-reminders',
     'sla-view',
     'sla-update',
-    'sla-diagnose'
+    'sla-diagnose',
+    'npm-build'
 ];
 
 if (!in_array($command, $allowed)) {
@@ -997,6 +998,35 @@ if ($command === 'deploy') {
         echo "✅ Deployment Selesai!\n";
     } catch (\Throwable $e) {
         echo "❌ Error: " . htmlspecialchars($e->getMessage()) . "\n\n";
+    }
+    echo "</pre>";
+    exit;
+}
+
+if ($command === 'npm-build') {
+    echo "<pre>=== Menjalankan npm run build ===\n\n";
+    $output = [];
+    $return_var = 0;
+    
+    // Gunakan direktori root proyek
+    $basePath = realpath(__DIR__ . '/..');
+    
+    // Coba deteksi npm
+    $npmPath = trim(shell_exec('which npm 2>/dev/null') ?? '');
+    if (!$npmPath) {
+        $npmPath = 'npm'; // fallback
+    }
+    
+    $cmd = "cd " . escapeshellarg($basePath) . " && $npmPath run build 2>&1";
+    echo "Command: $cmd\n\n";
+    
+    exec($cmd, $output, $return_var);
+    
+    echo implode("\n", $output);
+    echo "\n\nExit Code: $return_var";
+    if ($return_var !== 0) {
+        echo "\n\nCatatan: Jika error 'npm: command not found', server Anda (shared hosting) mungkin tidak menginstal Node.js.\n";
+        echo "Solusi: Build (npm run build) di lokal komputer Anda, lalu upload ulang seluruh isi folder 'public/build' ke server.";
     }
     echo "</pre>";
     exit;

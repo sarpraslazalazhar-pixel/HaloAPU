@@ -48,6 +48,7 @@ if (empty($command)) {
     echo "<div class='section'><h2>🚀 Deployment</h2>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy' style='border-left-color: #00e676;'>▶ deploy — Jalankan migrate --force & optimize:clear</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy-cpanel' style='border-left-color: #00b0ff;'>▶ deploy-cpanel — Full cPanel Deploy (Down, Cache, Migrate, Storage, Up)</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=seed-permissions' style='border-left-color: #ffab40;'>🔑 seed-permissions — Perbaiki hak akses sidebar</a>";
     echo "</div>";
     
     echo "<div class='section'><h2>⏱️ SLA Management</h2>";
@@ -973,7 +974,8 @@ $allowed = [
     'sla-update',
     'sla-diagnose',
     'npm-build',
-    'package:discover'
+    'package:discover',
+    'seed-permissions'
 ];
 
 if (!in_array($command, $allowed)) {
@@ -1028,6 +1030,23 @@ if ($command === 'npm-build') {
     if ($return_var !== 0) {
         echo "\n\nCatatan: Jika error 'npm: command not found', server Anda (shared hosting) mungkin tidak menginstal Node.js.\n";
         echo "Solusi: Build (npm run build) di lokal komputer Anda, lalu upload ulang seluruh isi folder 'public/build' ke server.";
+    }
+    echo "</pre>";
+    exit;
+}
+
+if ($command === 'seed-permissions') {
+    echo "<pre>=== Perbaiki Hak Akses Sidebar ===\n\n";
+    try {
+        $kernel->call('db:seed', ['--class' => 'PermissionSeeder', '--force' => true]);
+        echo "✅ Hak akses berhasil diperbaiki (Seeded)!\n";
+        echo Artisan::output();
+        
+        // Clear cache so frontend picks up new permissions immediately
+        $kernel->call('cache:clear');
+        echo "\n✅ Cache dibersihkan!\n";
+    } catch (\Throwable $e) {
+        echo "❌ Error: " . htmlspecialchars($e->getMessage()) . "\n";
     }
     echo "</pre>";
     exit;

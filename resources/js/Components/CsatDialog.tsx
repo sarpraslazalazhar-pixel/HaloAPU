@@ -17,15 +17,16 @@ interface CsatDialogProps {
     ticketId: number;
     disabled?: boolean;
     existingRating?: number | null;
+    existingKomentar?: string | null;
 }
 
-export function CsatDialog({ ticketId, disabled = false, existingRating }: CsatDialogProps) {
+export function CsatDialog({ ticketId, disabled = false, existingRating, existingKomentar }: CsatDialogProps) {
     const [open, setOpen] = useState(false);
     const [hoverRating, setHoverRating] = useState(0);
 
     const { data, setData, post, processing, errors, reset } = useForm({
-        rating: 0,
-        komentar: '',
+        rating: existingRating || 0,
+        komentar: existingKomentar || '',
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -38,20 +39,28 @@ export function CsatDialog({ ticketId, disabled = false, existingRating }: CsatD
         });
     };
 
-    if (existingRating) {
+    if (existingRating && !open) {
         return (
-            <div className="flex items-center gap-1">
-                <span className="text-sm text-muted-foreground mr-1">Rating Anda:</span>
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                        key={star}
-                        className={`h-5 w-5 ${
-                            star <= existingRating
-                                ? 'fill-yellow-400 text-yellow-400'
-                                : 'text-gray-300'
-                        }`}
-                    />
-                ))}
+            <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                    <span className="text-sm text-muted-foreground mr-1">Rating Anda:</span>
+                    {[1, 2, 3, 4, 5].map((star) => (
+                        <Star
+                            key={star}
+                            className={`h-5 w-5 ${
+                                star <= existingRating
+                                    ? 'fill-yellow-400 text-yellow-400'
+                                    : 'text-gray-300'
+                            }`}
+                        />
+                    ))}
+                </div>
+                <Button variant="outline" size="sm" disabled={disabled} onClick={() => {
+                    setData({ rating: existingRating, komentar: existingKomentar || '' });
+                    setOpen(true);
+                }}>
+                    Edit Rating
+                </Button>
             </div>
         );
     }
@@ -59,10 +68,12 @@ export function CsatDialog({ ticketId, disabled = false, existingRating }: CsatD
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button variant="outline" disabled={disabled}>
-                    <Star className="h-4 w-4 mr-2" />
-                    Berikan Rating
-                </Button>
+                {!existingRating && (
+                    <Button variant="outline" disabled={disabled}>
+                        <Star className="h-4 w-4 mr-2" />
+                        Berikan Rating
+                    </Button>
+                )}
             </DialogTrigger>
             <DialogContent>
                 <DialogHeader>

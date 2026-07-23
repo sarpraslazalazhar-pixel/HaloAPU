@@ -6,16 +6,16 @@ import { Button } from '@/Components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import MonthlyUnitChart from '@/Components/Charts/MonthlyUnitChart';
 import SubUnitChart from '@/Components/Charts/SubUnitChart';
-import { AlertTriangle, Eye, Clock, Folder, Loader2, RotateCw, CheckCircle, XCircle, ChevronDown, Calendar, PlusCircle, Star } from 'lucide-react';
-import ReactECharts from 'echarts-for-react';
+import { AlertTriangle, Eye, Clock, Hourglass, Folder, Loader2, RotateCw, CheckCircle, XCircle, ChevronDown, Calendar, PlusCircle, Star } from 'lucide-react';
+import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 
 const PIE_COLORS = ['#22c55e', '#ef4444', '#f97316'];
 
 const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
     open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
-    on_proses: { label: 'Diproses', bg: 'from-orange-500 to-orange-600', icon: RotateCw, anim: 'animate-spin group-hover:scale-110 group-hover:opacity-100' },
-    pending: { label: 'Tertunda', bg: 'from-zinc-500 to-zinc-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
+    on_proses: { label: 'Diproses', bg: 'from-orange-500 to-orange-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
+    pending: { label: 'Tertunda', bg: 'from-zinc-500 to-zinc-600', icon: Hourglass, anim: 'group-hover:rotate-180 transition-transform duration-500 group-hover:opacity-100' },
     solve: { label: 'Selesai', bg: 'from-green-500 to-green-600', icon: CheckCircle, anim: 'group-hover:scale-125 group-hover:opacity-100' },
     reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
 };
@@ -47,8 +47,8 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
 
     const bars = [
         { label: 'Tiket Masuk', count: statusCounts?.open || 0, color: 'bg-amber-400', icon: Folder },
-        { label: 'Diproses', count: statusCounts?.on_proses || 0, color: 'bg-sky-500', icon: RotateCw },
-        { label: 'Tertunda', count: statusCounts?.pending || 0, color: 'bg-cyan-400', icon: Clock },
+        { label: 'Diproses', count: statusCounts?.on_proses || 0, color: 'bg-sky-500', icon: Clock },
+        { label: 'Tertunda', count: statusCounts?.pending || 0, color: 'bg-cyan-400', icon: Hourglass },
     ];
 
     const months = [
@@ -270,7 +270,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                 </CardHeader>
                 <CardContent>
                     {dailyChartData?.length > 0 ? (
-                        <ReactECharts option={{
+                        <LazyECharts option={{
                             tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
                             legend: { bottom: 0 },
                             grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
@@ -282,7 +282,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                 smooth: true,
                                 data: dailyChartData.map((d: any) => d[u.nama_unit] || 0)
                             }))
-                        }} style={{ height: 350, width: '100%' }} />
+                        }} height={350} />
                     ) : (
                         <p className="text-sm text-muted-foreground text-center py-8">Belum ada data harian.</p>
                     )}
@@ -299,7 +299,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-sm font-semibold">Top 5 User (Paling Banyak Tiket)</CardTitle></CardHeader>
                         <CardContent>
                             {topUsersAll?.length > 0 ? (
-                                <ReactECharts option={{
+                                <LazyECharts option={{
                                     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
                                     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                                     xAxis: { type: 'value' },
@@ -310,7 +310,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                         itemStyle: { color: '#3b82f6', borderRadius: [0, 4, 4, 0] },
                                         data: [...topUsersAll].reverse().map((u: any) => u.total_tiket)
                                     }]
-                                }} style={{ height: 250, width: '100%' }} />
+                                }} height={250} />
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-8">Belum ada data.</p>
                             )}
@@ -321,7 +321,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-sm font-semibold">Tren CSAT Bulanan</CardTitle></CardHeader>
                         <CardContent>
                             {csatTrend?.length > 0 ? (
-                                <ReactECharts option={{
+                                <LazyECharts option={{
                                     tooltip: { trigger: 'axis' },
                                     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                                     xAxis: { type: 'category', data: csatTrend.map((d: any) => d.bulan) },
@@ -334,7 +334,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                         symbolSize: 8,
                                         data: csatTrend.map((d: any) => d.rata_rata)
                                     }]
-                                }} style={{ height: 250, width: '100%' }} />
+                                }} height={250} />
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-8">Belum ada data CSAT.</p>
                             )}
@@ -345,7 +345,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-sm font-semibold">Tiket Bulanan (12 Bulan)</CardTitle></CardHeader>
                         <CardContent>
                             {tiketBulanan?.length > 0 ? (
-                                <ReactECharts option={{
+                                <LazyECharts option={{
                                     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
                                     legend: { bottom: 0 },
                                     grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
@@ -356,7 +356,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                         { name: 'Selesai', type: 'bar', itemStyle: { color: '#22c55e', borderRadius: [4, 4, 0, 0] }, data: tiketBulanan.map((d: any) => d.selesai) },
                                         { name: 'Aktif', type: 'bar', itemStyle: { color: '#f97316', borderRadius: [4, 4, 0, 0] }, data: tiketBulanan.map((d: any) => d.aktif) }
                                     ]
-                                }} style={{ height: 300, width: '100%' }} />
+                                }} height={300} />
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-8">Belum ada data tiket bulanan.</p>
                             )}
@@ -412,7 +412,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-sm font-semibold">Distribusi Kepatuhan SLA</CardTitle></CardHeader>
                         <CardContent>
                             {slaPieChartData?.length > 0 ? (
-                                <ReactECharts option={{
+                                <LazyECharts option={{
                                     tooltip: { trigger: 'item', formatter: '{b} : {c} ({d}%)' },
                                     legend: { bottom: 0 },
                                     series: [{
@@ -429,7 +429,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                             itemStyle: { color: PIE_COLORS[i % PIE_COLORS.length] }
                                         }))
                                     }]
-                                }} style={{ height: 300, width: '100%' }} />
+                                }} height={300} />
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-8">Belum ada data SLA.</p>
                             )}
@@ -440,7 +440,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                         <CardHeader><CardTitle className="text-sm font-semibold">Tren Kepatuhan SLA (12 Bulan)</CardTitle></CardHeader>
                         <CardContent>
                             {slaTrendData?.length > 0 ? (
-                                <ReactECharts option={{
+                                <LazyECharts option={{
                                     tooltip: { trigger: 'axis', formatter: '{b}<br/>Kepatuhan SLA: {c}%' },
                                     grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
                                     xAxis: { type: 'category', data: slaTrendData.map((d: any) => d.bulan) },
@@ -453,7 +453,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                         symbolSize: 8,
                                         data: slaTrendData.map((d: any) => d.persentase_sla)
                                     }]
-                                }} style={{ height: 300, width: '100%' }} />
+                                }} height={300} />
                             ) : (
                                 <p className="text-sm text-muted-foreground text-center py-8">Belum ada data tren SLA.</p>
                             )}
@@ -465,7 +465,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                     <Card>
                         <CardHeader><CardTitle className="text-sm font-semibold">Kepatuhan SLA per Unit (Bulan Ini)</CardTitle></CardHeader>
                         <CardContent>
-                            <ReactECharts option={{
+                            <LazyECharts option={{
                                 tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
                                 legend: { bottom: 0 },
                                 grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
@@ -475,7 +475,7 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
                                     { name: 'Dalam SLA', type: 'bar', stack: 'total', itemStyle: { color: '#22c55e' }, data: slaBarChartData.map((d: any) => d.dalam_sla) },
                                     { name: 'Pelanggaran', type: 'bar', stack: 'total', itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] }, data: slaBarChartData.map((d: any) => d.breach) }
                                 ]
-                            }} style={{ height: 300, width: '100%' }} />
+                            }} height={300} />
                         </CardContent>
                     </Card>
                 )}

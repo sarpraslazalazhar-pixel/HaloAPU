@@ -69,18 +69,17 @@ class SlaEscalationNotification extends Notification
     public function toWhatsApp(object $notifiable): array
     {
         $jenisBreachLabel = $this->breachType === 'respon' ? 'Respon' : 'Penyelesaian';
-        $emoji = '🔴';
+        $namaAdmin = $notifiable->name ?? ($notifiable->nama ?? 'Admin');
+        $url = url('/admin/tiket/' . $this->ticket->id);
+
+        $message = "Halo *{$namaAdmin}* 👋\n\n";
+        $message .= "Ada info baru nih. Pengajuan *{$this->ticket->formatted_id}* udah melewati batas SLA {$jenisBreachLabel} ya 😊\n\n";
+        $message .= "Biar lebih jelas, langsung aja cek detailnya di sini:\n{$url}\n\n";
+        $message .= "Terima kasih";
 
         return [
             'receiver' => $notifiable->no_wa,
-            'message' => "{$emoji} *Breach SLA {$jenisBreachLabel}*\n\n"
-                . "Tiket: #{$this->ticket->id}\n"
-                . "Judul: {$this->ticket->judul}\n"
-                . "Unit: {$this->ticket->subUnit?->unit?->nama_unit}\n"
-                . "Jenis: SLA {$jenisBreachLabel}\n"
-                . "Prioritas: {$this->priority}\n"
-                . "Status: {$this->ticket->status}\n\n"
-                . "⛔ BREACH! Segera tangani tiket ini.",
+            'message' => $message,
         ];
     }
 }

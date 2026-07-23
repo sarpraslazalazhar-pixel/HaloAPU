@@ -41,6 +41,11 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user('web'),
                 'admin' => $request->user('admin'),
+                'permissions' => $request->user('admin') 
+                    ? ($request->user('admin')->hasRole('Super Admin') 
+                        ? \Spatie\Permission\Models\Permission::pluck('name') 
+                        : $request->user('admin')->getAllPermissions()->pluck('name')) 
+                    : [],
             ],
             'flash' => [
                 'message' => fn () => $request->session()->get('message'),
@@ -51,6 +56,7 @@ class HandleInertiaRequests extends Middleware
                 'nama_sistem' => \App\Models\SystemConfig::getValue('nama_sistem', 'Halo APU'),
                 'logo_path' => \App\Models\SystemConfig::getValue('logo_path'),
                 'banner_path' => \App\Models\SystemConfig::getValue('banner_path'),
+                'favicon_path' => \App\Models\SystemConfig::getValue('favicon_path'),
             ],
         ]);
     }

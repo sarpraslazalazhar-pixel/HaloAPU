@@ -71,14 +71,17 @@ class PendingTicketReminderNotification extends Notification
 
     public function toWhatsApp(object $notifiable): array
     {
+        $namaAdmin = $notifiable->name ?? ($notifiable->nama ?? 'Admin');
+        $url = url('/admin/tiket/' . $this->ticket->id);
+
+        $message = "Halo *{$namaAdmin}* 👋\n\n";
+        $message .= "Ada info baru nih. Pengajuan *{$this->ticket->formatted_id}* udah berstatus Pending selama {$this->hariPending} hari ya 😊\n\n";
+        $message .= "Biar lebih jelas, langsung aja cek detailnya di sini:\n{$url}\n\n";
+        $message .= "Terima kasih";
+
         return [
             'receiver' => $notifiable->no_wa,
-            'message' => "⏳ *Tiket Pending Lama*\n\n"
-                . "Tiket: #{$this->ticket->id}\n"
-                . "Judul: {$this->ticket->judul}\n"
-                . "Pending: {$this->hariPending} hari\n"
-                . "Unit: {$this->ticket->subUnit?->unit?->nama_unit}\n\n"
-                . "Mohon segera ditindaklanjuti.",
+            'message' => $message,
         ];
     }
 }

@@ -8,17 +8,20 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, XCircle, Eye } from 'lucide-react';
+import { FileText, XCircle, Eye, CheckCircle2 } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 
 interface DetailProps {
     ticket: any;
     formFields: any[];
+    maxRevisions: number;
 }
 
-export default function Detail({ ticket, formFields }: DetailProps) {
+export default function Detail({ ticket, formFields, maxRevisions }: DetailProps) {
     const { data: replyData, setData: setReplyData, post: postReply, processing: processingReply, errors: errorsReply, reset: resetReply } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
+    const { data: revData, setData: setRevData, post: postRev, processing: processingRev, errors: errorsRev, reset: resetRev } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
+    const [showRevForm, setShowRevForm] = useState(false);
     const [showConfirm, setShowConfirm] = useState(false);
     const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
     const canCancel = ticket.status === 'open';
@@ -89,7 +92,7 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                 </div>
                 <div className="flex items-center gap-2">
                     {showCsat && (
-                        <CsatDialog ticketId={ticket.id} existingRating={ticket.csat?.rating} />
+                        <CsatDialog ticketId={ticket.id} existingRating={ticket.csat?.rating} existingKomentar={ticket.csat?.komentar} />
                     )}
                     {canCancel && (
                         <Button variant="destructive" onClick={() => setShowConfirm(true)}>
@@ -111,6 +114,86 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                 cancelText="Tidak"
                 onConfirm={handleCancel}
             />
+
+            {ticket.status === 'solve' && ticket.sub_unit?.is_revision_enabled && !ticket.is_result_accepted && (
+                <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg flex flex-col gap-4">
+                    <div>
+                        <p className="font-semibold text-lg flex items-center gap-2"><Eye className="w-5 h-5"/> Review Hasil</p>
+                        <p className="text-sm">Tiket ini sudah diselesaikan. Silakan periksa hasil pekerjaan. Anda dapat menerima hasil akhir atau meminta revisi. Sisa revisi Anda: {maxRevisions - (ticket.revision_count || 0)} kali.</p>
+                    </div>
+                    <div className="flex gap-3">
+                        <Button 
+                            variant="default" 
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => {
+                                if(confirm('Yakin ingin menerima hasil akhir ini?')) {
+                                    router.post(route('tiket.accept-result', ticket.id));
+                                }
+                            }}
+                        >
+                            Terima Hasil Akhir
+                        </Button>
+                        {(ticket.revision_count || 0) < maxRevisions && (
+                            <Button variant="outline" className="border-red-500 text-red-600 hover:bg-red-50" onClick={() => setShowRevForm(!showRevForm)}>
+                                Minta Revisi ({maxRevisions - (ticket.revision_count || 0)} sisa)
+                            </Button>
+                        )}
+                    </div>
+                    
+                    {showRevForm && (
+                        <div className="mt-4 p-4 bg-white border rounded-lg shadow-sm">
+                            <h3 className="font-semibold mb-2">Form Permintaan Revisi</h3>
+                            <form onSubmit={(e) => {
+                                e.preventDefault();
+                                postRev(route('tiket.request-revision', ticket.id), { onSuccess: () => { resetRev(); setShowRevForm(false); } });
+                            }} className="space-y-4">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Catatan Revisi <span className="text-red-500">*</span></label>
+                                    <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={revData.catatan} onChange={e => setRevData('catatan', e.target.value)} placeholder="Tuliskan bagian mana yang perlu direvisi..." required />
+                                    {errorsRev.catatan && <p className="text-red-500 text-sm">{errorsRev.catatan}</p>}
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium">Lampiran Pendukung Revisi (Opsional)</label>
+                                    <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file.</p>
+                                    <input
+                                        type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        onChange={e => {
+                                            const files = Array.from(e.target.files || []);
+                                            if (revData.general_attachments.length + files.length > 3) { alert('Maksimal hanya 3 lampiran.'); return; }
+                                            const validFiles = files.filter(f => { if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; } return true; });
+                                            setRevData('general_attachments', [...revData.general_attachments, ...validFiles]);
+                                            e.target.value = '';
+                                        }}
+                                    />
+                                    {errorsRev.general_attachments && <p className="text-red-500 text-sm">{errorsRev.general_attachments}</p>}
+                                    {revData.general_attachments.length > 0 && (
+                                        <div className="mt-2 space-y-2">
+                                            {revData.general_attachments.map((file, idx) => (
+                                                <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
+                                                    <span className="truncate max-w-[200px]">{file.name}</span>
+                                                    <button type="button" onClick={() => setRevData('general_attachments', revData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500">Hapus</button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex justify-end gap-2">
+                                    <Button type="button" variant="ghost" onClick={() => setShowRevForm(false)}>Batal</Button>
+                                    <Button type="submit" disabled={processingRev}>Kirim Permintaan Revisi</Button>
+                                </div>
+                            </form>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {ticket.status === 'solve' && ticket.sub_unit?.is_revision_enabled && ticket.is_result_accepted && (
+                <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-3">
+                    <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                    <p className="font-medium">Anda telah menerima hasil akhir tiket ini.</p>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Card>
@@ -197,7 +280,7 @@ export default function Detail({ ticket, formFields }: DetailProps) {
                     </Card>
                 )}
 
-                {ticket.status !== 'solve' && ticket.status !== 'reject' && ticket.status !== 'dibatalkan' && (
+                {ticket.status !== 'solve' && ticket.status !== 'reject' && ticket.status !== 'dibatalkan' && ticket.status !== 'waiting_approval' && (
                     <Card className="md:col-span-2">
                         <CardHeader>
                             <CardTitle>Balas Tiket</CardTitle>

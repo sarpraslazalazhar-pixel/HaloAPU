@@ -15,7 +15,7 @@ import { Trash2, FileText, CheckCircle2, AlertCircle, Info } from 'lucide-react'
 import Swal from 'sweetalert2';
 
 const STEPS = [
-    { label: 'Pilih Layanan', description: 'Unit tujuan dan sub unit' },
+    { label: 'Pilih Layanan', description: 'Kanal layanan dan jenis layanan' },
     { label: 'Isi Form', description: 'Formulir layanan' },
     { label: 'Lampiran', description: 'Unggah dokumen pendukung' },
     { label: 'Tinjau & Kirim', description: 'Periksa dan kirim tiket' },
@@ -131,8 +131,8 @@ export default function Wizard({ unitList }: WizardProps) {
         let isValid = true;
         
         if (step === 0) {
-            if (!data.unit_id) { setError('unit_id', 'Unit Tujuan wajib dipilih'); isValid = false; }
-            if (!data.sub_unit_id) { setError('sub_unit_id', 'Sub Unit (Layanan) wajib dipilih'); isValid = false; }
+            if (!data.unit_id) { setError('unit_id', 'Kanal Layanan wajib dipilih'); isValid = false; }
+            if (!data.sub_unit_id) { setError('sub_unit_id', 'Jenis Layanan wajib dipilih'); isValid = false; }
         } else if (step === 1) {
             nonUploadFields.forEach(field => {
                 const isVisible = !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value;
@@ -280,7 +280,7 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
                         {activeStep === 0 && (
                             <div className="space-y-6">
                                 <div>
-                                    <Label className="mb-3 block text-base font-semibold">Unit Tujuan <span className="text-red-500">*</span></Label>
+                                    <Label className="mb-3 block text-base font-semibold">Kanal Layanan <span className="text-red-500">*</span></Label>
                                     <RadioCardGrid
                                         options={unitList}
                                         value={data.unit_id}
@@ -291,7 +291,7 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
                                     {errors.unit_id && <p className="text-red-500 text-sm mt-1">{errors.unit_id}</p>}
                                 </div>
                                 <div>
-                                    <Label className="mb-3 block text-base font-semibold">Sub Unit (Layanan) <span className="text-red-500">*</span></Label>
+                                    <Label className="mb-3 block text-base font-semibold">Jenis Layanan <span className="text-red-500">*</span></Label>
                                     {subUnits.loading ? <p className="text-sm text-gray-500 italic">Memuat...</p> : (
                                         <RadioCardGrid
                                             options={subUnits.options}
@@ -355,9 +355,9 @@ function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) 
 
                         {activeStep === 3 && (
                             <div className="space-y-4">
-                                <ReviewSection title="Layanan Tujuan" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
-                                    <ReviewRow label="Unit" value={getSelectedName(unitList, data.unit_id)} />
-                                    <ReviewRow label="Sub Unit" value={subUnits.options.find((s: any) => String(s.id) === String(data.sub_unit_id))?.nama_layanan || '-'} />
+                                <ReviewSection title="Pilihan Layanan" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
+                                    <ReviewRow label="Kanal Layanan" value={getSelectedName(unitList, data.unit_id)} />
+                                    <ReviewRow label="Jenis Layanan" value={subUnits.options.find((s: any) => String(s.id) === String(data.sub_unit_id))?.nama_layanan || '-'} />
                                 </ReviewSection>
 
                                 {nonUploadFields.length > 0 && (

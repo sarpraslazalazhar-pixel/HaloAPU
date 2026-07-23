@@ -66,17 +66,18 @@ class CsatReminderNotification extends Notification
 
     public function toWhatsApp(object $notifiable): array
     {
+        $nama = $notifiable->name ?: ($notifiable->username ?? 'Kak');
         $link = url("/tiket/{$this->ticket->id}");
+
+        $message = "Halo *{$nama}* 👋\n\n";
+        $message .= "Ada info baru nih buat pengajuan *{$this->ticket->formatted_id}* Kamu. Pengajuannya udah selesai dikerjakan ya 😊\n\n";
+        $message .= "Mohon ketersediaannya untuk memberikan Rating Kepuasan (CSAT) buat pengajuan ini.\n\n";
+        $message .= "Biar lebih jelas, langsung aja isi rating dan cek detailnya di sini:\n{$link}\n\n";
+        $message .= "Terima kasih";
 
         return [
             'receiver' => $notifiable->no_wa,
-            'message' => "⭐ *Berikan Rating Layanan Anda*\n\n"
-                . "Tiket: #{$this->ticket->id}\n"
-                . "Judul: {$this->ticket->judul}\n"
-                . "Diselesaikan: {$this->hariSejak} hari lalu\n\n"
-                . "Silakan berikan rating melalui tautan berikut:\n"
-                . "{$link}\n\n"
-                . "Rating Anda membantu kami meningkatkan layanan. 🙏",
+            'message' => $message,
         ];
     }
 }

@@ -102,16 +102,19 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
                             <div>
                                 <Label>Status</Label>
                                 <div className="flex flex-wrap gap-2 mt-1">
-                                    {statuses.map(s => (
-                                        <Badge
-                                            key={s}
-                                            variant={statusFilter.includes(s) ? 'default' : 'outline'}
-                                            className="cursor-pointer"
-                                            onClick={() => toggleStatus(s)}
-                                        >
-                                            {s}
-                                        </Badge>
-                                    ))}
+                                    {statuses.map(s => {
+                                        const labels: any = { open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', waiting_approval: 'Menunggu Review', need_revision: 'Butuh Revisi' };
+                                        return (
+                                            <Badge
+                                                key={s}
+                                                variant={statusFilter.includes(s) ? 'default' : 'outline'}
+                                                className="cursor-pointer"
+                                                onClick={() => toggleStatus(s)}
+                                            >
+                                                {labels[s] || s}
+                                            </Badge>
+                                        );
+                                    })}
                                 </div>
                             </div>
                             <div className="flex gap-4">

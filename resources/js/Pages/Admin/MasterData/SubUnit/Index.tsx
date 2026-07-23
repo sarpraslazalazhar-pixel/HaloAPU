@@ -30,6 +30,7 @@ interface SubUnit {
     monitor_asset_field_id?: number;
     monitor_start_field_id?: number;
     monitor_end_field_id?: number;
+    is_revision_enabled: boolean;
 }
 
 export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: any; units: Unit[]; filters?: { search?: string; unit_id?: number } }) {
@@ -47,6 +48,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
         monitor_asset_field_id: '',
         monitor_start_field_id: '',
         monitor_end_field_id: '',
+        is_revision_enabled: false,
     });
 
     const handleAdd = (e: React.FormEvent) => {
@@ -99,6 +101,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
             monitor_asset_field_id: subUnit.monitor_asset_field_id?.toString() || '',
             monitor_start_field_id: subUnit.monitor_start_field_id?.toString() || '',
             monitor_end_field_id: subUnit.monitor_end_field_id?.toString() || '',
+            is_revision_enabled: subUnit.is_revision_enabled || false,
         });
     };
 
@@ -109,22 +112,22 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
     };
 
     return (
-        <AdminLayout title="Master Sub Unit">
+        <AdminLayout title="Jenis Layanan">
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Master Data Sub Unit</h2>
+                <h2 className="text-2xl font-bold">Jenis Layanan</h2>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
-                        <Button onClick={() => reset()}>Tambah Sub Unit</Button>
+                        <Button onClick={() => reset()}>Tambah Jenis Layanan</Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                            <DialogTitle>Tambah Sub Unit</DialogTitle>
+                            <DialogTitle>Tambah Jenis Layanan</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleAdd} className="space-y-4">
                             <div className="space-y-2">
-                                <Label>Unit</Label>
-                                <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={data.unit_id} onChange={e => setData('unit_id', e.target.value)}>
-                                    <option value="">Pilih Unit</option>
+                                <Label>Kanal Layanan</Label>
+                                <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50" value={data.unit_id} onChange={e => setData('unit_id', e.target.value)}>
+                                    <option value="">Pilih Kanal Layanan</option>
                                     {units.map(u => (
                                         <option key={u.id} value={u.id}>{u.nama_unit}</option>
                                     ))}
@@ -132,7 +135,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                                 {errors.unit_id && <p className="text-red-500 text-sm">{errors.unit_id}</p>}
                             </div>
                             <div className="space-y-2">
-                                <Label>Nama Layanan</Label>
+                                <Label>Nama Jenis Layanan</Label>
                                 <Input value={data.nama_layanan} onChange={e => setData('nama_layanan', e.target.value)} />
                                 {errors.nama_layanan && <p className="text-red-500 text-sm">{errors.nama_layanan}</p>}
                             </div>
@@ -143,6 +146,14 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                             <div className="space-y-2">
                                 <Label>Aktif</Label>
                                 <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={data.aktif ? '1' : '0'} onChange={e => setData('aktif', e.target.value === '1')}>
+                                    <option value="1">Ya</option>
+                                    <option value="0">Tidak</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <Label>Aktifkan Fitur Revisi Pengajuan?</Label>
+                                <p className="text-xs text-slate-500 mb-1">Jika ya, admin bisa meminta user review dan user bisa meminta revisi.</p>
+                                <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.is_revision_enabled ? '1' : '0'} onChange={e => setData('is_revision_enabled', e.target.value === '1')}>
                                     <option value="1">Ya</option>
                                     <option value="0">Tidak</option>
                                 </select>
@@ -160,7 +171,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                     value={filterUnit}
                     onChange={handleUnitFilter}
                 >
-                    <option value="">Semua Unit</option>
+                    <option value="">Semua Kanal Layanan</option>
                     {units.map(u => (
                         <option key={u.id} value={u.id}>{u.nama_unit}</option>
                     ))}
@@ -171,9 +182,10 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                 <TableHeader>
                     <TableRow>
                         <TableHead>No</TableHead>
-                        <TableHead>Nama Layanan</TableHead>
-                        <TableHead>Unit</TableHead>
+                        <TableHead>Nama Jenis Layanan</TableHead>
+                        <TableHead>Kanal Layanan</TableHead>
                         <TableHead>Status</TableHead>
+                        <TableHead>Revisi</TableHead>
                         <TableHead>Live Monitor</TableHead>
                         <TableHead>Jml Form Field</TableHead>
                         <TableHead>Aksi</TableHead>
@@ -186,6 +198,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                             <TableCell>{item.nama_layanan}</TableCell>
                             <TableCell>{item.unit?.nama_unit}</TableCell>
                             <TableCell>{item.aktif ? 'Aktif' : 'Nonaktif'}</TableCell>
+                            <TableCell>{item.is_revision_enabled ? <span className="text-green-600 font-medium">Ya</span> : '-'}</TableCell>
                             <TableCell>{item.is_monitored ? <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">Aktif</span> : '-'}</TableCell>
                             <TableCell>{item.form_fields_count}</TableCell>
                             <TableCell className="space-x-2">
@@ -199,7 +212,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                         </TableRow>
                     )) : (
                         <TableRow>
-                            <TableCell colSpan={6} className="text-center py-4 text-slate-500">
+                            <TableCell colSpan={7} className="text-center py-4 text-slate-500">
                                 Tidak ada data
                             </TableCell>
                         </TableRow>
@@ -210,15 +223,15 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
             <Pagination links={subUnits.links} />
 
             <Dialog open={!!editSubUnit} onOpenChange={(open) => !open && setEditSubUnit(null)}>
-                <DialogContent>
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Edit Sub Unit</DialogTitle>
+                        <DialogTitle>Edit Jenis Layanan</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Unit</Label>
+                            <Label>Kanal Layanan</Label>
                             <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={data.unit_id} onChange={e => setData('unit_id', e.target.value)}>
-                                <option value="">Pilih Unit</option>
+                                <option value="">Pilih Kanal Layanan</option>
                                 {units.map(u => (
                                     <option key={u.id} value={u.id}>{u.nama_unit}</option>
                                 ))}
@@ -226,7 +239,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                             {errors.unit_id && <p className="text-red-500 text-sm">{errors.unit_id}</p>}
                         </div>
                         <div className="space-y-2">
-                            <Label>Nama Layanan</Label>
+                            <Label>Nama Jenis Layanan</Label>
                             <Input value={data.nama_layanan} onChange={e => setData('nama_layanan', e.target.value)} />
                             {errors.nama_layanan && <p className="text-red-500 text-sm">{errors.nama_layanan}</p>}
                         </div>
@@ -237,6 +250,14 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                         <div className="space-y-2">
                             <Label>Aktif</Label>
                             <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50" value={data.aktif ? '1' : '0'} onChange={e => setData('aktif', e.target.value === '1')}>
+                                <option value="1">Ya</option>
+                                <option value="0">Tidak</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Aktifkan Fitur Revisi Pengajuan?</Label>
+                            <p className="text-xs text-slate-500 mb-1">Jika ya, admin bisa meminta user review dan user bisa meminta revisi.</p>
+                            <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.is_revision_enabled ? '1' : '0'} onChange={e => setData('is_revision_enabled', e.target.value === '1')}>
                                 <option value="1">Ya</option>
                                 <option value="0">Tidak</option>
                             </select>

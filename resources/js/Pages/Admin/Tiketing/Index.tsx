@@ -7,16 +7,15 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { Eye } from 'lucide-react';
+import { Eye, Filter } from 'lucide-react';
 import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
     { value: 'open', label: 'Baru' },
     { value: 'on_proses', label: 'Diproses' },
     { value: 'pending', label: 'Tertunda' },
-    { value: 'solve', label: 'Selesai' },
-    { value: 'reject', label: 'Ditolak' },
-    { value: 'dibatalkan', label: 'Dibatalkan' },
+    { value: 'waiting_approval', label: 'Menunggu Review' },
+    { value: 'need_revision', label: 'Butuh Revisi' },
 ];
 
 interface Ticket {
@@ -29,6 +28,9 @@ interface Ticket {
 }
 
 export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList }: any) {
+    const [showFilter, setShowFilter] = useState(() => {
+        return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
+    });
     const [unitId, setUnitId] = useState(filters?.unit_id || '');
     const [subUnitId, setSubUnitId] = useState(filters?.sub_unit_id || '');
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
@@ -125,6 +127,14 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
         <AdminLayout title="Daftar Tiket">
             <Head title="Daftar Tiket" />
 
+            <div className="flex justify-end mb-4">
+                <Button onClick={() => setShowFilter(!showFilter)} variant="outline" className="flex items-center gap-2">
+                    <Filter className="w-4 h-4" />
+                    {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
+                </Button>
+            </div>
+
+            {showFilter && (
             <div className="bg-white dark:bg-slate-900 rounded-lg border p-4 mb-4 space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <select className="rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={unitId} onChange={e => { setUnitId(e.target.value); setSubUnitId(''); setSubUnits([]); if (e.target.value) fetch(`/api/sub-units/${e.target.value}`).then(r => r.json()).then(setSubUnits); }}>
@@ -168,6 +178,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                     <Button onClick={applyFilter} className="w-full md:w-auto">Terapkan Filter</Button>
                 </div>
             </div>
+            )}
 
             <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: Ticket) => t.id} />
             <Pagination links={tickets.links} />

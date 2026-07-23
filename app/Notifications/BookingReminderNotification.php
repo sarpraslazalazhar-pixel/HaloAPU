@@ -56,7 +56,7 @@ class BookingReminderNotification extends Notification
             'judul' => "Reminder Booking {$tipeLabel}",
             'pesan' => "Booking {$tipeLabel} \"{$this->booking->nama_aset}\" dijadwalkan pada " . \Carbon\Carbon::parse($this->booking->tanggal_mulai)->format('d M Y H:i') . ".",
             'icon' => 'calendar',
-            'aksi_url' => "/admin/tiketing/{$this->booking->ticket_id}",
+            'aksi_url' => $notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}",
         ];
     }
 
@@ -74,7 +74,7 @@ class BookingReminderNotification extends Notification
             ->line("**Aset:** {$this->booking->nama_aset}")
             ->line("**Mulai:** " . \Carbon\Carbon::parse($this->booking->tanggal_mulai)->format('d M Y H:i'))
             ->line("**Selesai:** " . \Carbon\Carbon::parse($this->booking->tanggal_selesai)->format('d M Y H:i'))
-            ->action('Lihat Detail', url("/admin/tiketing/{$this->booking->ticket_id}"))
+            ->action('Lihat Detail', url($notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}"))
             ->line('Terima kasih telah menggunakan Halo APU.');
     }
 
@@ -84,14 +84,19 @@ class BookingReminderNotification extends Notification
     public function toWhatsApp(object $notifiable): array
     {
         $tipeLabel = $this->booking->tipe === 'ruang' ? 'Ruang' : 'Kendaraan';
+        $namaAdmin = $notifiable->name ?? ($notifiable->nama ?? 'Kak');
+
+        $message = "Halo *{$namaAdmin}* 👋\n\n";
+        $message .= "Ada info baru nih buat pemakaian *{$tipeLabel}* Kamu. Jadwalnya udah mau mulai ya 😊\n\n";
+        $message .= "📌 *Aset:* {$this->booking->nama_aset}\n";
+        $message .= "⏱️ *Mulai:* " . \Carbon\Carbon::parse($this->booking->tanggal_mulai)->format('d M Y H:i') . "\n";
+        $message .= "🏁 *Selesai:* " . \Carbon\Carbon::parse($this->booking->tanggal_selesai)->format('d M Y H:i') . "\n\n";
+        $message .= "Biar lebih jelas, langsung aja cek detail pengajuannya di sistem kita.\n\n";
+        $message .= "Terima kasih";
 
         return [
             'receiver' => $notifiable->no_wa,
-            'message' => "📅 *Reminder Booking {$tipeLabel}*\n\n"
-                . "Aset: {$this->booking->nama_aset}\n"
-                . "Mulai: " . \Carbon\Carbon::parse($this->booking->tanggal_mulai)->format('d M Y H:i') . "\n"
-                . "Selesai: " . \Carbon\Carbon::parse($this->booking->tanggal_selesai)->format('d M Y H:i') . "\n\n"
-                . "Silakan persiapkan kebutuhan Anda.",
+            'message' => $message,
         ];
     }
 }

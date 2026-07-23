@@ -14,10 +14,11 @@ const validTransitions: Record<string, string[]> = {
     open: ['on_proses', 'reject', 'pending'],
     on_proses: ['solve', 'pending', 'reject'],
     pending: ['on_proses'],
+    need_revision: ['solve', 'pending', 'reject'],
 };
 
 const statusLabels: Record<string, string> = {
-    open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan',
+    open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', need_revision: 'Butuh Revisi', accepted: 'Diterima User',
 };
 
 export default function TicketDetail({ ticket, formFields }: any) {
@@ -99,6 +100,8 @@ export default function TicketDetail({ ticket, formFields }: any) {
                     #TKT-{formatTicketId(ticket.id)} <StatusBadge status={ticket.status} />
                 </h1>
             </div>
+
+
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <div className="lg:col-span-2 space-y-6">

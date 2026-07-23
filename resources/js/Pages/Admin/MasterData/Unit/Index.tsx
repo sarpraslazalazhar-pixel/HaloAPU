@@ -10,14 +10,68 @@ import { SearchInput } from '@/Components/SearchInput';
 import { Pagination } from '@/Components/Pagination';
 import Swal from 'sweetalert2';
 import { Pencil, Trash2 } from 'lucide-react';
+import { DynamicIcon, POPULAR_ICONS } from '@/Components/DynamicIcon';
 
 interface Unit {
     id: number;
     nama_unit: string;
+    icon?: string | null;
     deskripsi: string | null;
     aktif: boolean;
     sub_units_count: number;
     created_at: string;
+}
+
+function IconPicker({ selectedIcon, onSelect }: { selectedIcon: string; onSelect: (icon: string) => void }) {
+    const [search, setSearch] = useState('');
+
+    const filteredIcons = POPULAR_ICONS.filter(icon => 
+        icon.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
+            <div className="flex items-center justify-between gap-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Pilih Ikon Kanal Layanan</Label>
+                {selectedIcon && (
+                    <div className="flex items-center gap-1.5 text-xs text-sky-600 font-medium">
+                        <span>Ikon Terpilih:</span>
+                        <div className="p-1 bg-sky-500/10 rounded border border-sky-200">
+                            <DynamicIcon name={selectedIcon} className="w-4 h-4" />
+                        </div>
+                    </div>
+                )}
+            </div>
+            
+            <Input 
+                placeholder="Cari ikon (misal: Building, Wrench, Shield, Laptop)..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)} 
+                className="h-8 text-xs mb-2"
+            />
+
+            <div className="grid grid-cols-7 sm:grid-cols-9 gap-1.5 max-h-36 overflow-y-auto p-1 border rounded bg-background">
+                {filteredIcons.map(iconName => {
+                    const isSelected = selectedIcon === iconName;
+                    return (
+                        <button
+                            key={iconName}
+                            type="button"
+                            onClick={() => onSelect(isSelected ? '' : iconName)}
+                            title={iconName}
+                            className={`flex items-center justify-center p-2 rounded-md transition-all ${
+                                isSelected 
+                                    ? 'bg-sky-500 text-white shadow-sm ring-2 ring-sky-500 ring-offset-1' 
+                                    : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                            }`}
+                        >
+                            <DynamicIcon name={iconName} className="w-4 h-4" />
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
 }
 
 export default function UnitIndex({ units, filters }: { units: any; filters?: { search?: string } }) {
@@ -26,6 +80,7 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
 
     const { data, setData, post, put, delete: destroy, reset, errors } = useForm({
         nama_unit: '',
+        icon: '',
         deskripsi: '',
         aktif: true,
     });
@@ -72,29 +127,33 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
         setEditUnit(unit);
         setData({
             nama_unit: unit.nama_unit,
+            icon: unit.icon || '',
             deskripsi: unit.deskripsi || '',
             aktif: unit.aktif,
         });
     };
 
     return (
-        <AdminLayout title="Master Unit">
+        <AdminLayout title="Kanal Layanan">
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Master Data Unit</h2>
+                <h2 className="text-2xl font-bold">Kanal Layanan</h2>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
-                        <Button onClick={() => reset()}>Tambah Unit</Button>
+                        <Button onClick={() => reset()}>Tambah Kanal Layanan</Button>
                     </DialogTrigger>
-                    <DialogContent>
+                    <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                         <DialogHeader>
-                            <DialogTitle>Tambah Unit</DialogTitle>
+                            <DialogTitle>Tambah Kanal Layanan</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleAdd} className="space-y-4">
                             <div className="space-y-2">
-                                <Label>Nama Unit</Label>
+                                <Label>Nama Kanal Layanan</Label>
                                 <Input value={data.nama_unit} onChange={e => setData('nama_unit', e.target.value)} />
                                 {errors.nama_unit && <p className="text-red-500 text-sm">{errors.nama_unit}</p>}
                             </div>
+
+                            <IconPicker selectedIcon={data.icon} onSelect={icon => setData('icon', icon)} />
+
                             <div className="space-y-2">
                                 <Label>Deskripsi</Label>
                                 <Input value={data.deskripsi} onChange={e => setData('deskripsi', e.target.value)} />
@@ -121,10 +180,10 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
                 <TableHeader>
                     <TableRow>
                         <TableHead>No</TableHead>
-                        <TableHead>Nama Unit</TableHead>
+                        <TableHead>Nama Kanal Layanan</TableHead>
                         <TableHead>Deskripsi</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Jml Sub Unit</TableHead>
+                        <TableHead>Jml Jenis Layanan</TableHead>
                         <TableHead>Aksi</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -132,7 +191,14 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
                     {units.data?.length > 0 ? units.data.map((unit: Unit, i: number) => (
                         <TableRow key={unit.id}>
                             <TableCell>{units.from + i}</TableCell>
-                            <TableCell>{unit.nama_unit}</TableCell>
+                            <TableCell>
+                                <div className="flex items-center gap-2.5">
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-500/20 dark:text-sky-400 border border-sky-200/50 dark:border-sky-800/50">
+                                        <DynamicIcon name={unit.icon} fallback="Building" className="w-4 h-4" />
+                                    </div>
+                                    <span className="font-medium text-foreground">{unit.nama_unit}</span>
+                                </div>
+                            </TableCell>
                             <TableCell>{unit.deskripsi || '-'}</TableCell>
                             <TableCell>{unit.aktif ? 'Aktif' : 'Nonaktif'}</TableCell>
                             <TableCell>{unit.sub_units_count}</TableCell>
@@ -158,16 +224,19 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
             <Pagination links={units.links} />
 
             <Dialog open={!!editUnit} onOpenChange={(open) => !open && setEditUnit(null)}>
-                <DialogContent>
+                <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
                     <DialogHeader>
-                        <DialogTitle>Edit Unit</DialogTitle>
+                        <DialogTitle>Edit Kanal Layanan</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="space-y-4">
                         <div className="space-y-2">
-                            <Label>Nama Unit</Label>
+                            <Label>Nama Kanal Layanan</Label>
                             <Input value={data.nama_unit} onChange={e => setData('nama_unit', e.target.value)} />
                             {errors.nama_unit && <p className="text-red-500 text-sm">{errors.nama_unit}</p>}
                         </div>
+
+                        <IconPicker selectedIcon={data.icon} onSelect={icon => setData('icon', icon)} />
+
                         <div className="space-y-2">
                             <Label>Deskripsi</Label>
                             <Input value={data.deskripsi} onChange={e => setData('deskripsi', e.target.value)} />

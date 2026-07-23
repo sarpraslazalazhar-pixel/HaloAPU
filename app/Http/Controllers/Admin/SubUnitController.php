@@ -38,6 +38,7 @@ class SubUnitController extends Controller
         $validated = $request->validate([
             'unit_id' => 'required|exists:units,id',
             'nama_layanan' => 'required|string|max:255',
+            'icon' => 'nullable|string|max:100',
             'deskripsi' => 'nullable|string',
             'aktif' => 'nullable|boolean',
             'is_monitored' => 'nullable|boolean',
@@ -45,6 +46,7 @@ class SubUnitController extends Controller
             'monitor_asset_field_id' => 'nullable|exists:form_fields,id',
             'monitor_start_field_id' => 'nullable|exists:form_fields,id',
             'monitor_end_field_id' => 'nullable|exists:form_fields,id',
+            'is_revision_enabled' => 'nullable|boolean',
         ]);
 
         if ($request->has('aktif')) {
@@ -52,6 +54,9 @@ class SubUnitController extends Controller
         }
         if ($request->has('is_monitored')) {
             $validated['is_monitored'] = $request->boolean('is_monitored');
+        }
+        if ($request->has('is_revision_enabled')) {
+            $validated['is_revision_enabled'] = $request->boolean('is_revision_enabled');
         }
 
         SubUnit::create($validated);
@@ -64,6 +69,7 @@ class SubUnitController extends Controller
         $validated = $request->validate([
             'unit_id' => 'required|exists:units,id',
             'nama_layanan' => 'required|string|max:255',
+            'icon' => 'nullable|string|max:100',
             'deskripsi' => 'nullable|string',
             'aktif' => 'nullable|boolean',
             'is_monitored' => 'nullable|boolean',
@@ -71,6 +77,7 @@ class SubUnitController extends Controller
             'monitor_asset_field_id' => 'nullable|exists:form_fields,id',
             'monitor_start_field_id' => 'nullable|exists:form_fields,id',
             'monitor_end_field_id' => 'nullable|exists:form_fields,id',
+            'is_revision_enabled' => 'nullable|boolean',
         ]);
 
         if ($request->has('aktif')) {
@@ -78,6 +85,9 @@ class SubUnitController extends Controller
         }
         if ($request->has('is_monitored')) {
             $validated['is_monitored'] = $request->boolean('is_monitored');
+        }
+        if ($request->has('is_revision_enabled')) {
+            $validated['is_revision_enabled'] = $request->boolean('is_revision_enabled');
         }
 
         $subUnit->update($validated);

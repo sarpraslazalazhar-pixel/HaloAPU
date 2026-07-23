@@ -1035,6 +1035,22 @@ if ($command === 'npm-build') {
 if ($command === 'deploy-cpanel') {
     echo "<pre>=== Memulai Deployment ke cPanel ===\n\n";
     try {
+        echo "0. Memperbarui konfigurasi .env untuk Push Notification...\n";
+        $envPath = __DIR__ . '/../.env';
+        if (file_exists($envPath)) {
+            $envContent = file_get_contents($envPath);
+            if (!str_contains($envContent, 'VAPID_PUBLIC_KEY')) {
+                $vapidKeys = "\n\n# Web Push Notifications\n";
+                $vapidKeys .= "VAPID_PUBLIC_KEY=BPBkAYR05euwJRFbfWaqMYtdGshrYOSm3a3jIcQY16_9jV7dHf8f1q5MGksolLx3evAfKvPHs5N_GiqfM5Llj8g\n";
+                $vapidKeys .= "VAPID_PRIVATE_KEY=accagDJbsxklfPUv8npLj7HPPHOlYz4h9XMLANCGaWA\n";
+                $vapidKeys .= "VITE_VAPID_PUBLIC_KEY=\"\${VAPID_PUBLIC_KEY}\"\n";
+                file_put_contents($envPath, $vapidKeys, FILE_APPEND);
+                echo "✅ VAPID keys berhasil ditambahkan ke .env\n\n";
+            } else {
+                echo "⚡ VAPID keys sudah ada di .env (skip)\n\n";
+            }
+        }
+
         echo "1. Mengaktifkan Maintenance Mode...\n";
         $kernel->call('down');
         echo Artisan::output() . "\n";

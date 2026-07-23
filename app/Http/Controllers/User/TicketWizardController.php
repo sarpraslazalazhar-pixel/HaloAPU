@@ -204,11 +204,22 @@ class TicketWizardController extends Controller
             $ticket->load('user', 'subUnit');
             // Notifikasi ke User (database + WA jika punya no_wa)
             $ticket->user->notify(new TicketCreatedUserNotification($ticket));
-            // Notifikasi ke semua Admin (database + WA jika punya no_wa)
-            $admins = \App\Models\Admin::all();
-            Notification::send($admins, new TicketCreatedAdminNotification($ticket));
-            // Fallback: kirim WA ke nomor_wa_utama via AnonymousNotifiable
-            Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
+            // Notifikasi ke Admin yang berlangganan Kanal Layanan (Unit)
+            $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+                $query->where('units.id', $ticket->unit_id);
+            })->get();
+
+            if ($notifiedAdmins->isNotEmpty()) {
+                Notification::send($notifiedAdmins, new TicketCreatedAdminNotification($ticket));
+                Notification::send($notifiedAdmins, new \App\Notifications\BrowserNotification(
+                    "Tiket Baru Masuk",
+                    "Tiket #{$ticket->ticket_number} baru saja dibuat oleh {$ticket->user->username}",
+                    "/admin/tiket/{$ticket->id}"
+                ));
+            } else {
+                // Fallback: kirim WA ke nomor_wa_utama via AnonymousNotifiable
+                Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
+            }
         } catch (\Exception $e) {
             \Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: " . $e->getMessage());
         }

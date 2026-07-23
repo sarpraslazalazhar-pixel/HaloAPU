@@ -31,6 +31,8 @@ class TicketController extends Controller
         if ($request->filled('status')) {
             $statuses = is_array($request->status) ? $request->status : [$request->status];
             $query->whereIn('status', $statuses);
+        } else {
+            $query->whereIn('status', ['open', 'on_proses', 'pending', 'waiting_approval', 'need_revision']);
         }
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);
@@ -64,6 +66,7 @@ class TicketController extends Controller
             'attachments.field', 'slaTracking',
             'logs' => fn($q) => $q->latest('timestamp'),
             'logs.admin',
+            'logs.attachments',
         ]);
 
         $formFields = FormField::where('sub_unit_id', $ticket->sub_unit_id)
@@ -82,6 +85,7 @@ class TicketController extends Controller
             'open' => ['on_proses', 'reject', 'pending'],
             'on_proses' => ['solve', 'pending', 'reject'],
             'pending' => ['on_proses'],
+            'need_revision' => ['solve', 'pending', 'reject'],
         ];
 
         $request->validate([
@@ -97,6 +101,8 @@ class TicketController extends Controller
         if (!isset($validTransitions[$oldStatus]) || !in_array($newStatus, $validTransitions[$oldStatus])) {
             return redirect()->back()->with('error', 'Transisi status tidak valid.');
         }
+
+
 
         $sla = $ticket->slaTracking;
 
@@ -129,6 +135,16 @@ class TicketController extends Controller
             }
         }
 
+        if ($newStatus === 'on_proses' && $ticket->booking) {
+            if ($sla && !$sla->resolved_at) {
+                $resolvedAt = now();
+                $sla->update([
+                    'resolved_at' => $resolvedAt,
+                    'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
+                ]);
+            }
+        }
+
         if ($newStatus === 'solve') {
             if ($sla && !$sla->resolved_at) {
                 $resolvedAt = now();
@@ -137,6 +153,8 @@ class TicketController extends Controller
                     'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
                 ]);
             }
+            // Reset is_result_accepted saat admin set solve (user perlu review lagi)
+            $ticket->update(['is_result_accepted' => false]);
         }
 
         $ticket->update(['status' => $newStatus]);
@@ -179,7 +197,20 @@ class TicketController extends Controller
         // Notifikasi WA (User)
         try {
             $ticket->load('user', 'subUnit');
-            $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
+            if ($ticket->user) {
+                $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
+                $ticket->user->notify(new \App\Notifications\BrowserNotification(
+                    "Status Tiket #{$ticket->ticket_number} Diperbarui",
+                    "Tiket Anda kini berstatus: " . strtoupper($newStatus),
+                    "/user/tiket/{$ticket->id}"
+                ));
+                
+                if (!empty($request->catatan)) {
+                    $senderName = auth('admin')->user()->name ?? auth('admin')->user()->username;
+                    $url = route('tiket.show', $ticket->id);
+                    $ticket->user->notify(new \App\Notifications\TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
+                }
+            }
         } catch (\Exception $e) {
             \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());
         }

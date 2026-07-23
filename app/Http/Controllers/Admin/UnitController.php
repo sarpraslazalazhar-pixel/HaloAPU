@@ -31,6 +31,7 @@ class UnitController extends Controller
     {
         $validated = $request->validate([
             'nama_unit' => 'required|string|max:255|unique:units,nama_unit',
+            'icon' => 'nullable|string|max:100',
             'deskripsi' => 'nullable|string',
             'aktif' => 'nullable|boolean'
         ]);
@@ -48,6 +49,7 @@ class UnitController extends Controller
     {
         $validated = $request->validate([
             'nama_unit' => 'required|string|max:255|unique:units,nama_unit,' . $unit->id,
+            'icon' => 'nullable|string|max:100',
             'deskripsi' => 'nullable|string',
             'aktif' => 'nullable|boolean'
         ]);

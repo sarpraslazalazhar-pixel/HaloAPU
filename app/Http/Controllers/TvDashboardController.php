@@ -33,7 +33,7 @@ class TvDashboardController extends Controller
         // Jadwal Booking Mendatang (dari hari ini ke depan)
         $upcomingBookings = RoomVehicleBooking::with(['ticket:id,ticket_number,user_id', 'ticket.user:id,name'])
             ->whereDate('tanggal_mulai', '>=', $today)
-            ->whereIn('status', ['Disetujui', 'Menunggu', 'Diproses'])
+            ->whereIn('status', ['open', 'on_proses'])
             ->orderBy('tanggal_mulai', 'asc')
             ->take(10)
             ->get();

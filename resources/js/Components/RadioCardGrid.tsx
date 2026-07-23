@@ -1,5 +1,6 @@
 import React from 'react';
 import { Building2, HeartHandshake, Coins, Building } from 'lucide-react';
+import { DynamicIcon } from '@/Components/DynamicIcon';
 
 const divisiIcons: Record<string, React.ReactNode> = {
     sekretariat: <Building2 className="w-6 h-6 mb-2" />,
@@ -7,8 +8,12 @@ const divisiIcons: Record<string, React.ReactNode> = {
     keuangan: <Coins className="w-6 h-6 mb-2" />,
 };
 
-function getIconForDivisi(nama: string) {
-    const key = Object.keys(divisiIcons).find(k => nama.toLowerCase().includes(k));
+function getIconForOption(opt: any, labelKey: string) {
+    if (opt.icon) {
+        return <DynamicIcon name={opt.icon} className="w-6 h-6 mb-2" />;
+    }
+    const label = opt[labelKey] || '';
+    const key = Object.keys(divisiIcons).find(k => label.toLowerCase().includes(k));
     return key ? divisiIcons[key] : <Building className="w-6 h-6 mb-2" />;
 };
 
@@ -55,7 +60,7 @@ export function RadioCardGrid({
                             'bg-white border-blue-600 text-blue-600 hover:bg-blue-50 hover:shadow-sm'}
                         `}
                     >
-                        {showIcon && getIconForDivisi(opt[labelKey])}
+                        {showIcon && getIconForOption(opt, labelKey)}
                         <span>{opt[labelKey]}</span>
                     </button>
                 );

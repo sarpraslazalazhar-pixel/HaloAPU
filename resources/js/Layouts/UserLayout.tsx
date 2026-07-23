@@ -23,6 +23,7 @@ import ProfileModal from '@/Components/ProfileModal';
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
+import { useWebPush } from '@/hooks/useWebPush';
 
 interface UserLayoutProps {
     children: React.ReactNode;
@@ -63,6 +64,7 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
     const { auth, flash, appConfig } = usePage<any>().props;
     const user = auth.user;
     const [profileOpen, setProfileOpen] = useState(false);
+    const { subscribe } = useWebPush(user);
 
     useIdleTimer('/logout');
 
@@ -70,7 +72,50 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
         if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
         if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
         if (flash?.message) toast(flash.message, { id: 'flash-message' });
-    }, [flash]);
+
+        // Listen for Echo notifications
+        if (window.Echo && user) {
+            // Proactive notification permission request
+            if ('Notification' in window && Notification.permission === 'default') {
+                toast((t) => (
+                    <div className="flex flex-col gap-2">
+                        <span className="text-sm font-medium">Aktifkan Notifikasi Browser</span>
+                        <span className="text-xs text-muted-foreground">Terima pemberitahuan saat status tiket Anda diperbarui.</span>
+                        <div className="flex gap-2 justify-end mt-1">
+                            <Button size="sm" variant="outline" onClick={() => toast.dismiss(t.id)}>Nanti</Button>
+                            <Button size="sm" onClick={() => {
+                                toast.dismiss(t.id);
+                                Notification.requestPermission().then((permission) => {
+                                    if (permission === 'granted') {
+                                        subscribe();
+                                        toast.success('Notifikasi diaktifkan!');
+                                    }
+                                });
+                            }}>Aktifkan</Button>
+                        </div>
+                    </div>
+                ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
+            }
+
+            const channel = `App.Models.User.${user.id}`;
+            
+            window.Echo.private(channel)
+                .notification((notification: any) => {
+                    // Cek izin notifikasi browser
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                        new Notification(notification.title || 'Pemberitahuan Baru', {
+                            body: notification.message || '',
+                        });
+                    }
+                    // Tampilkan juga toast fallback di in-app
+                    toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });
+                });
+            
+            return () => {
+                window.Echo.leave(channel);
+            };
+        }
+    }, [flash, user]);
     
     const url = usePage().url;
     const systemName = appConfig?.nama_sistem || 'HALO APU';

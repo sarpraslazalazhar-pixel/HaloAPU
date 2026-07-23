@@ -24,7 +24,8 @@ class Ticket extends Model
     }
     protected $fillable = [
         'user_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
-        'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id'
+        'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id',
+        'revision_count', 'waiting_approval_at', 'is_result_accepted'
     ];
 
     public function getFormattedIdAttribute()
@@ -44,6 +45,7 @@ class Ticket extends Model
         'jabatan_id' => 'integer',
         'unit_id' => 'integer',
         'sub_unit_id' => 'integer',
+        'is_result_accepted' => 'boolean',
     ];
 
     public function user()

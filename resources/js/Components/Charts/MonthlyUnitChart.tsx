@@ -1,5 +1,5 @@
 import React from 'react';
-import ReactECharts from 'echarts-for-react';
+import LazyECharts from './LazyECharts';
 
 const COLORS = ['#3b82f6', '#f59e0b', '#10b981', '#8b5cf6', '#ef4444', '#14b8a6', '#f97316', '#6366f1'];
 
@@ -49,5 +49,5 @@ export default function MonthlyUnitChart({ data, xKey = 'bulan' }: { data: any[]
         }))
     };
 
-    return <ReactECharts option={option} style={{ height: 300, width: '100%' }} />;
+    return <LazyECharts option={option} height={300} />;
 }

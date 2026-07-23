@@ -6,9 +6,11 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
+use NotificationChannels\WebPush\HasPushSubscriptions;
+
 class Admin extends Authenticatable
 {
-    use Notifiable, HasRoles;
+    use Notifiable, HasRoles, HasPushSubscriptions;
 
     protected $guard_name = 'admin';
 
@@ -41,6 +43,11 @@ class Admin extends Authenticatable
     public function units()
     {
         return $this->belongsToMany(Unit::class, 'admin_unit', 'admin_id', 'unit_id');
+    }
+
+    public function subUnits()
+    {
+        return $this->belongsToMany(SubUnit::class, 'admin_sub_unit', 'admin_id', 'sub_unit_id');
     }
 }
 

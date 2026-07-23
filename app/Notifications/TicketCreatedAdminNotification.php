@@ -61,10 +61,12 @@ class TicketCreatedAdminNotification extends Notification
         $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
         $url = url('/admin/tiket/' . $this->ticket->id);
         
-        $message = "Halo Admin,\n\n";
-        $message .= "Ada *Tiket Baru Masuk* dari *{$pembuat}* terkait layanan *{$layanan}*.\n\n";
-        $message .= "Silakan segera direspon melalui link berikut:\n{$url}\n\n";
-        $message .= "Sistem Halo APU";
+        $namaAdmin = $notifiable->name ?? ($notifiable->nama ?? 'Admin');
+
+        $message = "Halo *{$namaAdmin}* 👋\n\n";
+        $message .= "Ada info baru nih. Pengajuan *{$layanan}* dari *{$pembuat}* udah terdaftar di sistem ticketing kita ya 😊\n\n";
+        $message .= "Biar lebih jelas, langsung aja cek detailnya di sini:\n{$url}\n\n";
+        $message .= "Terima kasih";
 
         // Tentukan nomor penerima
         if ($notifiable instanceof \App\Models\Admin) {

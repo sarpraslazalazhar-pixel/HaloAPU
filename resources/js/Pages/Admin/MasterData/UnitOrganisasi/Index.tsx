@@ -86,16 +86,16 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
     };
 
     return (
-        <AdminLayout title="Master Unit Organisasi">
+        <AdminLayout title="Sub Divisi">
             <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold">Master Data Unit Organisasi</h2>
+                <h2 className="text-2xl font-bold">Sub Divisi</h2>
                 <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
                     <DialogTrigger asChild>
-                        <Button onClick={() => reset()}>Tambah Unit Organisasi</Button>
+                        <Button onClick={() => reset()}>Tambah Sub Divisi</Button>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>Tambah Unit Organisasi</DialogTitle>
+                            <DialogTitle>Tambah Sub Divisi</DialogTitle>
                         </DialogHeader>
                         <form onSubmit={handleAdd} className="space-y-4">
                             <div className="space-y-2">
@@ -109,7 +109,7 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
                                 {errors.divisi_id && <p className="text-red-500 text-sm">{errors.divisi_id}</p>}
                             </div>
                             <div className="space-y-2">
-                                <Label>Nama Unit Organisasi</Label>
+                                <Label>Nama Sub Divisi</Label>
                                 <Input value={data.nama_unit_organisasi} onChange={e => setData('nama_unit_organisasi', e.target.value)} />
                                 {errors.nama_unit_organisasi && <p className="text-red-500 text-sm">{errors.nama_unit_organisasi}</p>}
                             </div>
@@ -137,7 +137,7 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
                 <TableHeader>
                     <TableRow>
                         <TableHead>No</TableHead>
-                        <TableHead>Nama Unit Organisasi</TableHead>
+                        <TableHead>Nama Sub Divisi</TableHead>
                         <TableHead>Divisi</TableHead>
                         <TableHead>Aksi</TableHead>
                     </TableRow>
@@ -172,7 +172,7 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
             <Dialog open={!!editItem} onOpenChange={(open) => !open && setEditItem(null)}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Edit Unit Organisasi</DialogTitle>
+                        <DialogTitle>Edit Sub Divisi</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleEdit} className="space-y-4">
                         <div className="space-y-2">
@@ -186,7 +186,7 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
                             {errors.divisi_id && <p className="text-red-500 text-sm">{errors.divisi_id}</p>}
                         </div>
                         <div className="space-y-2">
-                            <Label>Nama Unit Organisasi</Label>
+                            <Label>Nama Sub Divisi</Label>
                             <Input value={data.nama_unit_organisasi} onChange={e => setData('nama_unit_organisasi', e.target.value)} />
                             {errors.nama_unit_organisasi && <p className="text-red-500 text-sm">{errors.nama_unit_organisasi}</p>}
                         </div>

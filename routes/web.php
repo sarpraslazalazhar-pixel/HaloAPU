@@ -62,6 +62,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/tiket/riwayat', [\App\Http\Controllers\User\TicketHistoryController::class, 'index'])->name('tiket.riwayat');
     Route::get('/tiket/{ticket}', [\App\Http\Controllers\User\TicketHistoryController::class, 'show'])->name('tiket.show');
     Route::post('/tiket/{ticket}/reply', [\App\Http\Controllers\User\TicketHistoryController::class, 'reply'])->name('tiket.reply');
+    Route::post('/tiket/{ticket}/accept-result', [\App\Http\Controllers\User\TicketHistoryController::class, 'acceptResult'])->name('tiket.accept-result');
+    Route::post('/tiket/{ticket}/request-revision', [\App\Http\Controllers\User\TicketHistoryController::class, 'requestRevision'])->name('tiket.request-revision');
     Route::patch('/tiket/{ticket}/batal', [\App\Http\Controllers\User\TicketHistoryController::class, 'cancel'])->name('tiket.batal');
     Route::get('/tiket/download/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'download'])->name('tiket.download');
     Route::get('/tiket/view/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'viewAttachment'])->name('tiket.view');
@@ -76,15 +78,18 @@ Route::middleware('auth')->group(function () {
 
     // Monitor
     Route::get('/monitor', [MonitorController::class, 'userIndex'])->name('monitor');
-
-
-    // API dropdown (dependent dropdown & dynamic form)
-    Route::prefix('api')->group(function () {
-        Route::get('/org-units/{divisiId}', [DropdownController::class, 'orgUnits'])->name('api.org-units');
-        Route::get('/sub-units/{unitId}', [DropdownController::class, 'subUnits'])->name('api.sub-units');
-        Route::get('/form-fields/{subUnitId}', [DropdownController::class, 'formFields'])->name('api.form-fields');
-    });
 });
+
+// API dropdown (dependent dropdown & dynamic form)
+Route::prefix('api')->group(function () {
+    Route::get('/org-units/{divisiId}', [DropdownController::class, 'orgUnits'])->name('api.org-units');
+    Route::get('/sub-units/{unitId}', [DropdownController::class, 'subUnits'])->name('api.sub-units');
+    Route::get('/form-fields/{subUnitId}', [DropdownController::class, 'formFields'])->name('api.form-fields');
+});
+
+// Web Push Subscriptions
+Route::post('/push/subscribe', [\App\Http\Controllers\WebPushController::class, 'subscribe'])->name('push.subscribe');
+Route::post('/push/unsubscribe', [\App\Http\Controllers\WebPushController::class, 'unsubscribe'])->name('push.unsubscribe');
 
 Route::prefix('admin')->name('admin.')->group(function () {
     Route::middleware('guest:admin')->group(function () {
@@ -101,19 +106,24 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/profil/avatar', [\App\Http\Controllers\Admin\ProfileController::class, 'uploadAvatar'])->name('profil.upload-avatar');
 
         // CSAT Admin
-        Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');
+        Route::middleware('permission:akses-laporan')->group(function () {
+            Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');
+            Route::get('/laporan/tiket', [\App\Http\Controllers\Admin\LaporanTiketController::class, 'index'])->name('laporan.tiket');
+        });
 
         // Monitor Admin
         Route::get('/monitor', [MonitorController::class, 'adminIndex'])->name('monitor.index');
 
 
         // Konfigurasi Sistem
-        Route::get('/konfigurasi', [SystemConfigController::class, 'index'])->name('konfigurasi.index');
-        Route::put('/konfigurasi', [SystemConfigController::class, 'update'])->name('konfigurasi.update');
-        Route::post('/konfigurasi/upload-logo', [SystemConfigController::class, 'uploadLogo'])->name('konfigurasi.upload-logo');
-        Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
-        Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
-        Route::post('/konfigurasi/upload-sound', [SystemConfigController::class, 'uploadSound'])->name('konfigurasi.upload-sound');
+        Route::middleware('permission:akses-konfigurasi')->group(function () {
+            Route::get('/konfigurasi', [SystemConfigController::class, 'index'])->name('konfigurasi.index');
+            Route::put('/konfigurasi', [SystemConfigController::class, 'update'])->name('konfigurasi.update');
+            Route::post('/konfigurasi/upload-logo', [SystemConfigController::class, 'uploadLogo'])->name('konfigurasi.upload-logo');
+            Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
+            Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
+            Route::post('/konfigurasi/upload-sound', [SystemConfigController::class, 'uploadSound'])->name('konfigurasi.upload-sound');
+        });
 
         // Manual Scheduler
         Route::prefix('scheduler')->name('scheduler.')->group(function () {
@@ -124,36 +134,50 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/run-all', [\App\Http\Controllers\Admin\SchedulerController::class, 'runAll'])->name('run-all');
         });
 
-        // Manajemen Admin
-        Route::resource('manajemen-admin', AdminManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-admin');
-
-        // Manajemen User
-        Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-user');
-
-        // Master Data
-        Route::resource('master/unit', \App\Http\Controllers\Admin\UnitController::class)->except(['create', 'edit', 'show'])->names('master.unit');
-        Route::resource('master/sub-unit', \App\Http\Controllers\Admin\SubUnitController::class)->except(['create', 'edit', 'show'])->names('master.sub-unit');
-        Route::resource('master/divisi', \App\Http\Controllers\Admin\DivisiController::class)->except(['create', 'edit', 'show'])->names('master.divisi');
-        Route::resource('master/unit-organisasi', \App\Http\Controllers\Admin\UnitOrganisasiController::class)->except(['create', 'edit', 'show'])->names('master.unit-organisasi');
-        Route::post('master/jabatan/reorder', [\App\Http\Controllers\Admin\JabatanController::class, 'reorder'])->name('master.jabatan.reorder');
-        Route::resource('master/jabatan', \App\Http\Controllers\Admin\JabatanController::class)->except(['create', 'edit', 'show'])->names('master.jabatan');
-
-        // Peraturan Form
-        Route::prefix('peraturan-form')->group(function () {
-            Route::get('/', [\App\Http\Controllers\Admin\FormFieldController::class, 'index'])->name('peraturan-form.index');
-            Route::get('/{subUnit}/builder', [\App\Http\Controllers\Admin\FormFieldController::class, 'builder'])->name('peraturan-form.builder');
-            Route::post('/{subUnit}/fields', [\App\Http\Controllers\Admin\FormFieldController::class, 'store'])->name('peraturan-form.store');
-            Route::put('/fields/{formField}', [\App\Http\Controllers\Admin\FormFieldController::class, 'update'])->name('peraturan-form.update');
-            Route::delete('/fields/{formField}', [\App\Http\Controllers\Admin\FormFieldController::class, 'destroy'])->name('peraturan-form.destroy');
-            Route::post('/{subUnit}/reorder', [\App\Http\Controllers\Admin\FormFieldController::class, 'reorder'])->name('peraturan-form.reorder');
+        // Manajemen Akun
+        Route::middleware('permission:akses-manajemen-akun')->group(function () {
+            // Manajemen Operator
+            Route::resource('manajemen-operator', AdminManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-operator');
+            
+            // Manajemen User
+            Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-user');
+            
+            // Manajemen Peran
+            Route::resource('manajemen-peran', \App\Http\Controllers\Admin\RoleManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-peran');
         });
 
-        // SLA Config
-        Route::resource('sla-config', \App\Http\Controllers\Admin\SlaConfigController::class)->except(['create', 'edit', 'show']);
+        // Master Data Layanan
+        Route::middleware('permission:akses-layanan')->group(function () {
+            Route::resource('master/unit', \App\Http\Controllers\Admin\UnitController::class)->except(['create', 'edit', 'show'])->names('master.unit');
+            Route::resource('master/sub-unit', \App\Http\Controllers\Admin\SubUnitController::class)->except(['create', 'edit', 'show'])->names('master.sub-unit');
+        });
 
-        // Reminder Config
-        Route::get('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'index'])->name('reminder-config.index');
-        Route::put('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'update'])->name('reminder-config.update');
+        // Master Data Struktur
+        Route::middleware('permission:akses-struktur')->group(function () {
+            Route::resource('master/divisi', \App\Http\Controllers\Admin\DivisiController::class)->except(['create', 'edit', 'show'])->names('master.divisi');
+            Route::resource('master/unit-organisasi', \App\Http\Controllers\Admin\UnitOrganisasiController::class)->except(['create', 'edit', 'show'])->names('master.unit-organisasi');
+            Route::post('master/jabatan/reorder', [\App\Http\Controllers\Admin\JabatanController::class, 'reorder'])->name('master.jabatan.reorder');
+            Route::resource('master/jabatan', \App\Http\Controllers\Admin\JabatanController::class)->except(['create', 'edit', 'show'])->names('master.jabatan');
+        });
+
+        // Peraturan Form
+        Route::middleware('permission:akses-konfigurasi')->group(function () {
+            Route::prefix('peraturan-form')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Admin\FormFieldController::class, 'index'])->name('peraturan-form.index');
+                Route::get('/{subUnit}/builder', [\App\Http\Controllers\Admin\FormFieldController::class, 'builder'])->name('peraturan-form.builder');
+                Route::post('/{subUnit}/fields', [\App\Http\Controllers\Admin\FormFieldController::class, 'store'])->name('peraturan-form.store');
+                Route::put('/fields/{formField}', [\App\Http\Controllers\Admin\FormFieldController::class, 'update'])->name('peraturan-form.update');
+                Route::delete('/fields/{formField}', [\App\Http\Controllers\Admin\FormFieldController::class, 'destroy'])->name('peraturan-form.destroy');
+                Route::post('/{subUnit}/reorder', [\App\Http\Controllers\Admin\FormFieldController::class, 'reorder'])->name('peraturan-form.reorder');
+            });
+
+            // SLA Config
+            Route::resource('sla-config', \App\Http\Controllers\Admin\SlaConfigController::class)->except(['create', 'edit', 'show']);
+
+            // Reminder Config
+            Route::get('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'index'])->name('reminder-config.index');
+            Route::put('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'update'])->name('reminder-config.update');
+        });
 
         // Notifications
         Route::prefix('notifications')->name('notifications.')->group(function () {

@@ -247,6 +247,37 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
                                 </div>
                             </div>
 
+                            <div className="border-t pt-4">
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <p className="text-sm font-medium">Notifikasi Browser</p>
+                                        <p className="text-xs text-muted-foreground">Terima popup notifikasi saat ada tiket baru atau update.</p>
+                                    </div>
+                                    <Button 
+                                        type="button" 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => {
+                                            if (!('Notification' in window)) {
+                                                alert('Browser Anda tidak mendukung notifikasi.');
+                                                return;
+                                            }
+                                            Notification.requestPermission().then((permission) => {
+                                                if (permission === 'granted') {
+                                                    alert('Izin notifikasi diberikan! Anda akan menerima notifikasi.');
+                                                    // dummy notif
+                                                    new Notification('Notifikasi Aktif', { body: 'Anda akan menerima update tiket di sini.' });
+                                                } else {
+                                                    alert('Izin notifikasi ditolak.');
+                                                }
+                                            });
+                                        }}
+                                    >
+                                        Request Izin
+                                    </Button>
+                                </div>
+                            </div>
+
                             <div className="flex justify-end gap-2 pt-2">
                                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
                                     Batal

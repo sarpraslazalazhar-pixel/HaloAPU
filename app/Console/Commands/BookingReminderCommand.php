@@ -31,7 +31,7 @@ class BookingReminderCommand extends Command
             return Command::FAILURE;
         }
 
-        $bookings = \App\Models\RoomVehicleBooking::where('status', 'Disetujui')
+        $bookings = \App\Models\RoomVehicleBooking::where('status', 'on_proses')
             ->whereDate('tanggal_mulai', $targetDate)
             ->with(['ticket.subUnit.unit.admins', 'ticket.user'])
             ->get();
@@ -59,8 +59,25 @@ class BookingReminderCommand extends Command
                 $admins = $unit->admins;
                 foreach ($admins as $admin) {
                     $admin->notify(new BookingReminderNotification($booking));
+                    $admin->notify(new \App\Notifications\BrowserNotification(
+                        "Pengingat Booking",
+                        "Booking tiket #{$booking->ticket->ticket_number} hampir tiba tanggal mulainya.",
+                        "/admin/tiket/{$booking->ticket->id}"
+                    ));
                     $sent++;
                 }
+            }
+
+            // Kirim ke User pemesan
+            $user = $booking->ticket?->user;
+            if ($user) {
+                $user->notify(new BookingReminderNotification($booking));
+                $user->notify(new \App\Notifications\BrowserNotification(
+                    "Pengingat Booking",
+                    "Booking tiket Anda #{$booking->ticket->ticket_number} hampir tiba tanggal mulainya.",
+                    "/user/tiket/{$booking->ticket->id}"
+                ));
+                $sent++;
             }
         }
 

@@ -21,23 +21,18 @@ class CsatController extends Controller
             ]);
         }
 
-        if ($ticket->csat()->exists()) {
-            return back()->withErrors([
-                'rating' => 'Anda sudah memberikan rating untuk tiket ini.',
-            ]);
-        }
-
         $validated = $request->validate([
             'rating' => 'required|integer|min:1|max:5',
             'komentar' => 'nullable|string|max:1000',
         ]);
 
-        Csat::create([
-            'ticket_id' => $ticket->id,
-            'user_id' => $request->user()->id,
-            'rating' => $validated['rating'],
-            'komentar' => $validated['komentar'],
-        ]);
+        Csat::updateOrCreate(
+            ['ticket_id' => $ticket->id, 'user_id' => $request->user()->id],
+            [
+                'rating' => $validated['rating'],
+                'komentar' => $validated['komentar'],
+            ]
+        );
 
         if (in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
             if (strtolower($ticket->status) === 'solve' || $ticket->status !== 'Selesai') {

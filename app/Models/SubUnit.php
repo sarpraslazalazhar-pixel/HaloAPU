@@ -9,12 +9,14 @@ class SubUnit extends Model
     protected $fillable = [
         'unit_id', 'nama_layanan', 'deskripsi', 'aktif',
         'is_monitored', 'monitor_kategori',
-        'monitor_asset_field_id', 'monitor_start_field_id', 'monitor_end_field_id'
+        'monitor_asset_field_id', 'monitor_start_field_id', 'monitor_end_field_id',
+        'is_revision_enabled'
     ];
 
     protected $casts = [
         'aktif' => 'boolean',
         'is_monitored' => 'boolean',
+        'is_revision_enabled' => 'boolean',
     ];
 
     public function unit()

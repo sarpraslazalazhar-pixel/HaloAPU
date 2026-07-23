@@ -3,26 +3,70 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 
 import { cn } from "@/lib/utils"
 
-function TooltipProvider({ ...props }: TooltipPrimitive.Provider.Props) {
-  return <TooltipPrimitive.Provider data-slot="tooltip-provider" {...props} />
+function TooltipProvider({
+  delayDuration,
+  children,
+  ...props
+}: TooltipPrimitive.Provider.Props & { delayDuration?: number }) {
+  return (
+    <TooltipPrimitive.Provider data-slot="tooltip-provider" {...props}>
+      {children}
+    </TooltipPrimitive.Provider>
+  )
 }
 
-function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+function Tooltip({
+  delayDuration,
+  ...props
+}: TooltipPrimitive.Root.Props & { delayDuration?: number }) {
+  return (
+    <TooltipPrimitive.Root
+      data-slot="tooltip"
+      {...props}
+    />
+  )
 }
 
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
+function TooltipTrigger({
+  asChild,
+  children,
+  ...props
+}: TooltipPrimitive.Trigger.Props & { asChild?: boolean }) {
+  if (asChild && React.isValidElement(children)) {
+    return (
+      <TooltipPrimitive.Trigger
+        data-slot="tooltip-trigger"
+        render={children}
+        {...props}
+      />
+    )
+  }
+  return (
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      {...props}
+    >
+      {children}
+    </TooltipPrimitive.Trigger>
+  )
 }
 
 function TooltipContent({
   className,
   sideOffset = 4,
+  side,
   ...props
-}: TooltipPrimitive.Popup.Props & { sideOffset?: number }) {
+}: TooltipPrimitive.Popup.Props & {
+  sideOffset?: number
+  side?: "top" | "right" | "bottom" | "left"
+}) {
   return (
     <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Positioner data-slot="tooltip-positioner" sideOffset={sideOffset}>
+      <TooltipPrimitive.Positioner
+        data-slot="tooltip-positioner"
+        sideOffset={sideOffset}
+        side={side}
+      >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Unit extends Model
 {
-    protected $fillable = ['nama_unit', 'deskripsi', 'aktif'];
+    protected $fillable = ['nama_unit', 'icon', 'deskripsi', 'aktif'];
 
     public function subUnits()
     {

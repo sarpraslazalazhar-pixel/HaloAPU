@@ -140,8 +140,35 @@ export default function NotificationBell() {
             const newCount = response.data.unread_count;
 
             // Play sound jika count naik & tidak muted
-            if (!isMuted && previousCountRef.current !== null && newCount > previousCountRef.current) {
-                playNotificationSound();
+            if (previousCountRef.current !== null && newCount > previousCountRef.current) {
+                if (!isMuted) {
+                    playNotificationSound();
+                }
+                
+                // Fetch the latest notification to show in native browser notification
+                if (Notification.permission === 'granted') {
+                    axios.get(route('admin.notifications.index'), { params: { per_page: 1 } })
+                        .then(res => {
+                            const latest = res.data.notifications?.data?.[0];
+                            if (latest && !latest.read_at) {
+                                const title = latest.data.title || latest.data.judul || 'Notifikasi Baru';
+                                const body = latest.data.message || latest.data.pesan || 'Anda memiliki notifikasi baru';
+                                const notification = new Notification(title, {
+                                    body: body,
+                                    icon: '/logo.png' // Pastikan icon ada
+                                });
+                                
+                                notification.onclick = function() {
+                                    window.focus();
+                                    if (latest.data.url || latest.data.aksi_url) {
+                                        window.location.href = latest.data.url || latest.data.aksi_url;
+                                    }
+                                    this.close();
+                                };
+                            }
+                        })
+                        .catch(e => console.error('Gagal fetch detail notifikasi untuk browser push', e));
+                }
             }
 
             previousCountRef.current = newCount;
@@ -178,9 +205,14 @@ export default function NotificationBell() {
         }
     }, [isOpen, fetchRecentNotifications]);
 
-    // Fetch unread count saat mount
+    // Fetch unread count saat mount dan request permission native
     useEffect(() => {
         fetchUnreadCount();
+        
+        // Request Native Notification Permission
+        if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+            Notification.requestPermission();
+        }
     }, [fetchUnreadCount]);
 
     const handleMarkAsRead = async (id: string) => {

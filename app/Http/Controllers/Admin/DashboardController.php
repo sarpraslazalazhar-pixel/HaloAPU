@@ -22,13 +22,22 @@ class DashboardController extends Controller
         if ($year) $baseQuery->whereYear('created_at', $year);
         if ($month) $baseQuery->whereMonth('created_at', $month);
 
-        $totalTickets = (clone $baseQuery)->count();
+        $statusAggregates = (clone $baseQuery)->selectRaw('
+            COUNT(*) as total_tickets,
+            SUM(CASE WHEN status = "open" THEN 1 ELSE 0 END) as open_count,
+            SUM(CASE WHEN status = "on_proses" THEN 1 ELSE 0 END) as on_proses_count,
+            SUM(CASE WHEN status = "pending" THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN status IN ("solve", "selesai") THEN 1 ELSE 0 END) as solve_count,
+            SUM(CASE WHEN status = "reject" THEN 1 ELSE 0 END) as reject_count
+        ')->first();
+
+        $totalTickets = (int) ($statusAggregates->total_tickets ?? 0);
         $statusCounts = [
-            'open' => (clone $baseQuery)->where('status', 'open')->count(),
-            'on_proses' => (clone $baseQuery)->where('status', 'on_proses')->count(),
-            'pending' => (clone $baseQuery)->where('status', 'pending')->count(),
-            'solve' => (clone $baseQuery)->whereIn('status', ['solve', 'selesai'])->count(),
-            'reject' => (clone $baseQuery)->where('status', 'reject')->count(),
+            'open' => (int) ($statusAggregates->open_count ?? 0),
+            'on_proses' => (int) ($statusAggregates->on_proses_count ?? 0),
+            'pending' => (int) ($statusAggregates->pending_count ?? 0),
+            'solve' => (int) ($statusAggregates->solve_count ?? 0),
+            'reject' => (int) ($statusAggregates->reject_count ?? 0),
         ];
 
         $topUsers = User::select('users.id', 'users.username', 'org_divisi.nama_divisi')
@@ -157,18 +166,21 @@ class DashboardController extends Controller
             $slaQuery->where('units.id', $slaUnitId);
         }
 
-        $totalResolved = (clone $slaQuery)->whereNotNull('resolved_at')->count();
-        $totalResponded = (clone $slaQuery)->whereNotNull('responded_at')->count();
-        $totalAll = (clone $slaQuery)->count();
+        $slaAggregates = (clone $slaQuery)->selectRaw('
+            COUNT(*) as total_all,
+            SUM(CASE WHEN resolved_at IS NOT NULL THEN 1 ELSE 0 END) as total_resolved,
+            SUM(CASE WHEN responded_at IS NOT NULL THEN 1 ELSE 0 END) as total_responded,
+            SUM(CASE WHEN is_response_breached = 1 THEN 1 ELSE 0 END) as response_breach,
+            SUM(CASE WHEN is_resolution_breached = 1 THEN 1 ELSE 0 END) as resolution_breach,
+            SUM(CASE WHEN resolved_at IS NULL AND is_resolution_breached = 0 AND sla_resolution_deadline <= ? THEN 1 ELSE 0 END) as total_warning
+        ', [now()->addDay()])->first();
 
-        $responseBreach = (clone $slaQuery)->where('is_response_breached', true)->count();
-        $resolutionBreach = (clone $slaQuery)->where('is_resolution_breached', true)->count();
-        
-        $totalWarning = (clone $slaQuery)
-            ->whereNull('resolved_at')
-            ->where('is_resolution_breached', false)
-            ->where('sla_resolution_deadline', '<=', now()->addDay())
-            ->count();
+        $totalAll = (int) ($slaAggregates->total_all ?? 0);
+        $totalResolved = (int) ($slaAggregates->total_resolved ?? 0);
+        $totalResponded = (int) ($slaAggregates->total_responded ?? 0);
+        $responseBreach = (int) ($slaAggregates->response_breach ?? 0);
+        $resolutionBreach = (int) ($slaAggregates->resolution_breach ?? 0);
+        $totalWarning = (int) ($slaAggregates->total_warning ?? 0);
 
         $responseCompliance = $totalResponded > 0
             ? round((($totalResponded - $responseBreach) / $totalResponded) * 100, 1)

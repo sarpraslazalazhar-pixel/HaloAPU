@@ -137,7 +137,7 @@ class SimulateSlaAndRemindersCommand extends Command
                 'nama_aset' => 'Ruang Rapat Utama',
                 'tanggal_mulai' => Carbon::now()->addDays(2)->setTime(10, 0, 0),
                 'tanggal_selesai' => Carbon::now()->addDays(2)->setTime(12, 0, 0),
-                'status' => 'Disetujui',
+                'status' => 'on_proses',
             ]);
 
             $this->info("Case 2 Setup: Created approved booking for Asset: {$booking->nama_aset} scheduled in 2 days (Ticket #{$bookingTicket->id}).");

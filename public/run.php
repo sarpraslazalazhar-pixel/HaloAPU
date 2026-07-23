@@ -49,6 +49,7 @@ if (empty($command)) {
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy' style='border-left-color: #00e676;'>▶ deploy — Jalankan migrate --force & optimize:clear</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy-cpanel' style='border-left-color: #00b0ff;'>▶ deploy-cpanel — Full cPanel Deploy (Down, Cache, Migrate, Storage, Up)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=seed-permissions' style='border-left-color: #ffab40;'>🔑 seed-permissions — Perbaiki hak akses sidebar</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=test-push' style='border-left-color: #e91e63;'>🔔 test-push — Uji Coba Kirim Push Notifikasi</a>";
     echo "</div>";
     
     echo "<div class='section'><h2>⏱️ SLA Management</h2>";
@@ -975,7 +976,8 @@ $allowed = [
     'sla-diagnose',
     'npm-build',
     'package:discover',
-    'seed-permissions'
+    'seed-permissions',
+    'test-push'
 ];
 
 if (!in_array($command, $allowed)) {
@@ -1045,6 +1047,29 @@ if ($command === 'seed-permissions') {
         // Clear cache so frontend picks up new permissions immediately
         $kernel->call('cache:clear');
         echo "\n✅ Cache dibersihkan!\n";
+    } catch (\Throwable $e) {
+        echo "❌ Error: " . htmlspecialchars($e->getMessage()) . "\n";
+    }
+    echo "</pre>";
+    exit;
+}
+
+if ($command === 'test-push') {
+    echo "<pre>=== Menguji Push Notification ===\n\n";
+    try {
+        $admins = \App\Models\Admin::whereHas('pushSubscriptions')->get();
+        $users = \App\Models\User::whereHas('pushSubscriptions')->get();
+        
+        $total = $admins->count() + $users->count();
+        echo "Ditemukan {$total} perangkat/browser yang sudah berlangganan...\n\n";
+        
+        if ($total === 0) {
+            echo "❌ GAGAL: Belum ada perangkat browser yang memberikan izin atau berlangganan.\nSilakan login ke aplikasi dan setujui permintaan notifikasi (Allow Notifications) terlebih dahulu di browser Anda.\n";
+        } else {
+            \Illuminate\Support\Facades\Notification::send($admins, new \App\Notifications\TestPushNotification());
+            \Illuminate\Support\Facades\Notification::send($users, new \App\Notifications\TestPushNotification());
+            echo "✅ SUKSES: Test Push Notification berhasil dikirim ke {$total} perangkat!\n\nCoba cek layar/browser Anda sekarang (biasanya muncul dalam 1-5 detik).";
+        }
     } catch (\Throwable $e) {
         echo "❌ Error: " . htmlspecialchars($e->getMessage()) . "\n";
     }

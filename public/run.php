@@ -972,7 +972,8 @@ $allowed = [
     'sla-view',
     'sla-update',
     'sla-diagnose',
-    'npm-build'
+    'npm-build',
+    'package:discover'
 ];
 
 if (!in_array($command, $allowed)) {
@@ -1055,8 +1056,10 @@ if ($command === 'deploy-cpanel') {
         $kernel->call('down');
         echo Artisan::output() . "\n";
         
-        echo "2. Clear Cache & Optimize...\n";
+        echo "2. Clear Cache, Optimize & Discover Packages...\n";
         $kernel->call('optimize:clear');
+        echo Artisan::output() . "\n";
+        $kernel->call('package:discover');
         echo Artisan::output() . "\n";
         
         echo "3. Menjalankan Migrasi Database...\n";

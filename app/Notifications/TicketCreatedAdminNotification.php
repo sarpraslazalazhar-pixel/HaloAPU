@@ -24,6 +24,7 @@ class TicketCreatedAdminNotification extends Notification
 
         if ($notifiable instanceof \App\Models\Admin) {
             $channels[] = 'database';
+            $channels[] = \NotificationChannels\WebPush\WebPushChannel::class;
             // Jika admin punya nomor WA, kirim juga via WhatsApp
             if (!empty($notifiable->no_wa)) {
                 $channels[] = WhatsAppChannel::class;
@@ -39,6 +40,18 @@ class TicketCreatedAdminNotification extends Notification
         }
 
         return $channels;
+    }
+
+    public function toWebPush($notifiable, $notification)
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
+        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+        return (new \NotificationChannels\WebPush\WebPushMessage)
+            ->title('Tiket Baru Masuk')
+            ->icon('/images/logo.png')
+            ->body("Ada tiket baru dari {$pembuat} terkait layanan {$layanan}.")
+            ->action('Lihat Tiket', url('/admin/tiket/' . $this->ticket->id))
+            ->data(['url' => url('/admin/tiket/' . $this->ticket->id)]);
     }
 
     public function toArray(object $notifiable): array

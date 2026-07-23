@@ -22,11 +22,22 @@ class TicketStatusUpdatedNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = ['database', \NotificationChannels\WebPush\WebPushChannel::class];
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
         return $channels;
+    }
+
+    public function toWebPush($notifiable, $notification)
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        return (new \NotificationChannels\WebPush\WebPushMessage)
+            ->title('Status Tiket Diubah')
+            ->icon('/images/logo.png')
+            ->body('Status tiket Anda berubah menjadi ' . $statusStr . '. Catatan: ' . \Illuminate\Support\Str::limit($this->catatan, 50))
+            ->action('Lihat Tiket', route('tiket.show', $this->ticket->id))
+            ->data(['url' => route('tiket.show', $this->ticket->id)]);
     }
 
     public function toArray(object $notifiable): array

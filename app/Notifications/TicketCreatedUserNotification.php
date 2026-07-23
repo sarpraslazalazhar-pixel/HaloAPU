@@ -20,11 +20,21 @@ class TicketCreatedUserNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        $channels = ['database'];
+        $channels = ['database', \NotificationChannels\WebPush\WebPushChannel::class];
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
         return $channels;
+    }
+
+    public function toWebPush($notifiable, $notification)
+    {
+        return (new \NotificationChannels\WebPush\WebPushMessage)
+            ->title('Tiket Baru Berhasil Dibuat')
+            ->icon('/images/logo.png')
+            ->body('Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.')
+            ->action('Lihat Tiket', route('tiket.show', $this->ticket->id))
+            ->data(['url' => route('tiket.show', $this->ticket->id)]);
     }
 
     public function toArray(object $notifiable): array

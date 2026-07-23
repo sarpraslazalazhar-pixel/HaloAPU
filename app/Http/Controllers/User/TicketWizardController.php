@@ -211,11 +211,6 @@ class TicketWizardController extends Controller
 
             if ($notifiedAdmins->isNotEmpty()) {
                 Notification::send($notifiedAdmins, new TicketCreatedAdminNotification($ticket));
-                Notification::send($notifiedAdmins, new \App\Notifications\BrowserNotification(
-                    "Tiket Baru Masuk",
-                    "Tiket #{$ticket->ticket_number} baru saja dibuat oleh {$ticket->user->username}",
-                    "/admin/tiket/{$ticket->id}"
-                ));
             } else {
                 // Fallback: kirim WA ke nomor_wa_utama via AnonymousNotifiable
                 Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));

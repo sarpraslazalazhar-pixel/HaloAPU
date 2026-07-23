@@ -199,11 +199,6 @@ class TicketController extends Controller
             $ticket->load('user', 'subUnit');
             if ($ticket->user) {
                 $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $request->catatan));
-                $ticket->user->notify(new \App\Notifications\BrowserNotification(
-                    "Status Tiket #{$ticket->ticket_number} Diperbarui",
-                    "Tiket Anda kini berstatus: " . strtoupper($newStatus),
-                    "/user/tiket/{$ticket->id}"
-                ));
                 
                 if (!empty($request->catatan)) {
                     $senderName = auth('admin')->user()->name ?? auth('admin')->user()->username;

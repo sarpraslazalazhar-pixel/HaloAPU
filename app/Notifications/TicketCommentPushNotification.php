@@ -36,7 +36,18 @@ class TicketCommentPushNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return [WebPushChannel::class];
+        return ['database', WebPushChannel::class];
+    }
+
+    public function toDatabase(object $notifiable): array
+    {
+        return [
+            'type' => 'ticket_comment',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Komentar Baru: Tiket #' . $this->ticket->id,
+            'message' => $this->senderName . ' menambahkan komentar baru.',
+            'url' => $this->url,
+        ];
     }
 
     /**

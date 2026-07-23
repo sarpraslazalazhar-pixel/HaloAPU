@@ -26,6 +26,7 @@ class RevisionRequestedNotification extends Notification
 
         if ($notifiable instanceof \App\Models\Admin) {
             $channels[] = 'database';
+            $channels[] = \NotificationChannels\WebPush\WebPushChannel::class;
             if (!empty($notifiable->no_wa)) {
                 $channels[] = WhatsAppChannel::class;
             }
@@ -39,6 +40,17 @@ class RevisionRequestedNotification extends Notification
         }
 
         return $channels;
+    }
+
+    public function toWebPush($notifiable, $notification)
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
+        return (new \NotificationChannels\WebPush\WebPushMessage)
+            ->title('Permintaan Revisi Tiket')
+            ->icon('/images/logo.png')
+            ->body("Tiket {$this->ticket->formatted_id} ({$layanan}) perlu direvisi. Catatan: " . \Illuminate\Support\Str::limit($this->catatan, 50))
+            ->action('Lihat Tiket', url('/admin/tiket/' . $this->ticket->id))
+            ->data(['url' => url('/admin/tiket/' . $this->ticket->id)]);
     }
 
     public function toDatabase(object $notifiable): array

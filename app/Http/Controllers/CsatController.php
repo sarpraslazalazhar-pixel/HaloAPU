@@ -40,6 +40,14 @@ class CsatController extends Controller
             }
         }
 
+        $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+            $query->where('units.id', $ticket->subUnit->unit_id);
+        })->get();
+
+        if ($notifiedAdmins->isNotEmpty()) {
+            \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketRatedAdminNotification($ticket, $validated['rating'], $validated['komentar'] ?? ''));
+        }
+
         return back()->with('success', 'Terima kasih atas rating Anda!');
     }
 

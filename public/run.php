@@ -1063,7 +1063,7 @@ if ($command === 'deploy-cpanel') {
                 $vapidKeys = "\n\n# Web Push Notifications\n";
                 $vapidKeys .= "VAPID_PUBLIC_KEY=BPBkAYR05euwJRFbfWaqMYtdGshrYOSm3a3jIcQY16_9jV7dHf8f1q5MGksolLx3evAfKvPHs5N_GiqfM5Llj8g\n";
                 $vapidKeys .= "VAPID_PRIVATE_KEY=accagDJbsxklfPUv8npLj7HPPHOlYz4h9XMLANCGaWA\n";
-                $vapidKeys .= "VITE_VAPID_PUBLIC_KEY=\"\${VAPID_PUBLIC_KEY}\"\n";
+                $vapidKeys .= "VITE_VAPID_PUBLIC_KEY=BPBkAYR05euwJRFbfWaqMYtdGshrYOSm3a3jIcQY16_9jV7dHf8f1q5MGksolLx3evAfKvPHs5N_GiqfM5Llj8g\n";
                 file_put_contents($envPath, $vapidKeys, FILE_APPEND);
                 echo "✅ VAPID keys berhasil ditambahkan ke .env\n\n";
             } else {

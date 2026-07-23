@@ -9,7 +9,7 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
 
-class TicketCommentPushNotification extends Notification implements ShouldQueue
+class TicketCommentPushNotification extends Notification
 {
     use Queueable;
 

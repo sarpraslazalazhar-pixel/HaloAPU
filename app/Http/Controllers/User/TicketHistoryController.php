@@ -190,6 +190,8 @@ class TicketHistoryController extends Controller
 
         $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit->unit_id);
+        })->orWhereHas('roles', function($q) {
+            $q->where('name', 'superadmin');
         })->get();
 
         if ($notifiedAdmins->isNotEmpty()) {

@@ -61,7 +61,7 @@ class BookingReminderCommand extends Command
                     $admin->notify(new BookingReminderNotification($booking));
                     $admin->notify(new \App\Notifications\BrowserNotification(
                         "Pengingat Booking",
-                        "Booking tiket #{$booking->ticket->ticket_number} hampir tiba tanggal mulainya.",
+                        "Booking tiket #{$booking->ticket->formatted_id} hampir tiba tanggal mulainya.",
                         "/admin/tiket/{$booking->ticket->id}"
                     ));
                     $sent++;
@@ -74,7 +74,7 @@ class BookingReminderCommand extends Command
                 $user->notify(new BookingReminderNotification($booking));
                 $user->notify(new \App\Notifications\BrowserNotification(
                     "Pengingat Booking",
-                    "Booking tiket Anda #{$booking->ticket->ticket_number} hampir tiba tanggal mulainya.",
+                    "Booking tiket Anda #{$booking->ticket->formatted_id} hampir tiba tanggal mulainya.",
                     "/user/tiket/{$booking->ticket->id}"
                 ));
                 $sent++;

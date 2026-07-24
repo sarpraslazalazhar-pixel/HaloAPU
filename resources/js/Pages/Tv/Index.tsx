@@ -4,13 +4,11 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Badge } from '@/Components/ui/badge';
 import {
     Clock, Calendar, CheckCircle, Ticket as TicketIcon,
-    Activity, AlertCircle, User, ArrowRight, Play,
-    TrendingUp, BarChart3
+    Activity, AlertCircle, User, ArrowRight, Play
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { id as localeID } from 'date-fns/locale';
 import { Toaster, toast } from 'react-hot-toast';
-import ReactECharts from 'echarts-for-react';
 
 interface TvDashboardProps {
     stats: {
@@ -34,11 +32,9 @@ const ACCENT = {
     selesai: '#10b981',
 };
 
-const CHART_COLORS = ['#00a2e8', '#f59e0b', '#8b5cf6', '#10b981', '#ef4444', '#ec4899', '#14b8a6', '#f97316'];
-
 const statCards = [
     {
-        label: 'Total Hari Ini',
+        label: 'Tiket Baru',
         key: 'total_hari_ini' as const,
         icon: TicketIcon,
         accent: ACCENT.total,
@@ -67,15 +63,13 @@ const statCards = [
     },
 ];
 
-export default function TvDashboard({ stats, recentTickets, upcomingBookings, dailyChartData, units, notificationSound, logoPath }: TvDashboardProps) {
+export default function TvDashboard({ stats, recentTickets, upcomingBookings, notificationSound, logoPath }: TvDashboardProps) {
     const [currentTime, setCurrentTime] = useState(new Date());
     const [hasInteracted, setHasInteracted] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
     const audioBufferRef = useRef<AudioBuffer | null>(null);
     const prevLatestTicketIdRef = useRef<number | null>(null);
     const prevTicketsRef = useRef<any[]>([]);
-    const [newTicketIds, setNewTicketIds] = useState<Set<number>>(new Set());
-    const tableRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         if (typeof window !== 'undefined') {
@@ -133,65 +127,21 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, da
                         recentTickets.map(t => t.id).filter(id => !prevIds.has(id))
                     );
                     if (added.size > 0) {
-                        setNewTicketIds(added);
                         recentTickets
                             .filter(t => added.has(t.id))
                             .forEach(t => {
                                 toast.success(
-                                    `Tiket baru: ${t.ticket_number} - ${t.user?.name || '-'}`,
+                                    `Tiket baru: ${t.formatted_id} - ${t.user?.name || '-'}`,
                                     { id: `tv-ticket-${t.id}`, duration: 4000 }
                                 );
                             });
-                        setTimeout(() => setNewTicketIds(new Set()), 4000);
                     }
                 }
             }
             prevLatestTicketIdRef.current = currentLatestId;
             prevTicketsRef.current = recentTickets;
         }
-    }, [recentTickets]);
-
-    useEffect(() => {
-        const el = tableRef.current;
-        if (!el) return;
-        let rafId: number;
-        let startTime: number | null = null;
-        const duration = 10000;
-        const step = (timestamp: number) => {
-            if (!startTime) startTime = timestamp;
-            const elapsed = timestamp - startTime;
-            const progress = Math.min(elapsed / duration, 1);
-            const maxScroll = el.scrollHeight - el.clientHeight;
-            if (maxScroll <= 0) return;
-            el.scrollTop = progress * maxScroll;
-            if (progress < 1) {
-                rafId = requestAnimationFrame(step);
-            } else {
-                setTimeout(() => {
-                    el.scrollTo({ top: 0, behavior: 'smooth' });
-                }, 4000);
-            }
-        };
-        const delayId = setTimeout(() => {
-            startTime = null;
-            rafId = requestAnimationFrame(step);
-        }, 5000);
-        return () => {
-            clearTimeout(delayId);
-            if (rafId) cancelAnimationFrame(rafId);
-        };
-    }, [recentTickets]);
-
-    const getStatusBadge = (status: string) => {
-        const map: Record<string, { variant: "default" | "secondary" | "outline" | "destructive" | "ghost" | "link"; className: string }> = {
-            'Menunggu': { variant: 'outline', className: 'bg-amber-50 text-amber-700 border-amber-200' },
-            'Diproses': { variant: 'outline', className: 'bg-blue-50 text-blue-700 border-blue-200' },
-            'Eskalasi': { variant: 'destructive', className: '' },
-            'Menunggu Konfirmasi': { variant: 'outline', className: 'bg-orange-50 text-orange-700 border-orange-200' },
-            'Selesai': { variant: 'outline', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-        };
-        return map[status] || { variant: 'outline' as const, className: 'bg-slate-50 text-slate-600 border-slate-200' };
-    };
+    }, [recentTickets, hasInteracted]);
 
     if (!hasInteracted) {
         return (
@@ -227,61 +177,8 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, da
         );
     }
 
-    const chartOption = {
-        tooltip: {
-            trigger: 'axis' as const,
-            backgroundColor: 'rgba(255,255,255,0.95)',
-            borderColor: '#e2e8f0',
-            borderWidth: 1,
-            textStyle: { fontSize: 14, color: '#1e293b' },
-        },
-        legend: {
-            bottom: 0,
-            textStyle: { fontSize: 14, color: '#64748b' },
-            icon: 'roundRect',
-            itemWidth: 16,
-            itemHeight: 8,
-        },
-        grid: { left: '2%', right: '2%', bottom: '18%', top: '8%', containLabel: true },
-        xAxis: {
-            type: 'category' as const,
-            data: dailyChartData.map((d: any) => {
-                const parts = d.date.split('-');
-                return `${parts[2]}/${parts[1]}`;
-            }),
-            axisLabel: { fontSize: 14, color: '#94a3b8' },
-            axisLine: { lineStyle: { color: '#e2e8f0' } },
-            axisTick: { show: false },
-        },
-        yAxis: {
-            type: 'value' as const,
-            axisLabel: { fontSize: 14, color: '#94a3b8' },
-            splitLine: { lineStyle: { color: '#f1f5f9', type: 'dashed' as const } },
-        },
-        series: units.map((u: any, i: number) => ({
-            name: u.nama_unit,
-            type: 'line' as const,
-            smooth: true,
-            symbol: 'circle' as const,
-            symbolSize: 8,
-            lineStyle: { width: 3 },
-            itemStyle: { color: CHART_COLORS[i % CHART_COLORS.length] },
-            areaStyle: {
-                color: {
-                    type: 'linear' as const,
-                    x: 0, y: 0, x2: 0, y2: 1,
-                    colorStops: [
-                        { offset: 0, color: CHART_COLORS[i % CHART_COLORS.length] + '30' },
-                        { offset: 1, color: CHART_COLORS[i % CHART_COLORS.length] + '05' },
-                    ],
-                },
-            },
-            data: dailyChartData.map((d: any) => d[u.nama_unit] || 0),
-        })),
-    };
-
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 text-slate-900 font-sans flex flex-col overflow-hidden">
+        <div className="h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/30 text-slate-900 font-sans flex flex-col overflow-hidden">
             <Head title="Live Dashboard Operasional" />
             <Toaster
                 position="top-center"
@@ -290,9 +187,9 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, da
                     style: {
                         background: '#1e293b',
                         color: '#f8fafc',
-                        fontSize: '1rem',
+                        fontSize: '1.25rem',
                         borderRadius: '1rem',
-                        padding: '0.75rem 1.25rem',
+                        padding: '1rem 1.5rem',
                     },
                 }}
             />
@@ -311,223 +208,160 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, da
                         </div>
                     )}
                     <div className="hidden sm:block h-10 w-px bg-slate-200" />
-                    <div className="hidden sm:flex items-center gap-2">
-                        <span className="relative flex h-3 w-3">
+                    <div className="hidden sm:flex items-center gap-3">
+                        <span className="relative flex h-4 w-4">
                             <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 animate-ping opacity-75" />
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                            <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500" />
                         </span>
-                        <span className="text-sm font-medium text-slate-400 uppercase tracking-wider">Live</span>
+                        <span className="text-lg font-bold text-slate-400 uppercase tracking-wider">Live</span>
                     </div>
                 </div>
                 <div className="text-right">
-                    <div className="text-5xl md:text-6xl font-mono font-bold tracking-widest text-slate-800 tabular-nums">
+                    <div className="text-5xl md:text-7xl font-mono font-bold tracking-widest text-slate-800 tabular-nums">
                         {format(currentTime, 'HH:mm:ss')}
                     </div>
-                    <div className="text-base md:text-lg text-slate-400 uppercase tracking-widest font-medium mt-1">
+                    <div className="text-xl md:text-2xl text-slate-400 uppercase tracking-widest font-bold mt-2">
                         {format(currentTime, 'EEEE, dd MMMM yyyy', { locale: localeID })}
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 p-6 md:p-8 flex flex-col gap-6 overflow-hidden">
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            <main className="flex-1 p-4 md:p-6 flex flex-col gap-4 overflow-hidden">
+                <div className="grid grid-cols-4 gap-4 lg:gap-6 shrink-0">
                     {statCards.map(({ label, key, icon: Icon, accent, lightBg }) => (
                         <Card
                             key={label}
-                            className="border-0 shadow-md shadow-slate-200/50 bg-white overflow-hidden relative group"
+                            className="border-0 shadow-lg shadow-slate-200/50 bg-white overflow-hidden relative group"
                         >
                             <div
-                                className="absolute top-0 left-0 right-0 h-1.5"
+                                className="absolute top-0 left-0 right-0 h-2"
                                 style={{ backgroundColor: accent }}
                             />
-                            <CardContent className="p-6 md:p-8 relative">
-                                <div className="flex items-start justify-between">
-                                    <div className="space-y-2">
-                                        <p className="text-slate-400 text-sm font-semibold tracking-wider uppercase">
-                                            {label}
-                                        </p>
-                                        <h3
-                                            className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight tabular-nums"
-                                            style={{ color: accent }}
-                                        >
-                                            {stats[key]}
-                                        </h3>
-                                    </div>
-                                    <div className={`p-4 md:p-5 rounded-2xl ${lightBg} shadow-sm ring-1 ring-slate-200/50`}>
-                                        <Icon className="w-8 h-8 md:w-10 md:h-10" style={{ color: accent }} />
-                                    </div>
+                            <CardContent className="p-4 md:p-6 relative flex flex-col md:flex-row items-center md:justify-between gap-4">
+                                <div className="space-y-1 text-center md:text-left order-2 md:order-1">
+                                    <p className="text-slate-500 text-sm md:text-base font-bold tracking-widest uppercase">
+                                        {label}
+                                    </p>
+                                    <h3
+                                        className="text-4xl md:text-6xl font-black tracking-tighter tabular-nums"
+                                        style={{ color: accent }}
+                                    >
+                                        {stats[key]}
+                                    </h3>
+                                </div>
+                                <div className={`p-4 md:p-5 rounded-2xl ${lightBg} shadow-inner ring-1 ring-slate-200/50 order-1 md:order-2 shrink-0`}>
+                                    <Icon className="w-8 h-8 md:w-12 md:h-12" style={{ color: accent }} />
                                 </div>
                             </CardContent>
                         </Card>
                     ))}
                 </div>
 
-                <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 overflow-hidden min-h-0">
-                    <Card className="lg:col-span-2 border-0 shadow-md shadow-slate-200/50 bg-white flex flex-col overflow-hidden">
-                        <div className="px-6 md:px-8 py-5 flex justify-between items-center border-b border-slate-100">
-                            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3">
-                                <TicketIcon className="w-6 h-6 md:w-7 md:h-7 text-[#00a2e8]" />
-                                Tiket Terbaru
-                            </h2>
-                            <div className="flex items-center gap-2 text-sm text-slate-400 font-medium">
-                                <span className="relative flex h-2.5 w-2.5">
-                                    <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 animate-ping opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                                </span>
-                                Live
-                            </div>
-                        </div>
-                        <div ref={tableRef} className="flex-1 overflow-auto">
-                            <table className="w-full text-left">
-                                <thead className="bg-slate-50/80 sticky top-0 z-10">
-                                    <tr>
-                                        {['Tiket', 'Pengaju', 'Unit Tujuan', 'Layanan', 'Status', 'Waktu'].map(h => (
-                                            <th key={h} className="px-6 md:px-8 py-4 font-semibold text-xs uppercase tracking-widest text-slate-400">
-                                                {h}
-                                            </th>
-                                        ))}
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {recentTickets.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={6} className="px-8 py-20 text-center text-slate-400 text-xl font-medium">
-                                                Belum ada tiket hari ini
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        recentTickets.map((ticket, index) => {
-                                            const isNew = newTicketIds.has(ticket.id);
-                                            const badge = getStatusBadge(ticket.status);
-                                            return (
-                                                <tr
-                                                    key={ticket.id}
-                                                    className={`transition-all duration-700 ${
-                                                        isNew
-                                                            ? 'bg-amber-50/60'
-                                                            : index % 2 === 0
-                                                                ? 'bg-white'
-                                                                : 'bg-slate-50/30'
-                                                    } hover:bg-slate-50/50`}
-                                                >
-                                                    <td className="px-6 md:px-8 py-5 font-mono font-bold text-slate-900 text-base md:text-lg tracking-tight">
-                                                        {ticket.ticket_number}
-                                                    </td>
-                                                    <td className="px-6 md:px-8 py-5 font-semibold text-slate-700 text-base md:text-lg">
-                                                        {ticket.user?.name}
-                                                    </td>
-                                                    <td className="px-6 md:px-8 py-5 text-slate-500 text-base md:text-lg">
-                                                        {ticket.unit?.nama_unit}
-                                                    </td>
-                                                    <td className="px-6 md:px-8 py-5 text-slate-500 text-base md:text-lg">
-                                                        {ticket.sub_unit?.nama_layanan}
-                                                    </td>
-                                                    <td className="px-6 md:px-8 py-5">
-                                                        <Badge
-                                                            variant={badge.variant}
-                                                            className={`px-3 md:px-4 py-1.5 text-sm md:text-base font-semibold rounded-full ${badge.className}`}
-                                                        >
-                                                            {ticket.status}
-                                                        </Badge>
-                                                    </td>
-                                                    <td className="px-6 md:px-8 py-5 text-right text-slate-400 text-base md:text-lg font-medium tabular-nums">
-                                                        {format(new Date(ticket.created_at), 'HH:mm')}
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </Card>
-
-                    <Card className="border-0 shadow-md shadow-slate-200/50 bg-white flex flex-col overflow-hidden">
-                        <div className="px-6 md:px-8 py-5 border-b border-slate-100">
-                            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3">
-                                <Calendar className="w-6 h-6 md:w-7 md:h-7 text-[#00a2e8]" />
+                <div className="flex-1 flex flex-col min-h-0">
+                    <Card className="border-0 shadow-lg shadow-slate-200/50 bg-white flex flex-col overflow-hidden h-full">
+                        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between">
+                            <h2 className="text-3xl md:text-4xl font-extrabold text-slate-800 flex items-center gap-4">
+                                <Calendar className="w-8 h-8 md:w-10 md:h-10 text-[#00a2e8]" />
                                 Jadwal Booking
                             </h2>
                         </div>
-                        <div className="flex-1 overflow-auto p-5 md:p-6 space-y-4">
+                        <div className="flex-1 overflow-auto p-6 md:p-8 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                             {upcomingBookings.length === 0 ? (
-                                <div className="text-center text-slate-400 text-lg py-16 font-medium">
-                                    Tidak ada jadwal booking mendatang
+                                <div className="col-span-full flex items-center justify-center h-full">
+                                    <span className="text-slate-400 text-2xl font-semibold">Tidak ada jadwal booking mendatang</span>
                                 </div>
                             ) : (
                                 upcomingBookings.map(booking => {
-                                    const isToday =
-                                        new Date(booking.tanggal_mulai).toDateString() ===
-                                        currentTime.toDateString();
+                                    const now = currentTime.getTime();
+                                    const startTime = new Date(booking.tanggal_mulai).getTime();
+                                    const endTime = new Date(booking.tanggal_selesai).getTime();
+                                    const isToday = new Date(booking.tanggal_mulai).toDateString() === currentTime.toDateString();
+                                    const isOngoing = now >= startTime && now <= endTime;
+                                    const isFuture = now < startTime;
+                                    const isPendingApproval = booking.status === 'open';
+                                    
+                                    let badgeText = '';
+                                    let badgeStyle = '';
+                                    let cardStyle = '';
+
+                                    if (isOngoing) {
+                                        badgeText = 'Sedang Dipakai';
+                                        badgeStyle = 'bg-rose-500 text-white shadow-md shadow-rose-200 animate-pulse border-rose-500 text-sm px-4 py-1.5 font-bold tracking-wider uppercase';
+                                        cardStyle = 'bg-gradient-to-br from-rose-50 to-white border-rose-300 shadow-md shadow-rose-100/50 ring-1 ring-rose-200';
+                                    } else if (isFuture && isPendingApproval) {
+                                        badgeText = 'Menunggu Persetujuan';
+                                        badgeStyle = 'bg-sky-500 text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-sky-200 border-sky-500';
+                                        cardStyle = 'bg-gradient-to-br from-sky-50 to-white border-sky-200 shadow-md shadow-sky-100/50';
+                                    } else if (isFuture) {
+                                        if (isToday) {
+                                            badgeText = 'Terjadwal Hari Ini';
+                                            badgeStyle = 'bg-[#00a2e8] text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-blue-200 border-[#00a2e8]';
+                                            cardStyle = 'bg-gradient-to-br from-blue-50 to-white border-blue-200 shadow-md shadow-blue-100/50';
+                                        } else {
+                                            badgeText = `Dipesan: ${format(new Date(booking.tanggal_mulai), 'dd MMM', { locale: localeID })}`;
+                                            badgeStyle = 'bg-amber-500 text-white border-amber-500 text-sm px-4 py-1.5 font-bold shadow-md shadow-amber-200';
+                                            cardStyle = 'bg-gradient-to-br from-amber-50 to-white border-amber-200 shadow-sm';
+                                        }
+                                    } else {
+                                        badgeText = 'Selesai';
+                                        badgeStyle = 'text-slate-400 border-slate-200 border text-sm px-4 py-1.5 font-bold bg-slate-50';
+                                        cardStyle = 'bg-slate-50 border-slate-200 opacity-60';
+                                    }
+
                                     return (
                                         <div
                                             key={booking.id}
-                                            className={`p-5 md:p-6 rounded-xl border transition-all ${
-                                                isToday
-                                                    ? 'bg-gradient-to-r from-blue-50/80 to-white border-blue-200 shadow-sm shadow-blue-100/50'
-                                                    : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'
-                                            }`}
+                                            className={`p-6 md:p-8 rounded-2xl border transition-all flex flex-col justify-between ${cardStyle}`}
                                         >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <Badge
-                                                    variant={isToday ? 'default' : 'outline'}
-                                                    className={
-                                                        isToday
-                                                            ? 'bg-[#00a2e8] text-white text-xs px-3 py-1 font-semibold tracking-wider uppercase'
-                                                            : 'text-slate-400 border-slate-200 text-xs px-3 py-1 font-semibold'
-                                                    }
-                                                >
-                                                    {isToday
-                                                        ? 'Hari Ini'
-                                                        : format(new Date(booking.tanggal_mulai), 'dd MMM', {
-                                                              locale: localeID,
-                                                          })}
-                                                </Badge>
-                                                <span className="text-sm font-mono font-semibold text-slate-400">
-                                                    {booking.ticket?.ticket_number}
-                                                </span>
+                                            <div>
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <Badge variant="outline" className={badgeStyle}>
+                                                        {badgeText}
+                                                    </Badge>
+                                                    <span className="text-lg font-mono font-bold text-slate-400">
+                                                        {booking.ticket?.formatted_id}
+                                                    </span>
+                                                </div>
+                                                <h3 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-3 line-clamp-2">
+                                                    {booking.nama_aset}
+                                                </h3>
+                                                <p className="text-slate-500 font-semibold text-lg md:text-xl mb-6 flex items-center gap-3">
+                                                    <User className="w-5 h-5 md:w-6 md:h-6 text-slate-400" />
+                                                    {booking.ticket?.user?.name || '-'}
+                                                </p>
                                             </div>
-                                            <h3 className="text-xl md:text-2xl font-bold text-slate-900 mb-2">
-                                                {booking.nama_aset}
-                                            </h3>
-                                            <p className="text-slate-500 font-medium text-base md:text-lg mb-4 flex items-center gap-2">
-                                                <User className="w-4 h-4 md:w-5 md:h-5 text-slate-400" />
-                                                {booking.ticket?.user?.name || '-'}
-                                            </p>
-                                            <div className="flex items-center gap-2 md:gap-3 text-sm md:text-base font-medium text-slate-500 bg-slate-50/80 p-3 md:p-4 rounded-xl border border-slate-100">
-                                                <Clock className="w-4 h-4 md:w-5 md:h-5 text-slate-400 shrink-0" />
-                                                <span className="font-mono font-semibold tracking-tight text-slate-700">
-                                                    {format(new Date(booking.tanggal_mulai), 'HH:mm')}
-                                                </span>
-                                                <ArrowRight className="w-3 h-3 md:w-4 md:h-4 text-slate-300" />
-                                                <span className="font-mono font-semibold tracking-tight text-slate-700">
-                                                    {format(new Date(booking.tanggal_selesai), 'HH:mm')}
-                                                </span>
+                                            <div className="flex items-center gap-3 md:gap-4 text-base md:text-lg font-bold text-slate-500 bg-slate-50/80 p-4 md:p-5 rounded-xl border border-slate-100 justify-center mt-auto flex-wrap">
+                                                <Calendar className="w-5 h-5 md:w-6 md:h-6 text-slate-400 shrink-0" />
+                                                {new Date(booking.tanggal_mulai).toDateString() === new Date(booking.tanggal_selesai).toDateString() ? (
+                                                    <>
+                                                        <span className="font-mono tracking-tight text-slate-700">
+                                                            {format(new Date(booking.tanggal_mulai), 'dd MMM yyyy', { locale: localeID })}
+                                                        </span>
+                                                        <span className="text-slate-300 mx-1 md:mx-2">|</span>
+                                                        <Clock className="w-5 h-5 md:w-6 md:h-6 text-slate-400 shrink-0" />
+                                                        <span className="font-mono tracking-tight text-slate-700">
+                                                            {format(new Date(booking.tanggal_mulai), 'HH:mm')}
+                                                        </span>
+                                                        <ArrowRight className="w-4 h-4 md:w-5 md:h-5 text-slate-300" />
+                                                        <span className="font-mono tracking-tight text-slate-700">
+                                                            {format(new Date(booking.tanggal_selesai), 'HH:mm')}
+                                                        </span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <span className="font-mono tracking-tight text-slate-700">
+                                                            {format(new Date(booking.tanggal_mulai), 'dd MMM', { locale: localeID })} {format(new Date(booking.tanggal_mulai), 'HH:mm')}
+                                                        </span>
+                                                        <ArrowRight className="w-4 h-4 md:w-5 md:h-5 text-slate-300 mx-1" />
+                                                        <span className="font-mono tracking-tight text-slate-700">
+                                                            {format(new Date(booking.tanggal_selesai), 'dd MMM', { locale: localeID })} {format(new Date(booking.tanggal_selesai), 'HH:mm')}
+                                                        </span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     );
                                 })
-                            )}
-                        </div>
-                    </Card>
-                </div>
-
-                <div className="shrink-0">
-                    <Card className="border-0 shadow-md shadow-slate-200/50 bg-white flex flex-col">
-                        <div className="px-6 md:px-8 py-5 border-b border-slate-100 flex items-center justify-between">
-                            <h2 className="text-2xl md:text-3xl font-bold text-slate-800 flex items-center gap-3">
-                                <TrendingUp className="w-6 h-6 md:w-7 md:h-7 text-[#00a2e8]" />
-                                Grafik Harian Tiket (7 Hari)
-                            </h2>
-                            <BarChart3 className="w-5 h-5 text-slate-300 hidden sm:block" />
-                        </div>
-                        <div className="p-4 md:p-6">
-                            {dailyChartData?.length > 0 ? (
-                                <ReactECharts option={chartOption} style={{ height: 280, width: '100%' }} />
-                            ) : (
-                                <div className="h-[280px] flex items-center justify-center text-slate-400 text-lg font-medium">
-                                    Belum ada data harian
-                                </div>
                             )}
                         </div>
                     </Card>

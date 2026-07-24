@@ -28,6 +28,8 @@ interface SubUnit {
     is_monitored: boolean;
     monitor_kategori?: string;
     monitor_asset_field_id?: number;
+    monitor_date_field_id?: number;
+    monitor_end_date_field_id?: number;
     monitor_start_field_id?: number;
     monitor_end_field_id?: number;
     is_revision_enabled: boolean;
@@ -46,6 +48,8 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
         is_monitored: false,
         monitor_kategori: '',
         monitor_asset_field_id: '',
+        monitor_date_field_id: '',
+        monitor_end_date_field_id: '',
         monitor_start_field_id: '',
         monitor_end_field_id: '',
         is_revision_enabled: false,
@@ -99,6 +103,8 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
             is_monitored: subUnit.is_monitored || false,
             monitor_kategori: subUnit.monitor_kategori || '',
             monitor_asset_field_id: subUnit.monitor_asset_field_id?.toString() || '',
+            monitor_date_field_id: subUnit.monitor_date_field_id?.toString() || '',
+            monitor_end_date_field_id: subUnit.monitor_end_date_field_id?.toString() || '',
             monitor_start_field_id: subUnit.monitor_start_field_id?.toString() || '',
             monitor_end_field_id: subUnit.monitor_end_field_id?.toString() || '',
             is_revision_enabled: subUnit.is_revision_enabled || false,
@@ -286,6 +292,24 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
                                                     <Label>Field Form: Nama Aset</Label>
                                                     <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.monitor_asset_field_id} onChange={e => setData('monitor_asset_field_id', e.target.value)}>
                                                         <option value="">-- Pilih Field --</option>
+                                                        {editSubUnit.form_fields.map((f: any) => (
+                                                            <option key={f.id} value={f.id}>{f.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Field Form: Tanggal Pemakaian (Mulai)</Label>
+                                                    <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.monitor_date_field_id || ''} onChange={e => setData('monitor_date_field_id', e.target.value)}>
+                                                        <option value="">-- Gunakan Waktu Mulai --</option>
+                                                        {editSubUnit.form_fields.map((f: any) => (
+                                                            <option key={f.id} value={f.id}>{f.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <Label>Field Form: Tanggal Selesai (Opsional)</Label>
+                                                    <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.monitor_end_date_field_id || ''} onChange={e => setData('monitor_end_date_field_id', e.target.value)}>
+                                                        <option value="">-- Sama Dengan Tanggal Mulai --</option>
                                                         {editSubUnit.form_fields.map((f: any) => (
                                                             <option key={f.id} value={f.id}>{f.label}</option>
                                                         ))}

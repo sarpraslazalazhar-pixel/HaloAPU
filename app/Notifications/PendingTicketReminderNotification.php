@@ -50,22 +50,22 @@ class PendingTicketReminderNotification extends Notification
             'unit' => $this->ticket->subUnit?->unit?->nama_unit,
             'sub_unit' => $this->ticket->subUnit?->nama_layanan,
             'judul' => "Tiket Pending Lama",
-            'pesan' => "Tiket #{$this->ticket->id} \"{$this->ticket->judul}\" sudah pending selama {$this->hariPending} hari. Silakan tindak lanjuti.",
+            'pesan' => "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah pending selama {$this->hariPending} hari. Silakan tindak lanjuti.",
             'icon' => 'clock',
-            'aksi_url' => "/admin/tiketing/{$this->ticket->id}",
+            'aksi_url' => "/admin/tiket/{$this->ticket->id}",
         ];
     }
 
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject("Tiket Pending Lama — #{$this->ticket->id}")
+            ->subject("Tiket Pending Lama — #{$this->ticket->formatted_id}")
             ->greeting("Halo, {$notifiable->name}!")
             ->line("Tiket berikut sudah dalam status Pending selama **{$this->hariPending} hari**:")
-            ->line("**Tiket:** #{$this->ticket->id} — {$this->ticket->judul}")
+            ->line("**Tiket:** #{$this->ticket->formatted_id} — {$this->ticket->judul}")
             ->line("**Unit:** {$this->ticket->subUnit?->unit?->nama_unit}")
             ->line("**Pending Sejak:** {$this->ticket->updated_at->format('d M Y H:i')}")
-            ->action('Lihat Tiket', url("/admin/tiketing/{$this->ticket->id}"))
+            ->action('Lihat Tiket', url("/admin/tiket/{$this->ticket->id}"))
             ->line('Mohon segera ditindaklanjuti.');
     }
 

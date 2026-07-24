@@ -19,9 +19,9 @@ class TvDashboardController extends Controller
         // Statistik Hari Ini
         $stats = [
             'total_hari_ini' => Ticket::whereDate('created_at', $today)->count(),
-            'menunggu' => Ticket::where('status', 'Menunggu')->count(),
-            'diproses' => Ticket::whereIn('status', ['Diproses', 'Eskalasi', 'Menunggu Konfirmasi'])->count(),
-            'selesai' => Ticket::whereDate('updated_at', $today)->where('status', 'Selesai')->count(),
+            'menunggu' => Ticket::where('status', 'open')->count(),
+            'diproses' => Ticket::where('status', 'on_proses')->count(),
+            'selesai' => Ticket::whereDate('updated_at', $today)->whereIn('status', ['solve', 'close'])->count(),
         ];
 
         // Tiket Terbaru (Live Feed)
@@ -31,7 +31,7 @@ class TvDashboardController extends Controller
             ->get();
 
         // Jadwal Booking Mendatang (dari hari ini ke depan)
-        $upcomingBookings = RoomVehicleBooking::with(['ticket:id,ticket_number,user_id', 'ticket.user:id,name'])
+        $upcomingBookings = RoomVehicleBooking::with(['ticket:id,user_id', 'ticket.user:id,name'])
             ->whereDate('tanggal_mulai', '>=', $today)
             ->whereIn('status', ['open', 'on_proses'])
             ->orderBy('tanggal_mulai', 'asc')

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Head, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { StatusBadge } from '@/Components/StatusBadge';
@@ -21,9 +21,13 @@ const statusLabels: Record<string, string> = {
     open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', need_revision: 'Butuh Revisi', accepted: 'Diterima User',
 };
 
-export default function TicketDetail({ ticket, formFields }: any) {
+export default function TicketDetail({ ticket, formFields, operators }: any) {
+    const { auth } = usePage().props as any;
+    const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
+
     const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
     const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
+    const { data: assignData, setData: setAssignData, patch: patchAssign, processing: processingAssign, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
 
     const transitions = validTransitions[ticket.status] || [];
 
@@ -39,6 +43,11 @@ export default function TicketDetail({ ticket, formFields }: any) {
     const handlePrioritySubmit = (e: React.FormEvent) => {
         e.preventDefault();
         patchPriority(route('admin.tiket.priority', ticket.id));
+    };
+
+    const handleAssignSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        patchAssign(route('admin.tiket.assign', ticket.id));
     };
 
     const renderFormValue = (field: any) => {
@@ -153,6 +162,34 @@ export default function TicketDetail({ ticket, formFields }: any) {
                 </div>
 
                 <div className="space-y-6">
+                    {canAssignOperator && (
+                        <Card>
+                            <CardHeader><CardTitle>Penugasan Operator</CardTitle></CardHeader>
+                            <CardContent>
+                                <form onSubmit={handleAssignSubmit} className="space-y-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-medium">Tugaskan ke Operator</label>
+                                        <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={assignData.assigned_admin_id} onChange={e => setAssignData('assigned_admin_id', e.target.value)}>
+                                            <option value="">-- Pilih Operator --</option>
+                                            {operators?.map((op: any) => (
+                                                <option key={op.id} value={op.id}>{op.name || op.username}</option>
+                                            ))}
+                                        </select>
+                                        {errorsAssign.assigned_admin_id && <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id}</p>}
+                                    </div>
+                                    <Button type="submit" variant="secondary" className="w-full" disabled={processingAssign}>
+                                        Tugaskan
+                                    </Button>
+                                    {ticket.assigned_admin && (
+                                        <div className="text-sm text-slate-500 mt-2 text-center">
+                                            Saat ini ditugaskan ke: <span className="font-semibold text-slate-800">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
+                                        </div>
+                                    )}
+                                </form>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     <Card>
                         <CardHeader><CardTitle>Aksi Status</CardTitle></CardHeader>
                         <CardContent>

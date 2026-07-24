@@ -33,8 +33,16 @@ class SlaConfig extends Model
         return $query->where('sub_unit_id', $subUnitId);
     }
 
+    protected static array $thresholdCache = [];
+
     public static function getThreshold(?int $subUnitId, string $priority, string $jenis): int
     {
+        $cacheKey = ($subUnitId ?? 'global') . "_{$priority}_{$jenis}";
+        
+        if (array_key_exists($cacheKey, self::$thresholdCache)) {
+            return self::$thresholdCache[$cacheKey];
+        }
+
         if ($subUnitId) {
             $config = self::where('sub_unit_id', $subUnitId)
                 ->where('priority', $priority)
@@ -42,7 +50,7 @@ class SlaConfig extends Model
                 ->first();
 
             if ($config) {
-                return $config->threshold_minutes;
+                return self::$thresholdCache[$cacheKey] = $config->threshold_minutes;
             }
         }
 
@@ -51,6 +59,6 @@ class SlaConfig extends Model
             ->where('jenis', $jenis)
             ->first();
 
-        return $global?->threshold_minutes ?? 60;
+        return self::$thresholdCache[$cacheKey] = ($global?->threshold_minutes ?? 60);
     }
 }

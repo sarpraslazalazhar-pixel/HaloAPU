@@ -182,8 +182,27 @@ class TicketWizardController extends Controller
             $subUnit = \App\Models\SubUnit::find($request->sub_unit_id);
             if ($subUnit && $subUnit->is_monitored) {
                 $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
-                $startDT = \Carbon\Carbon::parse($request->form_data[(string) $subUnit->monitor_start_field_id] ?? now());
-                $endDT = \Carbon\Carbon::parse($request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour());
+                
+                // Ambil tanggal terpisah jika ada, atau gunakan default hari ini
+                $dateStr = $subUnit->monitor_date_field_id 
+                    ? ($request->form_data[(string) $subUnit->monitor_date_field_id] ?? now()->format('Y-m-d'))
+                    : null;
+                    
+                $endDateStr = $subUnit->monitor_end_date_field_id
+                    ? ($request->form_data[(string) $subUnit->monitor_end_date_field_id] ?? $dateStr ?? now()->format('Y-m-d'))
+                    : $dateStr;
+
+                $startFieldVal = $request->form_data[(string) $subUnit->monitor_start_field_id] ?? now();
+                $endFieldVal = $request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
+
+                // Jika ada field tanggal terpisah, gabungkan tanggal dan jam
+                if ($dateStr) {
+                    $startDT = \Carbon\Carbon::parse($dateStr . ' ' . \Carbon\Carbon::parse($startFieldVal)->format('H:i:s'));
+                    $endDT = \Carbon\Carbon::parse(($endDateStr ?? $dateStr) . ' ' . \Carbon\Carbon::parse($endFieldVal)->format('H:i:s'));
+                } else {
+                    $startDT = \Carbon\Carbon::parse($startFieldVal);
+                    $endDT = \Carbon\Carbon::parse($endFieldVal);
+                }
 
                 // Cek bentrok aset
                 $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)

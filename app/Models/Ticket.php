@@ -37,6 +37,18 @@ class Ticket extends Model
         return $id;
     }
 
+    public function getJudulAttribute()
+    {
+        if (!empty($this->form_data) && is_array($this->form_data)) {
+            foreach ($this->form_data as $key => $value) {
+                if (is_string($value) && !empty($value) && strlen($value) < 100) {
+                    return $value;
+                }
+            }
+        }
+        return $this->subUnit ? $this->subUnit->nama_layanan : 'Tiket #' . $this->formatted_id;
+    }
+
     protected $casts = [
         'form_data' => 'array',
         'user_id' => 'integer',

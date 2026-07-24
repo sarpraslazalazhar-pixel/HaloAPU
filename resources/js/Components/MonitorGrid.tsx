@@ -9,7 +9,7 @@ import MonitorCalendar from '@/Components/MonitorCalendar';
 interface AssetData {
     nama_aset: string;
     tipe: 'ruang' | 'kendaraan';
-    status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai';
+    status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai' | 'Menunggu Persetujuan';
     user: string | null;
     waktu_mulai: string | null;
     waktu_selesai: string | null;
@@ -35,16 +35,18 @@ interface MonitorGridProps {
     lastUpdated: string;
 }
 
-const STATUS_COLORS = {
+const STATUS_COLORS: Record<string, string> = {
     'Tersedia': 'bg-green-500/10 border-green-500/30 dark:bg-green-500/20',
     'Dipesan': 'bg-yellow-500/10 border-yellow-500/30 dark:bg-yellow-500/20',
     'Sedang Dipakai': 'bg-red-500/10 border-red-500/30 dark:bg-red-500/20',
+    'Menunggu Persetujuan': 'bg-blue-500/10 border-blue-500/30 dark:bg-blue-500/20',
 };
 
-const STATUS_BADGE_COLORS = {
+const STATUS_BADGE_COLORS: Record<string, string> = {
     'Tersedia': 'bg-green-500 text-white hover:bg-green-600',
     'Dipesan': 'bg-yellow-500 text-black hover:bg-yellow-600',
     'Sedang Dipakai': 'bg-red-500 text-white hover:bg-red-600',
+    'Menunggu Persetujuan': 'bg-blue-500 text-white hover:bg-blue-600',
 };
 
 export default function MonitorGrid({ assets = [], calendarData = [], lastUpdated }: MonitorGridProps) {
@@ -117,7 +119,7 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
                         </div>
                         <div className="flex items-center gap-2">
                             <Clock className="h-4 w-4 text-muted-foreground" />
-                            <span>{asset.waktu_mulai} — {asset.waktu_selesai}</span>
+                            <span>{asset.waktu}</span>
                         </div>
                     </div>
                 ) : (
@@ -157,6 +159,10 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-green-500" />
                     <span className="text-sm">Tersedia</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-blue-500" />
+                    <span className="text-sm">Menunggu Persetujuan</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-yellow-500" />

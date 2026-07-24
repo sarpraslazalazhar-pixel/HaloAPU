@@ -195,6 +195,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/download/{attachment}', [\App\Http\Controllers\Admin\TicketController::class, 'downloadAttachment'])->name('download');
             Route::get('/view/{attachment}', [\App\Http\Controllers\Admin\TicketController::class, 'viewAttachment'])->name('view');
             Route::get('/{ticket}', [\App\Http\Controllers\Admin\TicketController::class, 'show'])->name('show');
+            Route::patch('/{ticket}/assign', [\App\Http\Controllers\Admin\TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [\App\Http\Controllers\Admin\TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [\App\Http\Controllers\Admin\TicketController::class, 'updatePriority'])->name('priority');
         });

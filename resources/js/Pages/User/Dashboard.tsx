@@ -18,8 +18,8 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
 
     const QUICK_ACTIONS = [
         { label: 'Ajukan Tiket', desc: 'Buat permohonan layanan baru', icon: PlusCircle, href: '/tiket/buat', color: 'text-primary bg-primary/10' },
-        { label: 'Riwayat Tiket', desc: 'Lihat semua pengajuan Anda', icon: History, href: '/tiket/riwayat', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
-        { label: 'CSAT', desc: 'Riwayat penilaian kepuasan', icon: Star, href: '/csat/riwayat', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
+        { label: 'Riwayat Tiket', desc: 'Lihat semua pengajuan Kamu', icon: History, href: '/tiket/riwayat', color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/30' },
+        { label: 'Riwayat Penilaian', desc: 'Riwayat penilaian kepuasan', icon: Star, href: '/csat/riwayat', color: 'text-amber-600 bg-amber-50 dark:bg-amber-950/30' },
         { label: 'Monitor', desc: 'Pantau status ruangan & kendaraan', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50 dark:bg-purple-950/30' },
     ];
 
@@ -97,7 +97,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
                 {recentTickets && recentTickets.length > 0 ? (
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold">Tiket Terbaru Anda</h2>
+                            <h2 className="text-lg font-semibold">Tiket Terbaru Kamu</h2>
                             <Link href="/tiket/riwayat" className="text-sm font-medium text-primary hover:underline">Lihat Semua</Link>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -129,7 +129,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
                             <div className="text-center max-w-sm">
                                 <h3 className="text-base font-semibold text-foreground">Belum ada tiket</h3>
                                 <p className="text-sm text-muted-foreground mt-1">
-                                    Ajukan tiket pertama Anda untuk memulai layanan.
+                                    Ajukan tiket pertama Kamu untuk memulai layanan.
                                 </p>
                             </div>
                             <Link href="/tiket/buat">

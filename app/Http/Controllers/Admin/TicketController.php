@@ -20,7 +20,20 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Ticket::with(['user.divisi', 'unit', 'subUnit', 'slaTracking']);
+        $query = Ticket::with(['user.divisi', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin']);
+
+        $admin = auth('admin')->user();
+        if (!$admin->hasRole('Super Admin')) {
+            if ($admin->hasRole('Operator')) {
+                $query->where('assigned_admin_id', $admin->id);
+            } else {
+                $query->where(function($q) use ($admin) {
+                    $subUnitIds = $admin->subUnits()->pluck('sub_units.id')->toArray();
+                    $q->whereIn('sub_unit_id', $subUnitIds)
+                      ->orWhere('assigned_admin_id', $admin->id);
+                });
+            }
+        }
 
         if ($request->filled('unit_id')) {
             $query->where('unit_id', $request->unit_id);
@@ -60,6 +73,19 @@ class TicketController extends Controller
 
     public function show(Ticket $ticket)
     {
+        $admin = auth('admin')->user();
+        if (!$admin->hasRole('Super Admin')) {
+            if ($admin->hasRole('Operator')) {
+                if ($ticket->assigned_admin_id !== $admin->id) {
+                    abort(403, 'Anda tidak berhak mengakses tiket ini.');
+                }
+            } else {
+                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
+                    abort(403, 'Anda tidak berhak mengakses tiket ini.');
+                }
+            }
+        }
+
         $ticket->load([
             'user', 'user.divisi', 'user.orgUnit', 'user.jabatan',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
@@ -73,14 +99,32 @@ class TicketController extends Controller
             ->orderBy('urutan')
             ->get();
 
+        $operators = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+            $query->where('units.id', $ticket->unit_id);
+        })->get(['id', 'name', 'username']);
+
         return Inertia::render('Admin/Tiketing/Detail', [
             'ticket' => $ticket,
             'formFields' => $formFields,
+            'operators' => $operators,
         ]);
     }
 
     public function updateStatus(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)
     {
+        $admin = auth('admin')->user();
+        if (!$admin->hasRole('Super Admin')) {
+            if ($admin->hasRole('Operator')) {
+                if ($ticket->assigned_admin_id !== $admin->id) {
+                    abort(403, 'Anda tidak berhak mengubah status tiket ini.');
+                }
+            } else {
+                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
+                    abort(403, 'Anda tidak berhak mengubah status tiket ini.');
+                }
+            }
+        }
+
         $validTransitions = [
             'open' => ['on_proses', 'reject', 'pending'],
             'on_proses' => ['solve', 'pending', 'reject'],
@@ -210,6 +254,18 @@ class TicketController extends Controller
             \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());
         }
 
+        // Notifikasi ke Operator (jika ada dan yang merubah bukan dia sendiri)
+        try {
+            $ticket->load('assignedAdmin');
+            $currentAdminId = auth('admin')->id();
+            if ($ticket->assignedAdmin && $ticket->assignedAdmin->id !== $currentAdminId) {
+                $pengubahName = auth('admin')->user()->name ?? auth('admin')->user()->username;
+                $ticket->assignedAdmin->notify(new \App\Notifications\TicketStatusUpdatedOperatorNotification($ticket, $request->catatan, $pengubahName));
+            }
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi operator tiket #{$ticket->id}: " . $e->getMessage());
+        }
+
         return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
     }
 
@@ -268,5 +324,34 @@ class TicketController extends Controller
         ];
 
         return response()->file(Storage::disk('public')->path($attachment->file_path), $headers);
+    }
+
+    public function assignOperator(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (!$admin->hasRole('Super Admin') && !$admin->hasPermissionTo('akses-assign-operator')) {
+            abort(403, 'Anda tidak memiliki hak akses untuk menugaskan operator.');
+        }
+
+        $request->validate([
+            'assigned_admin_id' => 'required|exists:admins,id',
+        ]);
+
+        $admin = \App\Models\Admin::findOrFail($request->assigned_admin_id);
+
+        if (!$admin->units()->where('units.id', $ticket->unit_id)->exists()) {
+            return redirect()->back()->with('error', 'Operator tidak terdaftar pada unit layanan ini.');
+        }
+
+        $ticket->update(['assigned_admin_id' => $admin->id]);
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => auth('admin')->id(),
+            'aksi' => 'assign_operator',
+            'catatan' => 'Tiket ditugaskan ke operator: ' . ($admin->name ?? $admin->username),
+        ]);
+
+        return redirect()->back()->with('success', 'Operator berhasil ditugaskan.');
     }
 }

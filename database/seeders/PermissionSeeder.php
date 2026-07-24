@@ -19,6 +19,7 @@ class PermissionSeeder extends Seeder
             'akses-konfigurasi',
             'akses-laporan',
             'akses-manajemen-akun',
+            'akses-assign-operator',
         ];
 
         foreach ($permissions as $permission) {

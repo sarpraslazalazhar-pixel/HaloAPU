@@ -55,7 +55,7 @@ class TicketCreatedUserNotification extends Notification
         $url = route('tiket.show', $this->ticket->id);
         
         $message = "Halo *{$nama}*\n\n";
-        $message .= "Pengajuan *{$layanan}* telah terdaftar di sistem ticketing Kami.\n\n";
+        $message .= "*{$layanan}* telah terdaftar di sistem ticketing Kami.\n\n";
         $message .= "Kamu bisa memantau status pengajuan melalui link berikut:\n{$url}\n\n";
         $message .= "Terima kasih,\n";
         $message .= "Tim Halo APU";

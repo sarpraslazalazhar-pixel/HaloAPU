@@ -46,7 +46,7 @@ class CsatReminderNotification extends Notification
             'judul_tiket' => $this->ticket->judul,
             'hari_sejak_solve' => $this->hariSejak,
             'judul' => "Berikan Rating Tiket Anda",
-            'pesan' => "Tiket #{$this->ticket->id} \"{$this->ticket->judul}\" sudah diselesaikan {$this->hariSejak} hari lalu. Mohon berikan rating Anda.",
+            'pesan' => "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah diselesaikan {$this->hariSejak} hari lalu. Mohon berikan rating Anda.",
             'icon' => 'star',
             'aksi_url' => "/tiket/{$this->ticket->id}",
         ];
@@ -55,10 +55,10 @@ class CsatReminderNotification extends Notification
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)
-            ->subject("Berikan Rating untuk Tiket #{$this->ticket->id} — Halo APU")
+            ->subject("Berikan Rating untuk Tiket #{$this->ticket->formatted_id} — Halo APU")
             ->greeting("Halo, {$notifiable->name}!")
             ->line("Tiket Anda telah diselesaikan. Kami ingin mendengar pendapat Anda!")
-            ->line("**Tiket:** #{$this->ticket->id} — {$this->ticket->judul}")
+            ->line("**Tiket:** #{$this->ticket->formatted_id} — {$this->ticket->judul}")
             ->line("**Diselesaikan:** {$this->hariSejak} hari lalu")
             ->action('Berikan Rating', url("/tiket/{$this->ticket->id}"))
             ->line('Rating Anda sangat berarti bagi peningkatan layanan kami. Terima kasih!');

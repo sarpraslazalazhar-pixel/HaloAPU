@@ -21,7 +21,7 @@ class MonitorController extends Controller
         $now = Carbon::now();
 
         // Ambil semua booking yang relevan (hari ini dan ke depan)
-        $query = RoomVehicleBooking::where('status', 'on_proses')
+        $query = RoomVehicleBooking::whereIn('status', ['open', 'on_proses'])
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->with(['ticket.user:id,username']);
 
@@ -78,8 +78,17 @@ class MonitorController extends Controller
             $allAssets = $allAssets->where('tipe', $tipe)->values();
         }
 
+        $formatWaktu = function ($start, $end) {
+            $s = Carbon::parse($start);
+            $e = Carbon::parse($end);
+            if ($s->isSameDay($e)) {
+                return $s->format('d M Y, H:i') . ' - ' . $e->format('H:i');
+            }
+            return $s->format('d M, H:i') . ' - ' . $e->format('d M, H:i');
+        };
+
         // Map status per aset
-        return $allAssets->map(function ($asset) use ($bookings, $now) {
+        return $allAssets->map(function ($asset) use ($bookings, $now, $formatWaktu) {
             $assetBookings = $bookings->where('nama_aset', $asset->nama_aset);
 
             // Cek apakah sedang dipakai
@@ -94,26 +103,25 @@ class MonitorController extends Controller
                     'tipe' => $asset->tipe,
                     'status' => 'Sedang Dipakai',
                     'user' => $activeBooking->ticket?->user?->username ?? '-',
-                    'waktu_mulai' => Carbon::parse($activeBooking->tanggal_mulai)->format('d M Y H:i'),
-                    'waktu_selesai' => Carbon::parse($activeBooking->tanggal_selesai)->format('d M Y H:i'),
+                    'waktu' => $formatWaktu($activeBooking->tanggal_mulai, $activeBooking->tanggal_selesai),
                     'booking_id' => $activeBooking->id,
                 ];
             }
 
-            // Cek apakah ada booking mendatang hari ini
+            // Cek apakah ada booking mendatang (tidak hanya hari ini)
             $nextBooking = $assetBookings
                 ->filter(fn ($b) => Carbon::parse($b->tanggal_mulai)->gt($now))
                 ->sortBy('tanggal_mulai')
                 ->first();
 
-            if ($nextBooking && Carbon::parse($nextBooking->tanggal_mulai)->isToday()) {
+            if ($nextBooking) {
+                $displayStatus = $nextBooking->status === 'open' ? 'Menunggu Persetujuan' : 'Dipesan';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
-                    'status' => 'Dipesan',
+                    'status' => $displayStatus,
                     'user' => $nextBooking->ticket?->user?->username ?? '-',
-                    'waktu_mulai' => Carbon::parse($nextBooking->tanggal_mulai)->format('d M Y H:i'),
-                    'waktu_selesai' => Carbon::parse($nextBooking->tanggal_selesai)->format('d M Y H:i'),
+                    'waktu' => $formatWaktu($nextBooking->tanggal_mulai, $nextBooking->tanggal_selesai),
                     'booking_id' => $nextBooking->id,
                 ];
             }
@@ -135,7 +143,7 @@ class MonitorController extends Controller
      */
     protected function getCalendarData()
     {
-        $bookings = RoomVehicleBooking::where('status', 'on_proses')
+        $bookings = RoomVehicleBooking::whereIn('status', ['open', 'on_proses'])
             ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
             ->with(['ticket.user:id,username'])
             ->orderBy('tanggal_mulai')

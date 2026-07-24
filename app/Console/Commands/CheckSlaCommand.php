@@ -37,6 +37,9 @@ class CheckSlaCommand extends Command
                     if (!$sla) {
                         return;
                     }
+                    
+                    // Prevent N+1 query inside SlaCalculator by setting the already loaded ticket relation
+                    $sla->setRelation('ticket', $ticket);
 
                     $wasResponseBreached = $sla->is_response_breached;
                     $wasResolutionBreached = $sla->is_resolution_breached;

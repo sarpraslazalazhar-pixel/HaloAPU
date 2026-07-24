@@ -148,15 +148,27 @@ class TicketWizardController extends Controller
             }
 
             // 3. Buat SLA tracking
-            $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
-            $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
+            // Jika tiket dibuat di luar jam kerja (status=pending),
+            // SLA langsung di-pause. Deadline akan dihitung ulang saat admin resume.
+            if ($initialStatus === 'pending') {
+                TicketSlaTracking::create([
+                    'ticket_id' => $ticket->id,
+                    'sla_response_deadline' => null,
+                    'sla_resolution_deadline' => null,
+                    'current_tier' => 0,
+                    'paused_at' => now(),
+                ]);
+            } else {
+                $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
+                $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
 
-            TicketSlaTracking::create([
-                'ticket_id' => $ticket->id,
-                'sla_response_deadline' => $responseDeadline,
-                'sla_resolution_deadline' => $resolutionDeadline,
-                'current_tier' => 0,
-            ]);
+                TicketSlaTracking::create([
+                    'ticket_id' => $ticket->id,
+                    'sla_response_deadline' => $responseDeadline,
+                    'sla_resolution_deadline' => $resolutionDeadline,
+                    'current_tier' => 0,
+                ]);
+            }
 
             // 4. Log awal
             TicketLog::create([

@@ -147,6 +147,27 @@ class SlaCalculator
             return;
         }
 
+        // Jika deadline masih null (tiket dibuat di luar jam kerja),
+        // hitung deadline baru dari sekarang (fresh start)
+        if ($sla->sla_response_deadline === null || $sla->sla_resolution_deadline === null) {
+            $ticket = $sla->ticket;
+            $subUnitId = $ticket->sub_unit_id;
+            $priority = $ticket->priority ?? 'Sedang';
+            $now = Carbon::now();
+
+            $respThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'respon');
+            $resThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'penyelesaian');
+
+            $sla->update([
+                'paused_at' => null,
+                'sla_response_deadline' => $this->addWorkingMinutes($now, $respThreshold),
+                'sla_resolution_deadline' => $this->addWorkingMinutes($now, $resThreshold),
+            ]);
+
+            Log::info("SLA #{$sla->id} di-resume (fresh start). Deadline dihitung dari sekarang.");
+            return;
+        }
+
         $pausedMinutes = $this->getWorkingMinutesBetween($sla->paused_at, Carbon::now());
         $newTotalPaused = $sla->total_paused_minutes + $pausedMinutes;
 

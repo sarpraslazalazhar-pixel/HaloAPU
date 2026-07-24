@@ -8,7 +8,7 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye } from 'lucide-react';
+import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye, Clock } from 'lucide-react';
 
 const validTransitions: Record<string, string[]> = {
     open: ['on_proses', 'reject', 'pending'],
@@ -266,7 +266,11 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                 <div className="space-y-1">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-slate-500">SLA Respon</span>
-                                        {ticket.sla_tracking.responded_at ? (
+                                        {!ticket.sla_tracking.sla_response_deadline && !ticket.sla_tracking.responded_at ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                                <Clock className="w-3 h-3" /> Belum Dimulai
+                                            </span>
+                                        ) : ticket.sla_tracking.responded_at ? (
                                             new Date(ticket.sla_tracking.responded_at) > new Date(ticket.sla_tracking.sla_response_deadline) ? (
                                                 <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                                                     <XCircle className="w-3 h-3" /> Terlanggar
@@ -286,9 +290,13 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                             </span>
                                         )}
                                     </div>
-                                    {ticket.sla_tracking.sla_response_deadline && (
+                                    {ticket.sla_tracking.sla_response_deadline ? (
                                         <p className="text-xs text-slate-400">
                                             Deadline: {formatDateId(ticket.sla_tracking.sla_response_deadline)}
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-slate-400">
+                                            SLA akan dimulai saat status diubah ke Proses
                                         </p>
                                     )}
                                     {ticket.sla_tracking.responded_at && (
@@ -302,7 +310,11 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                 <div className="space-y-1">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm text-slate-500">SLA Penyelesaian</span>
-                                        {ticket.sla_tracking.resolved_at ? (
+                                        {!ticket.sla_tracking.sla_resolution_deadline && !ticket.sla_tracking.resolved_at ? (
+                                            <span className="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
+                                                <Clock className="w-3 h-3" /> Belum Dimulai
+                                            </span>
+                                        ) : ticket.sla_tracking.resolved_at ? (
                                             new Date(ticket.sla_tracking.resolved_at) > new Date(ticket.sla_tracking.sla_resolution_deadline) ? (
                                                 <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                                                     <XCircle className="w-3 h-3" /> Terlanggar
@@ -322,9 +334,13 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                             </span>
                                         )}
                                     </div>
-                                    {ticket.sla_tracking.sla_resolution_deadline && (
+                                    {ticket.sla_tracking.sla_resolution_deadline ? (
                                         <p className="text-xs text-slate-400">
                                             Deadline: {formatDateId(ticket.sla_tracking.sla_resolution_deadline)}
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-slate-400">
+                                            SLA akan dimulai saat status diubah ke Proses
                                         </p>
                                     )}
                                     {ticket.sla_tracking.resolved_at && (
@@ -333,6 +349,7 @@ export default function TicketDetail({ ticket, formFields }: any) {
                                         </div>
                                     )}
                                 </div>
+
 
                                 {/* Pause Status */}
                                 {ticket.sla_tracking.paused_at && (

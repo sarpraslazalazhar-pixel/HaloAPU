@@ -75,15 +75,26 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
 
         // Listen for Echo notifications
         if (window.Echo && user) {
+            // Cek apakah sudah ditanya hari ini
+            const lastAskedStr = localStorage.getItem('notif_last_asked');
+            const lastAsked = lastAskedStr ? parseInt(lastAskedStr, 10) : 0;
+            const now = Date.now();
+            const oneDay = 24 * 60 * 60 * 1000;
+            const shouldAsk = (now - lastAsked) > oneDay;
+
             // Proactive notification permission request
-            if ('Notification' in window && Notification.permission === 'default') {
+            if ('Notification' in window && Notification.permission === 'default' && shouldAsk) {
                 toast((t) => (
                     <div className="flex flex-col gap-2">
                         <span className="text-sm font-medium">Aktifkan Notifikasi Browser</span>
                         <span className="text-xs text-muted-foreground">Terima pemberitahuan saat status tiket Anda diperbarui.</span>
                         <div className="flex gap-2 justify-end mt-1">
-                            <Button size="sm" variant="outline" onClick={() => toast.dismiss(t.id)}>Nanti</Button>
+                            <Button size="sm" variant="outline" onClick={() => {
+                                localStorage.setItem('notif_last_asked', Date.now().toString());
+                                toast.dismiss(t.id);
+                            }}>Nanti</Button>
                             <Button size="sm" onClick={() => {
+                                localStorage.setItem('notif_last_asked', Date.now().toString());
                                 toast.dismiss(t.id);
                                 Notification.requestPermission().then((permission) => {
                                     if (permission === 'granted') {

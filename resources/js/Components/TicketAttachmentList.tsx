@@ -25,9 +25,11 @@ export function TicketAttachmentList({ attachments, downloadRoute }: TicketAttac
         <div className="space-y-2">
             {attachments.map((att) => (
                 <div key={att.id} className="flex items-center justify-between p-3 border rounded-lg bg-white">
-                    <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-slate-400" />
-                        <span className="text-sm font-medium">{att.original_name || att.file_path?.split('/').pop()}</span>
+                    <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
+                        <FileText className="h-4 w-4 text-slate-400 shrink-0" />
+                        <span className="text-sm font-medium truncate" title={att.original_name || att.file_path?.split('/').pop()}>
+                            {att.original_name || att.file_path?.split('/').pop()}
+                        </span>
                     </div>
                     
                     <AttachmentViewer attachment={att} viewRoute={viewRoute} downloadRoute={downloadRoute}>

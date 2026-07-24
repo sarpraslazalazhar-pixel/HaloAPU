@@ -1,14 +1,16 @@
-- [x] Tiket di dashboard tampilkan hanya 5 & tabel top pengaju di ganti jadi Ringkasan Status
-- [x] branch ganti pelanggaran 
-- [x] ubah modul sla menjadi tabel CRUD
-- [x] unit & sub = layanan & sub layanan
-- [x] step 1 data pengajuan di hapus dan ambil data dari akun manajemen pengguna
-- [x] master data layanan (kanal, jenis)
-- [x] master data struktur (Divisi, Sub divisi, jabatan)
-- [x] master data konfigurasi (form, SLA, remainder, sistem)
-- [x] master data laporan (CSAT, Tiket)
-- [x] master data Management akun (Role, User)
-- [x] notif browser
+- [ ] Tiket di dashboard tampilkan hanya 5 & tabel top pengaju di ganti jadi Ringkasan Status
+- [ ] branch ganti pelanggaran 
+- [ ] ubah modul sla menjadi tabel CRUD
+- [ ] unit & sub = layanan & sub layanan
+- [ ] step 1 data pengajuan di hapus dan ambil data dari akun manajemen pengguna
+- [ ] master data layanan (kanal, jenis)
+- [ ] master data struktur (Divisi, Sub divisi, jabatan)
+- [ ] master data konfigurasi (form, SLA, remainder, sistem)
+- [ ] master data laporan (CSAT, Tiket)
+- [ ] master data Management akun (Role, User)
+- [ ] notif browser
 - [ ] app home browser user
-- [x] notifikasi ke operator masuk tiket
-- [x] tombol hide/show filter pada menu tiketing
+- [ ] notifikasi ke operator masuk tiket
+- [ ] tombol hide/show filter pada menu tiketing
+- [ ] Ajukan Revisi batas 5 kali
+- [ ] 

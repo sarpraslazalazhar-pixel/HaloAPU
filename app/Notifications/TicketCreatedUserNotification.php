@@ -5,9 +5,11 @@ namespace App\Notifications;
 use App\Channels\WhatsAppChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
-class TicketCreatedUserNotification extends Notification
+class TicketCreatedUserNotification extends Notification implements ShouldBroadcast
 {
     use Queueable;
 
@@ -20,11 +22,25 @@ class TicketCreatedUserNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        $channels = ['database', \NotificationChannels\WebPush\WebPushChannel::class];
+        $channels = ['database', 'broadcast', \NotificationChannels\WebPush\WebPushChannel::class];
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
         return $channels;
+    }
+
+    /**
+     * Get the broadcastable representation of the notification.
+     */
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        return new BroadcastMessage([
+            'type' => 'ticket_created',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Tiket Baru Berhasil Dibuat',
+            'message' => 'Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
+            'url' => route('tiket.show', $this->ticket->id),
+        ]);
     }
 
     public function toWebPush($notifiable, $notification)
@@ -66,3 +82,4 @@ class TicketCreatedUserNotification extends Notification
         ];
     }
 }
+

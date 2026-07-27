@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -8,7 +8,8 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye, Clock } from 'lucide-react';
+import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye, Clock, Edit2 } from 'lucide-react';
+import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 
 const validTransitions: Record<string, string[]> = {
  open: ['on_proses', 'reject', 'pending'],
@@ -24,6 +25,9 @@ const statusLabels: Record<string, string> = {
 export default function TicketDetail({ ticket, formFields, operators }: any) {
  const { auth } = usePage().props as any;
  const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
+
+ const [editorOpen, setEditorOpen] = useState(false);
+ const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
 
  const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
  const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
@@ -242,7 +246,12 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
  {statusData.general_attachments.map((file, idx) => (
  <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
  <span className="truncate max-w-[200px]">{file.name}</span>
- <button type="button" onClick={() => setStatusData('general_attachments', statusData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500">Hapus</button>
+ <div className="flex items-center gap-3">
+ {file.type.startsWith('image/') && (
+ <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'admin'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
+ )}
+ <button type="button" onClick={() => setStatusData('general_attachments', statusData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
+ </div>
  </div>
  ))}
  </div>
@@ -407,6 +416,22 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
  )}
  </div>
  </div>
+ 
+ {fileToEdit && (
+ <ImageEditorModal
+ isOpen={editorOpen}
+ onClose={() => setEditorOpen(false)}
+ imageFile={fileToEdit.file}
+ onSave={(editedFile) => {
+ if (fileToEdit.form === 'admin') {
+ const newFiles = [...statusData.general_attachments];
+ newFiles[fileToEdit.index] = editedFile;
+ setStatusData('general_attachments', newFiles);
+ }
+ setEditorOpen(false);
+ }}
+ />
+ )}
  </AdminLayout>
  );
 }

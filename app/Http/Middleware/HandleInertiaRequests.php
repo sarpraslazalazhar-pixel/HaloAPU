@@ -57,6 +57,7 @@ class HandleInertiaRequests extends Middleware
                 'logo_path' => \App\Models\SystemConfig::getValue('logo_path'),
                 'banner_path' => \App\Models\SystemConfig::getValue('banner_path'),
                 'favicon_path' => \App\Models\SystemConfig::getValue('favicon_path'),
+                'notification_sound_path' => \App\Models\SystemConfig::getValue('notification_sound_path'),
             ],
         ]);
     }

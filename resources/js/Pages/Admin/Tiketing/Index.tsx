@@ -23,6 +23,7 @@ interface Ticket {
  user: { id: number; username: string; divisi?: { nama_divisi: string } };
  unit?: { nama_unit: string };
  sub_unit?: { nama_layanan: string };
+ assigned_admin?: { id: number; name: string; username: string };
  status: string;
  created_at: string;
 }
@@ -108,6 +109,13 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  <p className="font-medium">{t.unit?.nama_unit || '-'}</p>
  <p className="text-xs text-slate-500">{t.sub_unit?.nama_layanan || '-'}</p>
  </div>
+ ),
+ },
+ {
+ key: 'operator',
+ header: 'Operator',
+ render: (t: Ticket) => (
+ <p className="font-medium">{t.assigned_admin?.name || t.assigned_admin?.username || '-'}</p>
  ),
  },
  { key: 'status', header: 'Status', render: (t: Ticket) => <StatusBadge status={t.status} /> },

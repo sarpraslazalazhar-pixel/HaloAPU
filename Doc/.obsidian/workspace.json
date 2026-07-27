@@ -28,7 +28,7 @@
               "type": "markdown",
               "state": {
                 "file": "preview.md",
-                "mode": "source",
+                "mode": "preview",
                 "source": false
               },
               "icon": "lucide-file",
@@ -200,8 +200,10 @@
   },
   "active": "3bb0e6691d41c2ef",
   "lastOpenFiles": [
-    "PLAN-FASE-3.md",
+    "PRD.md",
+    "~$KUMENTASI-HALO-APU.docx",
     "preview.md",
+    "PLAN-FASE-3.md",
     "2026-07-15.md",
     "Untitled",
     "PLAN-FASE-5.md",
@@ -213,13 +215,11 @@
     "verify_lengkap/word/settings.xml",
     "verify_lengkap/docProps/core.xml",
     "verify_lengkap/docProps",
-    "verify_lengkap/word/styles.xml",
     "Revisi.md",
     "DEPLOY-cPanel.md",
     "laporan/Login admin dan user.md",
     "Untitled 1.canvas",
     "Untitled.canvas",
-    "PRD.md",
     "PLAN-FASE-1.md",
     "PLAN-FASE-2.md",
     "PLAN-FASE-6.md"

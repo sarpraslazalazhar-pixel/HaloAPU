@@ -40,7 +40,7 @@ const userNavItems: NavItem[] = [
  { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
  { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
  { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
- { label: 'CSAT', icon: Star, route: '/csat/riwayat' },
+ { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
 ];
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -176,7 +176,7 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
  { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
  { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
  { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
- { label: 'CSAT', icon: Star, route: '/csat/riwayat' },
+ { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
  ];
 
  return (

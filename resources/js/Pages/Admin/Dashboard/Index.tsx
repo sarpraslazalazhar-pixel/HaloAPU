@@ -110,17 +110,17 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
  </div>
 
  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
- <Card>
+ <Card className="flex flex-col">
  <CardHeader className="flex flex-row items-center gap-2 pb-3">
  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-50 ">
  <AlertTriangle className="h-4 w-4 text-orange-500" />
  </div>
  <CardTitle className="text-sm font-semibold">Tiket Perlu Ditindak Lanjuti</CardTitle>
  </CardHeader>
- <CardContent>
+ <CardContent className="flex-1 overflow-auto">
  {followUpTickets?.length > 0 ? (
  <div className="space-y-2">
- {followUpTickets.slice(0, 5).map((t: any) => (
+ {followUpTickets.map((t: any) => (
  <div key={t.id} className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50">
  <div className="flex items-center gap-3 min-w-0">
  <span className="shrink-0 font-semibold text-foreground">#TKT-{formatTicketId(t.id)}</span>

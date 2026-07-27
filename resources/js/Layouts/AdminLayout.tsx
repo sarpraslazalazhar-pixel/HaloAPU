@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
 import toast, { Toaster } from 'react-hot-toast';
 import {
@@ -44,6 +44,7 @@ import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
+import { useNotificationSound } from '@/hooks/useNotificationSound';
 
 interface AdminLayoutProps {
  children: React.ReactNode;
@@ -275,6 +276,25 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
  const [sidebarOpen, setSidebarOpen] = useState(false);
  const { subscribe } = useWebPush(admin);
 
+  // Sound URL
+  const soundUrl = appConfig?.notification_sound_path
+    ? `/system/notification-sound?v=${encodeURIComponent(appConfig.notification_sound_path)}`
+    : '/sounds/ting-ting-ting.wav';
+
+  const { isMuted, play } = useNotificationSound({ soundUrl });
+  const isMutedRef = useRef(isMuted);
+
+ // Sync isMuted state ke ref
+ useEffect(() => {
+   isMutedRef.current = isMuted;
+ }, [isMuted]);
+
+  const playNotificationSound = useCallback(() => {
+    if (!isMutedRef.current) {
+        play();
+    }
+  }, [play]);
+
  // Collapsed sidebar state with localStorage persistence
  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
  if (typeof window !== 'undefined') {
@@ -341,6 +361,9 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
 
  window.Echo.private(channel)
  .notification((notification: any) => {
+ // Mainkan suara notifikasi
+ playNotificationSound();
+
  if ('Notification' in window && Notification.permission === 'granted') {
  new Notification(notification.title || 'Pemberitahuan Baru', {
  body: notification.message || '',

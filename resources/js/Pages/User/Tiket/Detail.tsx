@@ -8,9 +8,10 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, XCircle, Eye, CheckCircle2 } from 'lucide-react';
+import { FileText, XCircle, Eye, CheckCircle2, Edit2 } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
+import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 
 interface DetailProps {
  ticket: any;
@@ -23,6 +24,8 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const { data: revData, setData: setRevData, post: postRev, processing: processingRev, errors: errorsRev, reset: resetRev } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
  const [showRevForm, setShowRevForm] = useState(false);
  const [showConfirm, setShowConfirm] = useState(false);
+ const [editorOpen, setEditorOpen] = useState(false);
+ const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'reply' | 'rev'} | null>(null);
  const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
  const canCancel = ticket.status === 'open';
 
@@ -172,7 +175,12 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  {revData.general_attachments.map((file, idx) => (
  <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
  <span className="truncate max-w-[200px]">{file.name}</span>
- <button type="button" onClick={() => setRevData('general_attachments', revData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500">Hapus</button>
+ <div className="flex items-center gap-3">
+ {file.type.startsWith('image/') && (
+ <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'rev'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
+ )}
+ <button type="button" onClick={() => setRevData('general_attachments', revData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
+ </div>
  </div>
  ))}
  </div>
@@ -323,7 +331,12 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  {replyData.general_attachments.map((file, idx) => (
  <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
  <span className="truncate max-w-[200px]">{file.name}</span>
- <button type="button" onClick={() => setReplyData('general_attachments', replyData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500">Hapus</button>
+ <div className="flex items-center gap-3">
+ {file.type.startsWith('image/') && (
+ <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'reply'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
+ )}
+ <button type="button" onClick={() => setReplyData('general_attachments', replyData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
+ </div>
  </div>
  ))}
  </div>
@@ -336,6 +349,26 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  )}
  </div>
  </div>
+ 
+ {fileToEdit && (
+ <ImageEditorModal
+ isOpen={editorOpen}
+ onClose={() => setEditorOpen(false)}
+ imageFile={fileToEdit.file}
+ onSave={(editedFile) => {
+ if (fileToEdit.form === 'reply') {
+ const newFiles = [...replyData.general_attachments];
+ newFiles[fileToEdit.index] = editedFile;
+ setReplyData('general_attachments', newFiles);
+ } else if (fileToEdit.form === 'rev') {
+ const newFiles = [...revData.general_attachments];
+ newFiles[fileToEdit.index] = editedFile;
+ setRevData('general_attachments', newFiles);
+ }
+ setEditorOpen(false);
+ }}
+ />
+ )}
  </UserLayout>
  );
 }

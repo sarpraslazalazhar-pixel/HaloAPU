@@ -172,10 +172,10 @@ class SystemConfigController extends Controller
             ]);
         }
 
-        $defaultPath = public_path('sounds/ting-ting-ting.mp3');
+        $defaultPath = public_path('sounds/ting-ting-ting.wav');
         if (file_exists($defaultPath)) {
             return response()->file($defaultPath, [
-                'Content-Type' => 'audio/mpeg',
+                'Content-Type' => 'audio/wav',
                 'Accept-Ranges' => 'bytes',
                 'Cache-Control' => 'public, max-age=3600',
             ]);

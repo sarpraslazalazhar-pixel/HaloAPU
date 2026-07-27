@@ -68,6 +68,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  const [hasInteracted, setHasInteracted] = useState(false);
  const audioContextRef = useRef<AudioContext | null>(null);
  const audioBufferRef = useRef<AudioBuffer | null>(null);
+ const fallbackAudioRef = useRef<HTMLAudioElement | null>(null);
  const prevLatestTicketIdRef = useRef<number | null>(null);
  const prevTicketsRef = useRef<any[]>([]);
 
@@ -75,6 +76,13 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  if (typeof window !== 'undefined') {
  const cacheBuster = notificationSound ?`?v=${encodeURIComponent(notificationSound)}`: '';
  const soundUrl = route('system.notification-sound') + cacheBuster;
+
+ // Prepare HTML Audio fallback
+ const fallbackAudio = new Audio(soundUrl);
+ fallbackAudio.preload = 'auto';
+ fallbackAudioRef.current = fallbackAudio;
+
+ // Prepare Web Audio API (primary)
  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
  audioContextRef.current = new AudioContextClass();
  fetch(soundUrl)
@@ -83,7 +91,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  .then(decodedData => {
  if (decodedData) audioBufferRef.current = decodedData;
  })
- .catch(err => console.error("Gagal memuat file audio:", err));
+ .catch(err => console.error("Gagal memuat file audio (Web Audio API):", err));
  }
  }, [notificationSound]);
 
@@ -104,6 +112,8 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  const currentLatestId = recentTickets[0].id;
  if (prevLatestTicketIdRef.current !== null && currentLatestId > prevLatestTicketIdRef.current) {
  if (hasInteracted) {
+ let played = false;
+ // Try Web Audio API first
  if (audioContextRef.current && audioBufferRef.current) {
  try {
  if (audioContextRef.current.state === 'suspended') {
@@ -116,9 +126,19 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  source.connect(gainNode);
  gainNode.connect(audioContextRef.current.destination);
  source.start(0);
+ played = true;
  } catch (e) {
- console.error('Web Audio API error:', e);
+ console.error('Web Audio API error, trying HTML Audio fallback:', e);
  }
+ }
+ // Fallback to HTML Audio element
+ if (!played && fallbackAudioRef.current) {
+ fallbackAudioRef.current.currentTime = 0;
+ fallbackAudioRef.current.volume = 1.0;
+ fallbackAudioRef.current.play().catch(err => {
+ console.error('HTML Audio fallback juga gagal:', err);
+ toast.error('Gagal memainkan suara notifikasi.', { id: 'tv-audio-error', duration: 3000 });
+ });
  }
  }
  if (prevTicketsRef.current.length > 0) {
@@ -166,6 +186,18 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
  audioContextRef.current.resume();
  }
+ // Unlock HTML5 Audio by playing and immediately pausing it
+ if (fallbackAudioRef.current) {
+ fallbackAudioRef.current.volume = 0; // mute temporarily just in case
+ fallbackAudioRef.current.play().then(() => {
+ if (fallbackAudioRef.current) {
+ fallbackAudioRef.current.pause();
+ fallbackAudioRef.current.currentTime = 0;
+ fallbackAudioRef.current.volume = 1;
+ }
+ }).catch(e => console.error('Gagal unlock audio:', e));
+ }
+ toast.success('Dashboard dimulai! Notifikasi suara aktif.', { id: 'dashboard-init', duration: 3000 });
  }}
  className="group relative inline-flex items-center justify-center gap-3 px-10 py-5 font-bold text-white text-lg transition-all duration-200 bg-[#00a2e8] rounded-2xl hover:bg-[#0081b8] shadow-lg shadow-blue-200/50 active:scale-[0.98]"
  >

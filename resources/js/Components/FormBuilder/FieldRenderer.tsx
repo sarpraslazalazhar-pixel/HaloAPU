@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FormField } from '@/types';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Edit2 } from 'lucide-react';
+import ImageEditorModal from './ImageEditorModal';
 
 interface FieldRendererProps {
  field: FormField;
@@ -12,6 +13,9 @@ interface FieldRendererProps {
 export default function FieldRenderer({ field, value, onChange, errors }: FieldRendererProps) {
  const error = errors?.[`form_data.${field.id}`];
  const errorClass = error ? 'border-red-500' : 'border-gray-300';
+
+ const [editorOpen, setEditorOpen] = useState(false);
+ const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
  const renderInput = () => {
  switch (field.tipe_field) {
@@ -45,16 +49,21 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  required={field.wajib}
  />
  );
- case 'tanggal':
+ case 'tanggal': {
+ const todayDate = new Date();
+ todayDate.setMinutes(todayDate.getMinutes() - todayDate.getTimezoneOffset());
+ const minDate = todayDate.toISOString().split('T')[0];
  return (
  <input
  type="date"
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
+ min={minDate}
  onChange={e => onChange(field.id, e.target.value)}
  required={field.wajib}
  />
  );
+ }
  case 'waktu':
  return (
  <input
@@ -65,16 +74,21 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  required={field.wajib}
  />
  );
- case 'datetime':
+ case 'datetime': {
+ const todayDateTime = new Date();
+ todayDateTime.setMinutes(todayDateTime.getMinutes() - todayDateTime.getTimezoneOffset());
+ const minDateTime = todayDateTime.toISOString().slice(0, 16);
  return (
  <input
  type="datetime-local"
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
+ min={minDateTime}
  onChange={e => onChange(field.id, e.target.value)}
  required={field.wajib}
  />
  );
+ }
  case 'dropdown':
  return (
  <select
@@ -170,13 +184,45 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  case 'upload_gambar':
  case 'upload_file':
  return (
+ <div className="space-y-2">
  <input
  type="file"
  className={`w-full ${errorClass}`}
  accept={field.tipe_field === 'upload_gambar' ? 'image/*' : undefined}
- onChange={e => onChange(field.id, e.target.files?.[0] || null)}
- required={field.wajib}
+ onChange={e => {
+ const file = e.target.files?.[0] || null;
+ if (field.tipe_field === 'upload_gambar' && file && file.type.startsWith('image/')) {
+ setSelectedImageFile(file);
+ setEditorOpen(true);
+ } else {
+ onChange(field.id, file);
+ }
+ }}
+ required={field.wajib && !value}
  />
+ {field.tipe_field === 'upload_gambar' && value instanceof File && (
+ <div className="mt-2 flex items-center gap-3 p-3 border rounded-lg bg-gray-50">
+ <div className="w-16 h-16 rounded-md bg-gray-200 overflow-hidden flex items-center justify-center shrink-0">
+ <img src={URL.createObjectURL(value)} alt="Preview" className="w-full h-full object-cover" />
+ </div>
+ <div className="flex-1 min-w-0">
+ <p className="text-sm font-medium text-gray-700 truncate">{value.name}</p>
+ <p className="text-xs text-gray-500">{(value.size / 1024).toFixed(1)} KB</p>
+ </div>
+ <button
+ type="button"
+ onClick={() => {
+ setSelectedImageFile(value);
+ setEditorOpen(true);
+ }}
+ className="p-2 text-blue-600 hover:bg-blue-50 rounded-md transition-colors flex items-center gap-1 text-sm font-medium"
+ >
+ <Edit2 className="w-4 h-4" />
+ Edit
+ </button>
+ </div>
+ )}
+ </div>
  );
  default:
  return (
@@ -229,6 +275,18 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  </label>
  {renderInput()}
  {error && <p className="text-red-500 text-xs">{error}</p>}
+ 
+ {selectedImageFile && (
+ <ImageEditorModal
+ isOpen={editorOpen}
+ onClose={() => setEditorOpen(false)}
+ imageFile={selectedImageFile}
+ onSave={(editedFile) => {
+ onChange(field.id, editedFile);
+ setEditorOpen(false);
+ }}
+ />
+ )}
  </div>
  );
 }

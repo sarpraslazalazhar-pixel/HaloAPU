@@ -5,9 +5,11 @@ namespace App\Notifications;
 use App\Channels\WhatsAppChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
-class TicketCreatedAdminNotification extends Notification
+class TicketCreatedAdminNotification extends Notification implements ShouldBroadcast
 {
     use Queueable;
 
@@ -24,6 +26,7 @@ class TicketCreatedAdminNotification extends Notification
 
         if ($notifiable instanceof \App\Models\Admin) {
             $channels[] = 'database';
+            $channels[] = 'broadcast';
             $channels[] = \NotificationChannels\WebPush\WebPushChannel::class;
             // Jika admin punya nomor WA, kirim juga via WhatsApp
             if (!empty($notifiable->no_wa)) {
@@ -40,6 +43,24 @@ class TicketCreatedAdminNotification extends Notification
         }
 
         return $channels;
+    }
+
+    /**
+     * Get the broadcastable representation of the notification.
+     * Ini yang dikirim via Echo ke browser untuk real-time notification + suara.
+     */
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
+        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+
+        return new BroadcastMessage([
+            'type' => 'ticket_created',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Tiket Baru Masuk',
+            'message' => "Ada tiket baru dari {$pembuat} terkait layanan {$layanan}.",
+            'url' => url('/admin/tiket/' . $this->ticket->id),
+        ]);
     }
 
     public function toWebPush($notifiable, $notification)
@@ -95,3 +116,4 @@ class TicketCreatedAdminNotification extends Notification
         ];
     }
 }
+

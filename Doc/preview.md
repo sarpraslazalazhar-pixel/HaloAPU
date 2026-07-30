@@ -17,6 +17,6 @@
 - [x] laporan tiket tambahkan filter dan card seperti di dasbor
 - [x] saat status baru bisa pilih operator sesuai kanal layanan 
 - [x] suara notif belum bersuara
-- [ ] Samping layanan tiketing ada nama operator yang bertugas
-- [ ] Tanggal yang sudah lewat gak bisa di pilih
+- [x] Samping layanan tiketing ada nama operator yang bertugas
+- [x] Tanggal yang sudah lewat gak bisa di pilih
 - [x] edit foto untuk

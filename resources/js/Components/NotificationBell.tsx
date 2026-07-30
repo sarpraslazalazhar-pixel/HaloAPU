@@ -11,6 +11,8 @@ import {
  DropdownMenuItem,
  DropdownMenuTrigger,
 } from '@/Components/ui/dropdown-menu';
+import { motion, AnimatePresence } from 'framer-motion';
+import { popoverVariants } from '@/lib/animationConfig';
 import { NotificationItem } from '@/types';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
 
@@ -192,25 +194,36 @@ export default function NotificationBell() {
  </Button>
 
  <div className="relative">
+ <motion.div whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}>
  <Button variant="ghost" size="icon" className="relative" onClick={() => setIsOpen(!isOpen)}>
  <Bell className="h-5 w-5" />
  {unreadCount > 0 && (
- <Badge
- variant="destructive"
- className="absolute -top-1 -right-1 h-5 min-w-[20px] flex items-center justify-center text-xs p-0 px-1"
+ <motion.span
+ initial={{ scale: 0 }}
+ animate={{ scale: 1 }}
+ transition={{ type: "spring", stiffness: 500, damping: 20 }}
+ className="absolute -top-1 -right-1 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white px-1 shadow-sm"
  >
  {unreadCount > 99 ? '99+' : unreadCount}
- </Badge>
+ </motion.span>
  )}
  </Button>
+ </motion.div>
 
+ <AnimatePresence>
  {isOpen && (
- <div className="absolute right-0 mt-2 w-96 bg-background border rounded-md shadow-lg z-50 overflow-hidden flex flex-col">
- <div className="flex items-center justify-between p-4 border-b">
- <h3 className="font-semibold">Notifikasi</h3>
+ <motion.div
+ variants={popoverVariants}
+ initial="initial"
+ animate="animate"
+ exit="exit"
+ className="absolute right-0 mt-2 w-96 bg-background border rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col"
+ >
+ <div className="flex items-center justify-between p-4 border-b bg-muted/30">
+ <h3 className="font-semibold text-sm">Notifikasi</h3>
  {unreadCount > 0 && (
- <Button variant="ghost" size="sm" onClick={handleMarkAllRead}>
- <Check className="h-4 w-4 mr-1" />
+ <Button variant="ghost" size="sm" onClick={handleMarkAllRead} className="text-xs h-8">
+ <Check className="h-3.5 w-3.5 mr-1 text-sky-600" />
  Tandai semua dibaca
  </Button>
  )}
@@ -298,8 +311,9 @@ export default function NotificationBell() {
  <ExternalLink className="h-3 w-3" />
  </a>
  </div>
- </div>
+ </motion.div>
  )}
+ </AnimatePresence>
  </div>
  </div>
  );

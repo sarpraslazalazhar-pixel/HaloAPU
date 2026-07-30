@@ -38,6 +38,9 @@ import {
  TooltipTrigger
 } from "@/Components/ui/tooltip";
 
+import { motion, AnimatePresence } from 'framer-motion';
+import { accordionVariants, navItemHover } from '@/lib/animationConfig';
+import PageTransition from '@/Components/PageTransition';
 import NotificationBell from '@/Components/NotificationBell';
 import ProfileModal from '@/Components/ProfileModal';
 import { BottomNav } from '@/Components/BottomNav';
@@ -126,147 +129,157 @@ const adminNavItems: NavItem[] = [
 ];
 
 function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean; isCollapsed: boolean }) {
- const Icon = item.icon;
+  const Icon = item.icon;
 
- return (
- <Link
- href={item.route!}
- title={isCollapsed ? item.label : undefined}
- className={`group relative flex items-center transition-all duration-200 ${isCollapsed
- ? 'h-10 w-10 justify-center rounded-xl mx-auto'
- : 'gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full'
- } ${active
- ? 'bg-sky-500/10 text-sky-600 font-semibold shadow-sm border border-sky-200/50 '
- : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
- }`}
- >
- <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
- {!isCollapsed && <span className="truncate">{item.label}</span>}
- </Link>
- );
+  return (
+    <motion.div variants={navItemHover} initial="rest" whileHover="hover" className="w-full">
+      <Link
+        href={item.route!}
+        title={isCollapsed ? item.label : undefined}
+        className={`group relative flex items-center transition-all duration-200 ${isCollapsed
+          ? 'h-10 w-10 justify-center rounded-xl mx-auto'
+          : 'gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full'
+        } ${active
+          ? 'bg-sky-500/10 text-sky-600 font-semibold shadow-sm border border-sky-200/50 '
+          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        }`}
+      >
+        <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
+        {!isCollapsed && <span className="truncate">{item.label}</span>}
+      </Link>
+    </motion.div>
+  );
 }
 
 function NavDropdown({ item, isCollapsed, url, permissions }: { item: NavItem; isCollapsed: boolean; url: string; permissions?: string[] }) {
- const visibleChildren = item.children?.filter(child =>
- !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup))
- ) || [];
+  const visibleChildren = item.children?.filter(child =>
+    !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup))
+  ) || [];
 
- if (visibleChildren.length === 0) return null;
+  if (visibleChildren.length === 0) return null;
 
- const isChildActive = visibleChildren.some(child => isRouteActive(url, child.route));
- const [isOpen, setIsOpen] = useState(isChildActive);
- const [popoverOpen, setPopoverOpen] = useState(false);
- const popoverRef = React.useRef<HTMLDivElement>(null);
+  const isChildActive = visibleChildren.some(child => isRouteActive(url, child.route));
+  const [isOpen, setIsOpen] = useState(isChildActive);
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const popoverRef = React.useRef<HTMLDivElement>(null);
 
- useEffect(() => {
- if (isChildActive) {
- setIsOpen(true);
- }
- }, [url]);
+  useEffect(() => {
+    if (isChildActive) {
+      setIsOpen(true);
+    }
+  }, [url]);
 
- // Close popover when clicking outside
- useEffect(() => {
- if (!popoverOpen) return;
- const handleClick = (e: MouseEvent) => {
- if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
- setPopoverOpen(false);
- }
- };
- document.addEventListener('mousedown', handleClick);
- return () => document.removeEventListener('mousedown', handleClick);
- }, [popoverOpen]);
+  useEffect(() => {
+    if (!popoverOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setPopoverOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [popoverOpen]);
 
- const Icon = item.icon;
+  const Icon = item.icon;
 
- if (isCollapsed) {
- return (
- <div className="relative flex justify-center w-full">
- <DropdownMenu open={popoverOpen} onOpenChange={setPopoverOpen}>
- <DropdownMenuTrigger
- aria-label={item.label}
- className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 cursor-pointer outline-none ${isChildActive || popoverOpen
- ? 'bg-sky-500/10 text-sky-600 font-semibold border border-sky-200/50 shadow-sm'
- : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
- }`}
- >
- <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isChildActive || popoverOpen ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
- </DropdownMenuTrigger>
+  if (isCollapsed) {
+    return (
+      <div className="relative flex justify-center w-full">
+        <DropdownMenu open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <DropdownMenuTrigger
+            aria-label={item.label}
+            className={`group relative flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 cursor-pointer outline-none ${isChildActive || popoverOpen
+              ? 'bg-sky-500/10 text-sky-600 font-semibold border border-sky-200/50 shadow-sm'
+              : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+            }`}
+          >
+            <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isChildActive || popoverOpen ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
+          </DropdownMenuTrigger>
 
- <DropdownMenuContent side="right" align="start" sideOffset={10} className="w-52 p-1.5 z-[100] shadow-xl border bg-popover">
- <div className="text-xs font-bold text-sky-600 px-2.5 py-1.5 border-b mb-1 flex items-center gap-2">
- <Icon className="h-3.5 w-3.5" />
- <span>{item.label}</span>
- </div>
- <div className="space-y-0.5">
- {visibleChildren.map((child, idx) => {
- const active = isRouteActive(url, child.route);
- const ChildIcon = child.icon || Icon;
- return (
- <Link
- key={idx}
- href={child.route}
- onClick={() => setPopoverOpen(false)}
- className={`flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-lg cursor-pointer transition-colors w-full outline-none ${active
- ? 'bg-sky-500/15 text-sky-600 font-semibold'
- : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground hover:bg-muted/50'
- }`}
- >
- <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
- <span className="truncate">{child.label}</span>
- </Link>
- );
- })}
- </div>
- </DropdownMenuContent>
- </DropdownMenu>
- </div>
- );
- }
+          <DropdownMenuContent side="right" align="start" sideOffset={10} className="w-52 p-1.5 z-[100] shadow-xl border bg-popover">
+            <div className="text-xs font-bold text-sky-600 px-2.5 py-1.5 border-b mb-1 flex items-center gap-2">
+              <Icon className="h-3.5 w-3.5" />
+              <span>{item.label}</span>
+            </div>
+            <div className="space-y-0.5">
+              {visibleChildren.map((child, idx) => {
+                const active = isRouteActive(url, child.route);
+                const ChildIcon = child.icon || Icon;
+                return (
+                  <Link
+                    key={idx}
+                    href={child.route}
+                    onClick={() => setPopoverOpen(false)}
+                    className={`flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-lg cursor-pointer transition-colors w-full outline-none ${active
+                      ? 'bg-sky-500/15 text-sky-600 font-semibold'
+                      : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
+                    <span className="truncate">{child.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    );
+  }
 
- return (
- <div className="flex flex-col gap-0.5">
- <button
- type="button"
- onClick={() => setIsOpen(!isOpen)}
- className={`group relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full transition-all duration-200 ${isChildActive
- ? 'bg-sky-500/10 text-sky-600 font-semibold'
- : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
- }`}
- >
- <div className="flex items-center gap-3 min-w-0">
- <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isChildActive ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
- <span className="truncate">{item.label}</span>
- </div>
- <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-foreground' : 'text-muted-foreground'}`} />
- </button>
+  return (
+    <div className="flex flex-col gap-0.5">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className={`group relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full transition-all duration-200 ${isChildActive
+          ? 'bg-sky-500/10 text-sky-600 font-semibold'
+          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+        }`}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isChildActive ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
+          <span className="truncate">{item.label}</span>
+        </div>
+        <ChevronDown className={`h-4 w-4 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180 text-foreground' : 'text-muted-foreground'}`} />
+      </button>
 
- {isOpen && (
- <div className="flex flex-col gap-0.5 ml-4 pl-3 border-l border-border/60 py-1 transition-all">
- {visibleChildren.map((child, idx) => {
- const active = isRouteActive(url, child.route);
- const ChildIcon = child.icon;
- return (
- <Link
- key={idx}
- href={child.route}
- className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 ${active
- ? 'bg-sky-500/15 text-sky-600 font-semibold shadow-xs'
- : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
- }`}
- >
- {ChildIcon ? (
- <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
- ) : (
- <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? 'bg-sky-500' : 'bg-muted-foreground/40'}`} />
- )}
- <span className="truncate">{child.label}</span>
- </Link>
- );
- })}
- </div>
- )}
- </div>
- );
+      <AnimatePresence initial={false}>
+        {isOpen && (
+          <motion.div
+            variants={accordionVariants}
+            initial="closed"
+            animate="open"
+            exit="closed"
+            className="flex flex-col gap-0.5 ml-4 pl-3 border-l border-border/60 py-1"
+          >
+            {visibleChildren.map((child, idx) => {
+              const active = isRouteActive(url, child.route);
+              const ChildIcon = child.icon;
+              return (
+                <motion.div key={idx} variants={navItemHover} initial="rest" whileHover="hover">
+                  <Link
+                    href={child.route}
+                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 ${active
+                      ? 'bg-sky-500/15 text-sky-600 font-semibold shadow-xs'
+                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                    }`}
+                  >
+                    {ChildIcon ? (
+                      <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
+                    ) : (
+                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? 'bg-sky-500' : 'bg-muted-foreground/40'}`} />
+                    )}
+                    <span className="truncate">{child.label}</span>
+                  </Link>
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 export default function AdminLayout({ children, title }: AdminLayoutProps) {
@@ -581,11 +594,11 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
 
  <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={admin} isAdmin={true} />
  </header>
- <main className="flex-1 overflow-y-auto">
- <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
- {children}
- </div>
- </main>
+        <main className="flex-1 overflow-y-auto flex flex-col">
+          <PageTransition className="mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
+            {children}
+          </PageTransition>
+        </main>
  </div>
 
  <BottomNav items={bottomNavItems} />

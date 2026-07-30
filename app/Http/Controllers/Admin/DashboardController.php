@@ -9,6 +9,7 @@ use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 
 class DashboardController extends Controller
@@ -57,43 +58,49 @@ class DashboardController extends Controller
             ->limit(10)
             ->get();
 
-        $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+        $units = Cache::remember('admin_dashboard_units', 300, function () {
+            return Unit::where('aktif', true)->orderBy('nama_unit')->get();
+        });
         $unitNames = $units->pluck('nama_unit', 'id');
 
-        // Monthly chart — only if year is selected
+        // Monthly chart — cached per year (60s)
         $monthlyChartData = [];
         if ($year) {
-            $monthlyRaw = Ticket::selectRaw('MONTH(created_at) as bulan, unit_id, COUNT(*) as total')
-                ->whereYear('created_at', $year)
-                ->groupBy('bulan', 'unit_id')
-                ->with('unit')
-                ->get();
+            $monthlyChartData = Cache::remember("admin_dashboard_monthly_{$year}", 60, function () use ($year, $unitNames) {
+                $monthlyRaw = Ticket::selectRaw('MONTH(created_at) as bulan, unit_id, COUNT(*) as total')
+                    ->whereYear('created_at', $year)
+                    ->groupBy('bulan', 'unit_id')
+                    ->with('unit')
+                    ->get();
 
-            $monthlyChartData = collect(range(1, 12))->map(function ($b) use ($monthlyRaw, $unitNames) {
-                $row = ['bulan' => date('M', mktime(0, 0, 0, $b, 1))];
-                foreach ($unitNames as $id => $name) {
-                    $row[$name] = $monthlyRaw->firstWhere(fn($r) => $r->bulan == $b && $r->unit_id == $id)?->total ?? 0;
-                }
-                return $row;
+                return collect(range(1, 12))->map(function ($b) use ($monthlyRaw, $unitNames) {
+                    $row = ['bulan' => date('M', mktime(0, 0, 0, $b, 1))];
+                    foreach ($unitNames as $id => $name) {
+                        $row[$name] = $monthlyRaw->firstWhere(fn($r) => $r->bulan == $b && $r->unit_id == $id)?->total ?? 0;
+                    }
+                    return $row;
+                });
             });
         }
 
-        // Yearly chart — all years regardless of filter
-        $yearlyRaw = Ticket::selectRaw('YEAR(created_at) as tahun, unit_id, COUNT(*) as total')
-            ->groupBy('tahun', 'unit_id')
-            ->with('unit')
-            ->get();
+        // Yearly chart — cached (60s)
+        $yearlyChartData = Cache::remember('admin_dashboard_yearly', 60, function () use ($unitNames) {
+            $yearlyRaw = Ticket::selectRaw('YEAR(created_at) as tahun, unit_id, COUNT(*) as total')
+                ->groupBy('tahun', 'unit_id')
+                ->with('unit')
+                ->get();
 
-        $yearlyChartData = $yearlyRaw
-            ->groupBy('tahun')
-            ->sortKeys()
-            ->map(function ($items, $tahun) use ($unitNames) {
-                $row = ['tahun' => (string) $tahun];
-                foreach ($unitNames as $id => $name) {
-                    $row[$name] = $items->firstWhere('unit_id', $id)?->total ?? 0;
-                }
-                return $row;
-            })->values();
+            return $yearlyRaw
+                ->groupBy('tahun')
+                ->sortKeys()
+                ->map(function ($items, $tahun) use ($unitNames) {
+                    $row = ['tahun' => (string) $tahun];
+                    foreach ($unitNames as $id => $name) {
+                        $row[$name] = $items->firstWhere('unit_id', $id)?->total ?? 0;
+                    }
+                    return $row;
+                })->values();
+        });
 
         // Sub unit chart — per unit + aggregate across all
         $subUnitQuery = Ticket::selectRaw('unit_id, sub_unit_id, COUNT(*) as total')
@@ -119,39 +126,45 @@ class DashboardController extends Controller
                 'value' => $items->sum('total'),
             ])->values();
 
-        // ── Top 5 User (all-time, using tickets table) ──
-        $topUsersAll = DB::table('tickets')
-            ->join('users', 'tickets.user_id', '=', 'users.id')
-            ->select('users.username', DB::raw('COUNT(*) as total_tiket'))
-            ->groupBy('users.id', 'users.username')
-            ->orderByDesc('total_tiket')
-            ->limit(5)
-            ->get();
+        // ── Top 5 User (cached 60s) ──
+        $topUsersAll = Cache::remember('admin_dashboard_top_users_all', 60, function () {
+            return DB::table('tickets')
+                ->join('users', 'tickets.user_id', '=', 'users.id')
+                ->select('users.username', DB::raw('COUNT(*) as total_tiket'))
+                ->groupBy('users.id', 'users.username')
+                ->orderByDesc('total_tiket')
+                ->limit(5)
+                ->get();
+        });
 
-        // ── CSAT Trend (rata-rata per bulan, 12 bulan terakhir) ──
-        $csatTrend = DB::table('csats')
-            ->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
-                DB::raw('ROUND(AVG(rating), 2) as rata_rata'),
-                DB::raw('COUNT(*) as total'),
-            )
-            ->where('created_at', '>=', now()->subYear())
-            ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
-            ->orderBy('bulan')
-            ->get();
+        // ── CSAT Trend (cached 60s) ──
+        $csatTrend = Cache::remember('admin_dashboard_csat_trend', 60, function () {
+            return DB::table('csats')
+                ->select(
+                    DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
+                    DB::raw('ROUND(AVG(rating), 2) as rata_rata'),
+                    DB::raw('COUNT(*) as total'),
+                )
+                ->where('created_at', '>=', now()->subYear())
+                ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
+                ->orderBy('bulan')
+                ->get();
+        });
 
-        // ── Tiket Bulanan (12 bulan terakhir) ──
-        $tiketBulanan = DB::table('tickets')
-            ->select(
-                DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
-                DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN status IN ('Selesai', 'Solve', 'selesai', 'solve') THEN 1 ELSE 0 END) as selesai"),
-                DB::raw("SUM(CASE WHEN status NOT IN ('Selesai', 'Solve', 'selesai', 'solve') THEN 1 ELSE 0 END) as aktif"),
-            )
-            ->where('created_at', '>=', now()->subYear())
-            ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
-            ->orderBy('bulan')
-            ->get();
+        // ── Tiket Bulanan (cached 60s) ──
+        $tiketBulanan = Cache::remember('admin_dashboard_tiket_bulanan', 60, function () {
+            return DB::table('tickets')
+                ->select(
+                    DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
+                    DB::raw('COUNT(*) as total'),
+                    DB::raw("SUM(CASE WHEN status IN ('Selesai', 'Solve', 'selesai', 'solve') THEN 1 ELSE 0 END) as selesai"),
+                    DB::raw("SUM(CASE WHEN status NOT IN ('Selesai', 'Solve', 'selesai', 'solve') THEN 1 ELSE 0 END) as aktif"),
+                )
+                ->where('created_at', '>=', now()->subYear())
+                ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
+                ->orderBy('bulan')
+                ->get();
+        });
 
         // ── SLA Compliance Data ──
         $slaPeriod = $request->get('sla_period', now()->format('Y-m'));
@@ -211,19 +224,21 @@ class DashboardController extends Controller
             ->groupBy('units.id', 'units.nama_unit')
             ->get();
 
-        // ── SLA Trend (12 bulan) ──
-        $slaTrendData = DB::table('ticket_sla_tracking')
-            ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
-            ->select(
-                DB::raw("DATE_FORMAT(tickets.created_at, '%Y-%m') as bulan"),
-                DB::raw('COUNT(*) as total'),
-                DB::raw('SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) as dalam_sla'),
-                DB::raw('ROUND(SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) / COUNT(*) * 100, 1) as persentase_sla'),
-            )
-            ->where('tickets.created_at', '>=', now()->subYear())
-            ->groupBy(DB::raw("DATE_FORMAT(tickets.created_at, '%Y-%m')"))
-            ->orderBy('bulan')
-            ->get();
+        // ── SLA Trend (cached 60s) ──
+        $slaTrendData = Cache::remember('admin_dashboard_sla_trend', 60, function () {
+            return DB::table('ticket_sla_tracking')
+                ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
+                ->select(
+                    DB::raw("DATE_FORMAT(tickets.created_at, '%Y-%m') as bulan"),
+                    DB::raw('COUNT(*) as total'),
+                    DB::raw('SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) as dalam_sla'),
+                    DB::raw('ROUND(SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) / COUNT(*) * 100, 1) as persentase_sla'),
+                )
+                ->where('tickets.created_at', '>=', now()->subYear())
+                ->groupBy(DB::raw("DATE_FORMAT(tickets.created_at, '%Y-%m')"))
+                ->orderBy('bulan')
+                ->get();
+        });
 
         // ── Daily Chart (7 Hari Terakhir) ──
         $startDate = now()->subDays(6)->startOfDay();

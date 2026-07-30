@@ -10,6 +10,7 @@ import { SearchInput } from '@/Components/SearchInput';
 import { Pagination } from '@/Components/Pagination';
 import Swal from 'sweetalert2';
 import { Pencil, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface Unit {
  id: number;
@@ -164,7 +165,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  <option value="0">Tidak</option>
  </select>
  </div>
- <div className="flex justify-end pt-4"><Button type="submit">Simpan</Button></div>
+ <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Simpan</Button></motion.div></div>
  </form>
  </DialogContent>
  </Dialog>
@@ -342,7 +343,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  </div>
  </div>
 
- <div className="flex justify-end pt-4"><Button type="submit">Update</Button></div>
+ <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Update</Button></motion.div></div>
  </form>
  </DialogContent>
  </Dialog>

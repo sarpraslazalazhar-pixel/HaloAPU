@@ -13,6 +13,7 @@ import {
  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/Components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
+import { motion } from 'framer-motion';
 
 interface Divisi {
  id: number;
@@ -505,14 +506,18 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  {errors.jabatan_id && <p className="text-xs text-destructive mt-1">{errors.jabatan_id}</p>}
  </div>
  </div>
- <DialogFooter>
- <Button type="button" variant="ghost" onClick={() => { setOpen(false); setEditing(null); reset(); }}>
- Batal
- </Button>
- <Button type="submit" disabled={processing}>
- {processing ? 'Menyimpan...' : (editing ? 'Update' : 'Simpan')}
- </Button>
- </DialogFooter>
+        <DialogFooter>
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button type="button" variant="ghost" onClick={() => { setOpen(false); setEditing(null); reset(); }}>
+              Batal
+            </Button>
+          </motion.div>
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button type="submit" disabled={processing}>
+              {processing ? 'Menyimpan...' : (editing ? 'Update' : 'Simpan')}
+            </Button>
+          </motion.div>
+        </DialogFooter>
  </form>
  </DialogContent>
  </Dialog>

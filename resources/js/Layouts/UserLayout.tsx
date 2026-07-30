@@ -22,6 +22,9 @@ import {
 import ProfileModal from '@/Components/ProfileModal';
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
+import { motion } from 'framer-motion';
+import { navItemHover } from '@/lib/animationConfig';
+import PageTransition from '@/Components/PageTransition';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
 
@@ -46,17 +49,19 @@ const userNavItems: NavItem[] = [
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
  const Icon = item.icon;
  return (
- <Link
- href={item.route}
- className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
- active
- ? 'bg-primary/10 text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r-full before:bg-primary'
- : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
- }`}
- >
- <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
- <span>{item.label}</span>
- </Link>
+  <motion.div variants={navItemHover} initial="rest" whileHover="hover">
+    <Link
+      href={item.route}
+      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+        active
+          ? 'bg-primary/10 text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r-full before:bg-primary'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+      }`}
+    >
+      <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
+      <span>{item.label}</span>
+    </Link>
+  </motion.div>
  );
 }
 
@@ -229,11 +234,11 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
 
  <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={user} isAdmin={false} />
  </header>
- <main className="flex-1 overflow-y-auto">
- <div key={url} className="animate-page-in mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
- {children}
- </div>
- </main>
+        <main className="flex-1 overflow-y-auto flex flex-col">
+          <PageTransition className="mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
+            {children}
+          </PageTransition>
+        </main>
  </div>
 
  <BottomNav items={bottomNavItems} />

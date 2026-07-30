@@ -11,6 +11,7 @@ import { Pagination } from '@/Components/Pagination';
 import Swal from 'sweetalert2';
 import { Pencil, Trash2 } from 'lucide-react';
 import { DynamicIcon, POPULAR_ICONS } from '@/Components/DynamicIcon';
+import { motion } from 'framer-motion';
 
 interface Unit {
  id: number;
@@ -166,7 +167,7 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
  <option value="0">Tidak</option>
  </select>
  </div>
- <div className="flex justify-end pt-4"><Button type="submit">Simpan</Button></div>
+ <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Simpan</Button></motion.div></div>
  </form>
  </DialogContent>
  </Dialog>
@@ -249,7 +250,7 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
  <option value="0">Tidak</option>
  </select>
  </div>
- <div className="flex justify-end pt-4"><Button type="submit">Update</Button></div>
+ <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Update</Button></motion.div></div>
  </form>
  </DialogContent>
  </Dialog>

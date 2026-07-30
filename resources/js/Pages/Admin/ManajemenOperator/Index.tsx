@@ -13,6 +13,7 @@ import {
  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from '@/Components/ui/alert-dialog';
 import { Badge } from '@/Components/ui/badge';
+import { motion } from 'framer-motion';
 
 interface Role {
  id: number;
@@ -436,12 +437,16 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
  />
  </div>
  <DialogFooter>
+ <motion.div whileTap={{ scale: 0.95 }}>
  <Button type="button" variant="outline" onClick={() => setOpen(false)}>
  Batal
  </Button>
+ </motion.div>
+ <motion.div whileTap={{ scale: 0.95 }}>
  <Button type="submit" disabled={processing}>
  {processing ? 'Menyimpan...' : 'Simpan'}
  </Button>
+ </motion.div>
  </DialogFooter>
  </form>
  </DialogContent>

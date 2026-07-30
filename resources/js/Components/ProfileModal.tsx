@@ -5,6 +5,7 @@ import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
 import { Camera, Loader2, User } from 'lucide-react';
+import { motion } from 'framer-motion';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 
@@ -153,14 +154,17 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  <User className="h-10 w-10 text-muted-foreground" />
  )}
  </div>
- <button
- type="button"
- onClick={() => fileInputRef.current?.click()}
- className="absolute bottom-0 right-0 p-1.5 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-colors"
- disabled={uploading}
- >
- {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
- </button>
+ <motion.button
+            type="button"
+            whileHover={{ scale: 1.15 }}
+            whileTap={{ scale: 0.9 }}
+            transition={{ type: "spring", stiffness: 400, damping: 20 }}
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute bottom-0 right-0 p-1.5 rounded-full bg-primary text-primary-foreground shadow-md hover:bg-primary/90 transition-colors cursor-pointer"
+            disabled={uploading}
+          >
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+          </motion.button>
  <input
  ref={fileInputRef}
  type="file"
@@ -278,15 +282,19 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  </div>
  </div>
 
- <div className="flex justify-end gap-2 pt-2">
- <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
- Batal
- </Button>
- <Button type="submit" disabled={processing}>
- {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
- Simpan
- </Button>
- </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Batal
+            </Button>
+          </motion.div>
+          <motion.div whileTap={{ scale: 0.95 }}>
+            <Button type="submit" disabled={processing}>
+              {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Simpan
+            </Button>
+          </motion.div>
+        </div>
  </form>
  </>
  )}

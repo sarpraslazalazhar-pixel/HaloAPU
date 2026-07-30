@@ -13,6 +13,7 @@ import { RadioGroup, RadioGroupItem } from '@/Components/ui/radio-group';
 import Swal from 'sweetalert2';
 import { Pencil, Trash2 } from 'lucide-react';
 import { Head } from '@inertiajs/react';
+import { motion } from 'framer-motion';
 
 interface SubUnit {
  id: number;
@@ -234,7 +235,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
  {errors.threshold_minutes && <p className="text-red-500 text-sm">{errors.threshold_minutes}</p>}
  </div>
 
- <Button type="submit" className="w-full">Simpan</Button>
+ <motion.div whileTap={{ scale: 0.95 }}><Button type="submit" className="w-full">Simpan</Button></motion.div>
  </form>
  </DialogContent>
  </Dialog>
@@ -407,7 +408,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
  {errors.threshold_minutes && <p className="text-red-500 text-sm">{errors.threshold_minutes}</p>}
  </div>
 
- <Button type="submit" className="w-full">Update</Button>
+ <motion.div whileTap={{ scale: 0.95 }}><Button type="submit" className="w-full">Update</Button></motion.div>
  </form>
  </DialogContent>
  </Dialog>

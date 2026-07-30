@@ -236,10 +236,14 @@ class TicketWizardController extends Controller
             // Notifikasi ke User (database + WA jika punya no_wa)
             $ticket->user->notify(new TicketCreatedUserNotification($ticket));
             // Notifikasi ke Admin yang berlangganan Kanal Layanan (Unit) atau memiliki role superadmin
-            $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
-                $query->where('units.id', $ticket->unit_id);
-            })->orWhereHas('roles', function($q) {
-                $q->where('name', 'superadmin');
+            $notifiedAdmins = \App\Models\Admin::where(function ($q) use ($ticket) {
+                $q->whereHas('units', function ($query) use ($ticket) {
+                    $query->where('units.id', $ticket->unit_id);
+                })->orWhereHas('roles', function($roleQuery) {
+                    $roleQuery->whereIn('name', ['Super Admin', 'superadmin']);
+                });
+            })->whereDoesntHave('roles', function($q) {
+                $q->where('name', 'Operator');
             })->get();
 
             if ($notifiedAdmins->isNotEmpty()) {

@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { SearchInput } from '@/Components/SearchInput';
 import Swal from 'sweetalert2';
 import { GripVertical, Pencil, Trash2 } from 'lucide-react';
+import { motion } from 'framer-motion';
 import {
  DndContext,
  closestCenter,
@@ -165,7 +166,7 @@ export default function JabatanIndex({ jabatans, filters }: { jabatans: Jabatan[
  <Input value={data.nama_jabatan} onChange={e => setData('nama_jabatan', e.target.value)} />
  {errors.nama_jabatan && <p className="text-red-500 text-sm">{errors.nama_jabatan}</p>}
  </div>
- <div className="flex justify-end pt-4"><Button type="submit">Simpan</Button></div>
+ <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Simpan</Button></motion.div></div>
  </form>
  </DialogContent>
  </Dialog>
@@ -234,7 +235,7 @@ export default function JabatanIndex({ jabatans, filters }: { jabatans: Jabatan[
  <Input value={data.nama_jabatan} onChange={e => setData('nama_jabatan', e.target.value)} />
  {errors.nama_jabatan && <p className="text-red-500 text-sm">{errors.nama_jabatan}</p>}
  </div>
- <div className="flex justify-end pt-4"><Button type="submit">Update</Button></div>
+ <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Update</Button></motion.div></div>
  </form>
  </DialogContent>
  </Dialog>

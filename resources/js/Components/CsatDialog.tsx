@@ -12,6 +12,7 @@ import {
 import { Button } from '@/Components/ui/button';
 import { Textarea } from '@/Components/ui/textarea';
 import { Label } from '@/Components/ui/label';
+import { motion } from 'framer-motion';
 
 interface CsatDialogProps {
  ticketId: number;
@@ -85,22 +86,24 @@ export function CsatDialog({ ticketId, disabled = false, existingRating, existin
  <Label>Rating</Label>
  <div className="flex items-center gap-1 mt-2">
  {[1, 2, 3, 4, 5].map((star) => (
- <button
+ <motion.button
  key={star}
  type="button"
+ whileHover={{ scale: 1.25 }}
+ whileTap={{ scale: 0.85 }}
  onMouseEnter={() => setHoverRating(star)}
  onMouseLeave={() => setHoverRating(0)}
  onClick={() => setData('rating', star)}
- className="p-1 transition-transform hover:scale-110"
+ className="p-1 cursor-pointer focus:outline-none"
  >
  <Star
  className={`h-8 w-8 transition-colors ${
  star <= (hoverRating || data.rating)
- ? 'fill-yellow-400 text-yellow-400'
+ ? 'fill-yellow-400 text-yellow-400 drop-shadow-sm'
  : 'text-gray-300 '
  }`}
  />
- </button>
+ </motion.button>
  ))}
  </div>
  <div className="text-sm text-muted-foreground mt-1">

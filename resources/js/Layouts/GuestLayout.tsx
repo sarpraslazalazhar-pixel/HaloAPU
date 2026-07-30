@@ -1,5 +1,6 @@
 import React from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
+import PageTransition from '@/Components/PageTransition';
 
 
 interface GuestLayoutProps {
@@ -34,9 +35,11 @@ export default function GuestLayout({ children, title }: GuestLayoutProps) {
  </Link>
  </div>
 
+ <PageTransition>
  <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
  {children}
  </div>
+ </PageTransition>
  </div>
  </div>
  );

@@ -352,6 +352,12 @@ class TicketController extends Controller
             'catatan' => 'Tiket ditugaskan ke operator: ' . ($admin->name ?? $admin->username),
         ]);
 
+        try {
+            $admin->notify(new \App\Notifications\TicketAssignedOperatorNotification($ticket));
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi penugasan operator untuk tiket #{$ticket->id}: " . $e->getMessage());
+        }
+
         return redirect()->back()->with('success', 'Operator berhasil ditugaskan.');
     }
 }

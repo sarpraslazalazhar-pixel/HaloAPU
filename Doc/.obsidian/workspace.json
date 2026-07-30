@@ -4,39 +4,20 @@
     "type": "split",
     "children": [
       {
-        "id": "df9ddefbf8ade3bd",
+        "id": "850fbbcffa551bea",
         "type": "tabs",
         "children": [
           {
-            "id": "fa3f238c64c23a94",
+            "id": "1cd6d5536f2ea727",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "PLAN-FASE-3.md",
-                "mode": "preview",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "PLAN-FASE-3"
-            }
-          },
-          {
-            "id": "3bb0e6691d41c2ef",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "preview.md",
-                "mode": "preview",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "preview"
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "Graph view"
             }
           }
-        ],
-        "currentTab": 1
+        ]
       }
     ],
     "direction": "vertical"
@@ -198,28 +179,41 @@
       "bases:Create new base": false
     }
   },
-  "active": "3bb0e6691d41c2ef",
+  "active": "0f939ac65f8367c4",
   "lastOpenFiles": [
-    "PRD.md",
-    "~$KUMENTASI-HALO-APU.docx",
-    "preview.md",
+    "Untitled.canvas",
     "PLAN-FASE-3.md",
+    "preview.md",
+    "Test.md",
+    "fitur_aplikasi_detail.md",
+    "fitur_aplikasi.md",
+    "~$KUMENTASI-HALO-APU-LENGKAP.docx",
+    "screenshots/Screenshot (320).png",
+    "~$KUMENTASI-HALO-APU.docx",
+    "nscheck.cjs",
+    "test-minimal.docx",
+    "test-minimal.cjs",
+    "unpacked/word/media/26-manajemen-operator.png",
+    "unpacked/word/media/25-tv-dashboard.png",
+    "unpacked/word/media/24-laporan-csat.png",
+    "unpacked/word/media/23-notification-bell.png",
+    "unpacked/word/media/22-sla-config.png",
+    "unpacked/word/media/21-konfigurasi-scheduler.png",
+    "unpacked/word/media/20-konfigurasi-jam-kerja.png",
+    "unpacked/word/media/19-konfigurasi-branding.png",
+    "unpacked/word/media/18-master-data-unit.png",
+    "unpacked/word/media",
+    "build.cjs",
+    "test-repack.docx",
+    "test-jzip.cjs",
+    "repack.cjs",
+    "PRD.md",
     "2026-07-15.md",
-    "Untitled",
     "PLAN-FASE-5.md",
-    "verify_lengkap/_rels",
-    "verify_lengkap/word/_rels/fontTable.xml.rels",
-    "verify_lengkap/word/fontTable.xml",
-    "verify_lengkap/word/_rels/comments.xml.rels",
-    "verify_lengkap/word/comments.xml",
-    "verify_lengkap/word/settings.xml",
-    "verify_lengkap/docProps/core.xml",
-    "verify_lengkap/docProps",
     "Revisi.md",
     "DEPLOY-cPanel.md",
     "laporan/Login admin dan user.md",
     "Untitled 1.canvas",
-    "Untitled.canvas",
     "PLAN-FASE-1.md",
     "PLAN-FASE-2.md",
     "PLAN-FASE-6.md"

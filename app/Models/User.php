@@ -8,11 +8,12 @@ use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 use App\Notifications\CustomResetPasswordNotification;
 
+use Laravel\Sanctum\HasApiTokens;
 use NotificationChannels\WebPush\HasPushSubscriptions;
 
 class User extends Authenticatable
 {
-    use HasFactory, Notifiable, HasRoles, HasPushSubscriptions;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPushSubscriptions;
 
     /**
      * Send the password reset notification.

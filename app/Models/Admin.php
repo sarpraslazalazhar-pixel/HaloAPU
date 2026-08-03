@@ -7,10 +7,11 @@ use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
 
 use NotificationChannels\WebPush\HasPushSubscriptions;
+use Laravel\Sanctum\HasApiTokens;
 
 class Admin extends Authenticatable
 {
-    use Notifiable, HasRoles, HasPushSubscriptions;
+    use HasApiTokens, Notifiable, HasRoles, HasPushSubscriptions;
 
     protected $guard_name = 'admin';
 

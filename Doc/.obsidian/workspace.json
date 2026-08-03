@@ -11,10 +11,14 @@
             "id": "1cd6d5536f2ea727",
             "type": "leaf",
             "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "Graph view"
+              "type": "markdown",
+              "state": {
+                "file": "Halo APU.md",
+                "mode": "preview",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "Halo APU"
             }
           }
         ]
@@ -179,14 +183,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "0f939ac65f8367c4",
+  "active": "1cd6d5536f2ea727",
   "lastOpenFiles": [
+    "fitur_aplikasi_detail.md",
     "Untitled.canvas",
     "PLAN-FASE-3.md",
     "preview.md",
     "Test.md",
-    "fitur_aplikasi_detail.md",
-    "fitur_aplikasi.md",
+    "Halo APU.md",
     "~$KUMENTASI-HALO-APU-LENGKAP.docx",
     "screenshots/Screenshot (320).png",
     "~$KUMENTASI-HALO-APU.docx",

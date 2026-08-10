@@ -60,6 +60,24 @@ class AuthController extends Controller
         ], 200);
     }
 
+    public function storeFcmToken(Request $request)
+    {
+        $request->validate([
+            'fcm_token' => 'required|string',
+        ]);
+
+        $user = $request->user();
+        if ($user) {
+            $user->fcm_token = $request->fcm_token;
+            $user->save();
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'FCM token stored successfully'
+        ]);
+    }
+
     public function profile(Request $request)
     {
         $user = $request->user();

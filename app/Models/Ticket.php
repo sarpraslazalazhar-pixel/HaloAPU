@@ -21,6 +21,7 @@ class Ticket extends Model
                 $model->{$model->getKeyName()} = $id;
             }
         });
+
     }
     protected $fillable = [
         'user_id', 'divisi_id', 'org_unit_id', 'jabatan_id',

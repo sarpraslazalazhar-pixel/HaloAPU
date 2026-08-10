@@ -21,7 +21,7 @@ class DashboardApiController extends Controller
             $subUnitIds = $user->subUnits()->pluck('sub_units.id')->toArray();
 
             // If not super_admin, filter by assigned units/subunits
-            if (!$user->hasRole('super_admin')) {
+            if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin'])) {
                 $query->where(function ($q) use ($unitIds, $subUnitIds) {
                     if (!empty($unitIds)) {
                         $q->orWhereIn('unit_id', $unitIds);

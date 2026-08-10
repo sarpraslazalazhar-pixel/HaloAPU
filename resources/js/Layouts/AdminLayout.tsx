@@ -20,6 +20,7 @@ import {
  MoreHorizontal,
  Grid3X3,
  Sparkles,
+ MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -78,6 +79,7 @@ function isRouteActive(url: string, routePath?: string): boolean {
 
 const adminNavItems: NavItem[] = [
  { type: 'link', label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
+ { type: 'link', label: 'Pesan', icon: MessageSquare, route: '/admin/chat' },
  { type: 'link', label: 'Tiketing', icon: Ticket, route: '/admin/tiket' },
  { type: 'link', label: 'Monitor Grid', icon: Grid3X3, route: '/admin/monitor' },
 

@@ -52,6 +52,16 @@ class User extends Authenticatable
         return $this->hasMany(Ticket::class);
     }
 
+    public function conversations()
+    {
+        return $this->hasMany(Conversation::class);
+    }
+
+    public function messages()
+    {
+        return $this->morphMany(Message::class, 'sender');
+    }
+
     public function divisi()
     {
         return $this->belongsTo(OrgDivisi::class, 'divisi_id');

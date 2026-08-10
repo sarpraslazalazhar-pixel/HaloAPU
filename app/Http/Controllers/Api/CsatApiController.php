@@ -117,6 +117,35 @@ class CsatApiController extends Controller
                 'per_page' => $csats->perPage(),
                 'total' => $csats->total(),
             ],
-        ]);
+        ], 200);
+    }
+
+    /**
+     * Get tickets that need CSAT rating (pending).
+     */
+    public function pending(Request $request)
+    {
+        $user = $request->user();
+
+        $pendingTickets = Ticket::where('user_id', $user->id)
+            ->whereIn('status', ['solve', 'selesai'])
+            ->whereDoesntHave('csat')
+            ->with('subUnit:id,nama_layanan')
+            ->latest()
+            ->get();
+
+        $formatted = $pendingTickets->map(function ($ticket) {
+            return [
+                'id' => (string) $ticket->id,
+                'ticketId' => $ticket->formatted_id ?? (string) $ticket->id,
+                'ticketTitle' => $ticket->judul,
+                'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : '',
+                'completedAt' => $ticket->updated_at->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'data' => $formatted,
+        ], 200);
     }
 }

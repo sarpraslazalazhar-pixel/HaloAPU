@@ -78,6 +78,18 @@ Route::middleware('auth')->group(function () {
 
     // Monitor
     Route::get('/monitor', [MonitorController::class, 'userIndex'])->name('monitor');
+
+    // User Chat
+    Route::prefix('chat')->name('chat.')->group(function () {
+        Route::get('/', [\App\Http\Controllers\ChatController::class, 'index'])->name('index');
+        Route::get('/tickets', [\App\Http\Controllers\ChatController::class, 'userTickets'])->name('tickets');
+        Route::post('/conversations/{conversation}/messages', [\App\Http\Controllers\ChatController::class, 'storeMessage'])->name('messages.store');
+        Route::put('/messages/{message}', [\App\Http\Controllers\ChatController::class, 'updateMessage'])->name('messages.update');
+        Route::delete('/messages/{message}', [\App\Http\Controllers\ChatController::class, 'destroyMessage'])->name('messages.destroy');
+        Route::post('/conversations/{conversation}/read', [\App\Http\Controllers\ChatController::class, 'markAsRead'])->name('read');
+        Route::post('/conversations/{conversation}/typing', [\App\Http\Controllers\ChatController::class, 'typing'])->name('typing');
+        Route::get('/download/{attachment}', [\App\Http\Controllers\ChatController::class, 'downloadAttachment'])->name('download');
+    });
 });
 
 // API dropdown (dependent dropdown & dynamic form)
@@ -198,6 +210,18 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/assign', [\App\Http\Controllers\Admin\TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [\App\Http\Controllers\Admin\TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [\App\Http\Controllers\Admin\TicketController::class, 'updatePriority'])->name('priority');
+        });
+
+        // Chat Admin
+        Route::prefix('chat')->name('chat.')->group(function () {
+            Route::get('/', [\App\Http\Controllers\Admin\ChatController::class, 'index'])->name('index');
+            Route::get('/tickets', [\App\Http\Controllers\Admin\ChatController::class, 'ticketsList'])->name('tickets');
+            Route::post('/conversations/{conversation}/messages', [\App\Http\Controllers\Admin\ChatController::class, 'storeMessage'])->name('messages.store');
+            Route::put('/messages/{message}', [\App\Http\Controllers\Admin\ChatController::class, 'updateMessage'])->name('messages.update');
+            Route::delete('/messages/{message}', [\App\Http\Controllers\Admin\ChatController::class, 'destroyMessage'])->name('messages.destroy');
+            Route::post('/conversations/{conversation}/read', [\App\Http\Controllers\Admin\ChatController::class, 'markAsRead'])->name('read');
+            Route::post('/conversations/{conversation}/typing', [\App\Http\Controllers\Admin\ChatController::class, 'typing'])->name('typing');
+            Route::get('/download/{attachment}', [\App\Http\Controllers\Admin\ChatController::class, 'downloadAttachment'])->name('download');
         });
     });
 });

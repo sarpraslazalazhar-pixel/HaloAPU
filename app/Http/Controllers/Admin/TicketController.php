@@ -44,8 +44,6 @@ class TicketController extends Controller
         if ($request->filled('status')) {
             $statuses = is_array($request->status) ? $request->status : [$request->status];
             $query->whereIn('status', $statuses);
-        } else {
-            $query->whereIn('status', ['open', 'on_proses', 'pending', 'waiting_approval', 'need_revision']);
         }
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);

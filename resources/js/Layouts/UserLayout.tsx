@@ -8,6 +8,7 @@ import {
  Star, 
  LogOut,
  User,
+ MessageSquare,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import {
@@ -41,6 +42,7 @@ interface NavItem {
 
 const userNavItems: NavItem[] = [
  { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
+ { label: 'Pesan', icon: MessageSquare, route: '/chat' },
  { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
  { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
  { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Traits\HasRoles;
@@ -11,7 +12,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 class Admin extends Authenticatable
 {
-    use HasApiTokens, Notifiable, HasRoles, HasPushSubscriptions;
+    use HasApiTokens, HasFactory, Notifiable, HasRoles, HasPushSubscriptions;
 
     protected $guard_name = 'admin';
 
@@ -49,6 +50,11 @@ class Admin extends Authenticatable
     public function subUnits()
     {
         return $this->belongsToMany(SubUnit::class, 'admin_sub_unit', 'admin_id', 'sub_unit_id');
+    }
+
+    public function messages()
+    {
+        return $this->morphMany(Message::class, 'sender');
     }
 }
 

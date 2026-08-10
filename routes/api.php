@@ -8,8 +8,12 @@ use App\Http\Controllers\Api\ServiceController;
 use App\Http\Controllers\Api\DashboardApiController;
 use App\Http\Controllers\Api\CsatApiController;
 use App\Http\Controllers\Api\NotificationApiController;
+use App\Http\Controllers\Api\MonitorApiController;
 
 Route::post('/login', [AuthController::class, 'login']);
+
+// Proxy to serve attachments with CORS headers for Flutter Web
+Route::get('/attachments/serve', [TicketController::class, 'serveAttachment']);
 
 Route::middleware('auth:sanctum')->group(function () {
     // Auth & Profile
@@ -17,10 +21,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/user', [AuthController::class, 'updateProfile']);
     Route::post('/user/avatar', [AuthController::class, 'uploadAvatar']);
     Route::post('/user/change-password', [AuthController::class, 'changePassword']);
+    Route::post('/users/fcm-token', [AuthController::class, 'storeFcmToken']);
     Route::post('/logout', [AuthController::class, 'logout']);
 
     // Dashboard
     Route::get('/dashboard', [DashboardApiController::class, 'index']);
+
+    // Monitor (Pantauan Langsung)
+    Route::get('/monitor/assets', [MonitorApiController::class, 'assets']);
+    Route::get('/monitor/calendar', [MonitorApiController::class, 'calendar']);
 
     // Services
     Route::get('/services', [ServiceController::class, 'index']);
@@ -31,13 +40,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/tickets/{id}', [TicketController::class, 'show']);
     Route::post('/tickets', [TicketController::class, 'store']);
     Route::post('/tickets/{id}/reply', [TicketController::class, 'reply']);
+    Route::post('/tickets/{id}/assign', [TicketController::class, 'assignOperator']);
     Route::patch('/tickets/{id}/cancel', [TicketController::class, 'cancel']);
     Route::post('/tickets/{id}/accept', [TicketController::class, 'acceptResult']);
     Route::post('/tickets/{id}/revision', [TicketController::class, 'requestRevision']);
-    Route::patch('/tickets/{id}/status', [TicketController::class, 'changeStatus']);
+    Route::post('/tickets/{id}/status', [TicketController::class, 'changeStatus']);
 
     // CSAT / Ratings
     Route::post('/tickets/{id}/rate', [CsatApiController::class, 'store']);
+    Route::get('/ratings/pending', [CsatApiController::class, 'pending']);
     Route::get('/ratings', [CsatApiController::class, 'index']);
 
     // Notifications

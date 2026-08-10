@@ -11,6 +11,10 @@ use App\Models\FormField;
 use App\Models\SystemConfig;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use App\Models\RoomVehicleBooking;
+use App\Models\TicketSlaTracking;
+use App\Services\SlaCalculator;
+use Illuminate\Validation\ValidationException;
 
 class TicketController extends Controller
 {
@@ -27,17 +31,29 @@ class TicketController extends Controller
         $query = Ticket::with(['subUnit', 'assignedAdmin', 'user']);
 
         if ($user instanceof \App\Models\Admin) {
-            if ($user->hasRole('superadmin')) {
+            if ($user->hasRole(['superadmin', 'super_admin', 'Super Admin'])) {
                 // Superadmin sees all tickets
+            } elseif ($user->hasRole('Operator')) {
+                $query->where('assigned_admin_id', $user->id);
             } else {
-                $user->load('units');
-                $unitIds = $user->units->pluck('id')->toArray();
-                $query->whereHas('subUnit', function ($q) use ($unitIds) {
-                    $q->whereIn('unit_id', $unitIds);
+                $query->where(function($q) use ($user) {
+                    $subUnitIds = $user->subUnits()->pluck('sub_units.id')->toArray();
+                    $q->whereIn('sub_unit_id', $subUnitIds)
+                      ->orWhere('assigned_admin_id', $user->id);
                 });
             }
         } else {
             $query->where('user_id', $user->id);
+        }
+
+        // Filter by search keyword
+        if ($request->has('search') && $request->search) {
+            $keyword = $request->search;
+            $query->where(function ($q) use ($keyword) {
+                $q->where('id', 'like', "%{$keyword}%")
+                  ->orWhere('title', 'like', "%{$keyword}%")
+                  ->orWhere('description', 'like', "%{$keyword}%");
+            });
         }
 
         // Filter by status
@@ -102,11 +118,14 @@ class TicketController extends Controller
         ]);
 
         $ticket = new Ticket();
+        $subUnit = \App\Models\SubUnit::find($validated['sub_unit_id']);
+        
         $ticket->user_id = $user->id;
         $ticket->divisi_id = $user->divisi_id ?? null;
         $ticket->org_unit_id = $user->org_unit_id ?? null;
         $ticket->jabatan_id = $user->jabatan_id ?? null;
         $ticket->sub_unit_id = $validated['sub_unit_id'];
+        $ticket->unit_id = $subUnit ? $subUnit->unit_id : null;
         $ticket->form_data = $formData ?? [];
         $ticket->status = 'open';
         $ticket->priority = $validated['priority'] ?? 'normal';
@@ -140,7 +159,72 @@ class TicketController extends Controller
             'timestamp' => now(),
         ]);
 
-        // Notify admins
+        // SLA Tracking
+        $slaCalculator = new SlaCalculator();
+        $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
+        $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
+
+        TicketSlaTracking::create([
+            'ticket_id' => $ticket->id,
+            'sla_response_deadline' => $responseDeadline,
+            'sla_resolution_deadline' => $resolutionDeadline,
+            'current_tier' => 0,
+        ]);
+
+        // Integrasi Live Monitor (Booking Aset Generik)
+        if ($subUnit && $subUnit->is_monitored) {
+            $assetName = $formData[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
+            
+            $dateStr = $subUnit->monitor_date_field_id 
+                ? ($formData[(string) $subUnit->monitor_date_field_id] ?? now()->format('Y-m-d'))
+                : null;
+                
+            $endDateStr = $subUnit->monitor_end_date_field_id
+                ? ($formData[(string) $subUnit->monitor_end_date_field_id] ?? $dateStr ?? now()->format('Y-m-d'))
+                : $dateStr;
+
+            $startFieldVal = $formData[(string) $subUnit->monitor_start_field_id] ?? now();
+            $endFieldVal = $formData[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
+
+            if ($dateStr) {
+                $startDT = \Carbon\Carbon::parse($dateStr . ' ' . \Carbon\Carbon::parse($startFieldVal)->format('H:i:s'));
+                $endDT = \Carbon\Carbon::parse(($endDateStr ?? $dateStr) . ' ' . \Carbon\Carbon::parse($endFieldVal)->format('H:i:s'));
+            } else {
+                $startDT = \Carbon\Carbon::parse($startFieldVal);
+                $endDT = \Carbon\Carbon::parse($endFieldVal);
+            }
+
+            // Cek bentrok
+            $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)
+                ->whereNotIn('status', ['reject', 'dibatalkan', 'solve', 'selesai'])
+                ->where('tanggal_mulai', '<', $endDT)
+                ->where('tanggal_selesai', '>', $startDT)
+                ->exists();
+
+            if ($bentrok) {
+                // Return error response directly since API
+                return response()->json([
+                    'message' => 'Gagal membuat tiket',
+                    'errors' => ['form_data.' . $subUnit->monitor_asset_field_id => ['Aset ini sudah dipesan pada jam tersebut.']]
+                ], 422);
+            }
+
+            RoomVehicleBooking::create([
+                'ticket_id' => $ticket->id,
+                'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
+                'nama_aset' => $assetName,
+                'tanggal_mulai' => $startDT,
+                'tanggal_selesai' => $endDT,
+                'status' => 'open',
+            ]);
+        }
+
+        // Notify admins and user
+        try {
+            $ticket->user->notify(new \App\Notifications\TicketCreatedUserNotification($ticket));
+        } catch (\Exception $e) {
+            // Silently ignore notification errors
+        }
         $this->notifyAdminsNewTicket($ticket);
 
         $ticket->load(['subUnit', 'assignedAdmin', 'user']);
@@ -205,6 +289,17 @@ class TicketController extends Controller
             ];
         });
 
+        $operators = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+            $query->where('units.id', $ticket->subUnit?->unit_id ?? $ticket->unit_id);
+        })->get(['id', 'name', 'username']);
+
+        $responseData['operators'] = $operators->map(function ($admin) {
+            return [
+                'id' => $admin->id,
+                'name' => $admin->name ?? $admin->username,
+            ];
+        });
+
         $responseData['formData'] = $ticket->form_data ?? [];
 
         $responseData['attachments'] = $ticket->attachments->map(function ($att) {
@@ -214,6 +309,7 @@ class TicketController extends Controller
                 'fileName' => $att->original_name,
                 'mimeType' => $att->mime_type,
                 'fileSize' => $att->file_size,
+                'path' => 'storage/' . $att->file_path,
                 'url' => url('storage/' . $att->file_path),
             ];
         });
@@ -230,6 +326,7 @@ class TicketController extends Controller
                     return [
                         'id' => $att->id,
                         'fileName' => $att->original_name,
+                        'path' => 'storage/' . $att->file_path,
                         'url' => url('storage/' . $att->file_path),
                     ];
                 }),
@@ -484,6 +581,50 @@ class TicketController extends Controller
     }
 
     /**
+     * Assign operator to ticket (Admin only).
+     */
+    public function assignOperator(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user instanceof \App\Models\Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat menugaskan operator tiket'], 403);
+        }
+
+        if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin']) && !$user->hasPermissionTo('akses-assign-operator')) {
+            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk menugaskan operator'], 403);
+        }
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (!$ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        $validated = $request->validate([
+            'admin_id' => 'required|integer|exists:admins,id',
+        ]);
+
+        $admin = \App\Models\Admin::find($validated['admin_id']);
+
+        $ticket->update(['assigned_admin_id' => $admin->id]);
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $user->id,
+            'aksi' => 'assign_operator',
+            'catatan' => 'Tiket ditugaskan ke operator: ' . ($admin->name ?? $admin->username),
+            'timestamp' => now(),
+        ]);
+
+        return response()->json([
+            'message' => 'Operator berhasil ditugaskan',
+            'data' => $this->formatTicket($ticket->fresh()),
+        ]);
+    }
+
+    /**
      * Change ticket status (Admin only).
      */
     public function changeStatus(Request $request, string $id)
@@ -503,7 +644,10 @@ class TicketController extends Controller
         }
 
         $request->validate([
-            'status' => 'required|in:open,on_proses,solve,reject,dibatalkan',
+            'status' => 'required|in:open,on_proses,solve,reject,dibatalkan,pending',
+            'catatan' => 'nullable|string|max:1000',
+            'general_attachments' => 'nullable|array|max:3',
+            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
         $oldStatus = $ticket->status;
@@ -515,13 +659,39 @@ class TicketController extends Controller
 
         $ticket->update(['status' => $newStatus]);
 
-        TicketLog::create([
+        $defaultCatatan = "Status tiket diubah dari {$oldStatus} menjadi {$newStatus} oleh {$user->name}";
+        
+        $log = TicketLog::create([
             'ticket_id' => $ticket->id,
             'admin_id' => $user->id,
             'aksi' => 'update_status',
-            'catatan' => "Status tiket diubah dari {$oldStatus} menjadi {$newStatus} oleh {$user->name}",
+            'catatan' => $request->catatan ?? $defaultCatatan,
             'timestamp' => now(),
         ]);
+
+        $generalFiles = $request->file('general_attachments');
+        if (!empty($generalFiles) && is_array($generalFiles)) {
+            foreach ($generalFiles as $file) {
+                if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+
+                $path = Storage::disk('public')->putFileAs(
+                    "ticket-attachments/{$ticket->id}",
+                    $file->getPathname(),
+                    $file->hashName()
+                );
+
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'field_id' => null,
+                    'ticket_log_id' => $log->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'wajib' => false,
+                ]);
+            }
+        }
 
         return response()->json([
             'message' => 'Status tiket berhasil diperbarui',
@@ -534,12 +704,23 @@ class TicketController extends Controller
      */
     private function formatTicket(Ticket $ticket): array
     {
+        $flutterStatus = match(strtolower($ticket->status)) {
+            'open' => 'open',
+            'on_proses' => 'on_proses',
+            'solve', 'selesai' => 'solve',
+            'reject' => 'reject',
+            'dibatalkan' => 'dibatalkan',
+            'pending' => 'pending',
+            'need_revision' => 'need_revision',
+            default => 'open'
+        };
+
         return [
             'id' => $ticket->formatted_id ?? (string) $ticket->id,
             'title' => $ticket->judul,
             'description' => isset($ticket->form_data) ? (is_array($ticket->form_data) ? json_encode($ticket->form_data) : $ticket->form_data) : '',
             'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : 'General',
-            'status' => $ticket->status,
+            'status' => $flutterStatus,
             'createdAt' => $ticket->created_at->toIso8601String(),
             'requesterName' => $ticket->user ? $ticket->user->name : '',
             'assignedTo' => $ticket->assignedAdmin ? $ticket->assignedAdmin->name : null,
@@ -589,5 +770,22 @@ class TicketController extends Controller
         } catch (\Exception $e) {
             // Silently ignore notification errors
         }
+    }
+
+    /**
+     * Serve attachment file with CORS headers for Flutter Web
+     */
+    public function serveAttachment(Request $request)
+    {
+        $path = $request->query('path');
+        if (!$path || !Storage::disk('public')->exists($path)) {
+            return response()->json(['message' => 'File not found'], 404);
+        }
+        
+        $fullPath = storage_path('app/public/' . $path);
+        
+        // Let Laravel handle the file response. Because this route is in api.php,
+        // the global CORS middleware will automatically attach the correct headers.
+        return response()->file($fullPath);
     }
 }

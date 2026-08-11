@@ -271,17 +271,26 @@ class ChatController extends Controller
         ]);
     }
 
-    public function ticketsList()
+    public function ticketsList(Request $request)
     {
         $admin = Auth::guard('admin')->user();
         $query = Ticket::with('subUnit:id,nama_layanan');
 
-        if (!$admin->hasRole('Super Admin') && !$admin->hasPermissionTo('akses-laporan')) {
-            $unitIds = $admin->units->pluck('id')->toArray();
-            $query->where(function ($q) use ($admin, $unitIds) {
-                $q->where('assigned_admin_id', $admin->id)
-                  ->orWhereIn('unit_id', $unitIds);
-            });
+        if ($request->filled('conversation_id')) {
+            $conversation = Conversation::find($request->conversation_id);
+            if ($conversation && $conversation->user_id) {
+                $query->where('user_id', $conversation->user_id);
+            }
+        } elseif ($request->filled('user_id')) {
+            $query->where('user_id', $request->user_id);
+        } else {
+            if (!$admin->hasRole('Super Admin') && !$admin->hasPermissionTo('akses-laporan')) {
+                $unitIds = $admin->units->pluck('id')->toArray();
+                $query->where(function ($q) use ($admin, $unitIds) {
+                    $q->where('assigned_admin_id', $admin->id)
+                      ->orWhereIn('unit_id', $unitIds);
+                });
+            }
         }
 
         $tickets = $query->orderByDesc('created_at')
@@ -384,9 +393,6 @@ class ChatController extends Controller
     public function destroyMessage(Message $message)
     {
         $admin = Auth::guard('admin')->user();
-        if ($message->sender_type !== Admin::class || (int) $message->sender_id !== (int) $admin->id) {
-            abort(403);
-        }
 
         $conversationId = $message->conversation_id;
         $messageId = $message->id;

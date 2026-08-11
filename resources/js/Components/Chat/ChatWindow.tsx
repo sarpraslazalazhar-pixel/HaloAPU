@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 import {
   Send,
   Paperclip,
@@ -22,6 +23,8 @@ import {
   AlertCircle,
   ExternalLink,
   MessageSquare,
+  Copy,
+  MoreVertical,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
@@ -266,7 +269,9 @@ export function ChatWindow({
   const fetchTickets = async () => {
     setLoadingTickets(true);
     try {
-      const url = isAdmin ? route('admin.chat.tickets') : route('chat.tickets');
+      const url = isAdmin
+        ? route('admin.chat.tickets', { conversation_id: conversation?.id })
+        : route('chat.tickets');
       const res = await axios.get(url);
       setTicketsList(res.data.tickets || []);
     } catch {
@@ -361,8 +366,39 @@ export function ChatWindow({
     }
   };
 
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    message: ChatMessage;
+  } | null>(null);
+
+  // Close context menu on window click
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
+
   const handleDeleteMessage = async (msgId: number) => {
-    if (!confirm('Hapus pesan ini?')) return;
+    setContextMenu(null);
+    const result = await Swal.fire({
+      title: 'Hapus Pesan?',
+      text: 'Pesan ini akan dihapus dari percakapan.',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Ya, Hapus!',
+      cancelButtonText: 'Batal',
+      customClass: {
+        popup: 'rounded-2xl shadow-xl border border-zinc-100',
+        confirmButton: 'rounded-xl text-xs font-semibold px-4 py-2 bg-red-600 hover:bg-red-700 text-white',
+        cancelButton: 'rounded-xl text-xs font-semibold px-4 py-2 bg-zinc-100 hover:bg-zinc-200 text-zinc-700',
+      },
+    });
+
+    if (!result.isConfirmed) return;
+
     try {
       const delUrl = isAdmin
         ? route('admin.chat.messages.destroy', { message: msgId })
@@ -370,9 +406,9 @@ export function ChatWindow({
 
       await axios.delete(delUrl);
       setMessages((prev) => prev.filter((m) => m.id !== msgId));
-      toast.success('Pesan dihapus');
-    } catch {
-      toast.error('Gagal menghapus pesan');
+      toast.success('Pesan berhasil dihapus');
+    } catch (err: any) {
+      toast.error(err.response?.data?.error || 'Gagal menghapus pesan');
     }
   };
 
@@ -509,6 +545,14 @@ export function ChatWindow({
                 )}
 
                 <div
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setContextMenu({
+                      x: e.clientX,
+                      y: e.clientY,
+                      message: msg,
+                    });
+                  }}
                   className={`relative max-w-[85%] md:max-w-[75%] rounded-[1.25rem] px-4 py-2.5 shadow-sm flex flex-col group/msg transition-all ${
                     isSelf
                       ? 'bg-sky-600 text-white rounded-br-sm'
@@ -612,36 +656,53 @@ export function ChatWindow({
 
                   {/* Message Action Controls on Hover */}
                   <div
-                    className={`absolute top-1/2 -translate-y-1/2 hidden group-hover/msg:flex items-center gap-0.5 bg-white border border-zinc-100 shadow-sm rounded-lg p-0.5 z-10 transition-all ${
-                      isSelf ? '-left-[88px]' : '-right-[44px]'
+                    className={`absolute top-1/2 -translate-y-1/2 hidden group-hover/msg:flex items-center gap-0.5 bg-white border border-zinc-200 shadow-md rounded-xl p-1 z-20 transition-all ${
+                      isSelf ? '-left-28' : '-right-20'
                     }`}
                   >
                     <button
-                      onClick={() => setReplyingTo(msg)}
+                      onClick={(e) => { e.stopPropagation(); setReplyingTo(msg); }}
                       title="Balas"
-                      className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500 hover:text-zinc-800 transition-colors"
+                      className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-900 transition-colors"
                     >
                       <CornerUpLeft className="h-3.5 w-3.5" />
                     </button>
+                    {msg.body && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(msg.body || '');
+                          toast.success('Teks pesan disalin');
+                        }}
+                        title="Salin Teks"
+                        className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-zinc-900 transition-colors"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     {isSelf && !isReadByOthers && msg.body && (
                       <button
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           setEditingMessage(msg);
                           setInputText(msg.body || '');
                         }}
                         title="Edit Pesan"
-                        className="p-1.5 hover:bg-zinc-100 rounded-md text-zinc-500 hover:text-sky-600 transition-colors"
+                        className="p-1.5 hover:bg-zinc-100 rounded-lg text-zinc-500 hover:text-sky-600 transition-colors"
                       >
                         <Edit2 className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    {isSelf && (
+                    {(isSelf || isAdmin) && (
                       <button
-                        onClick={() => handleDeleteMessage(msg.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteMessage(msg.id);
+                        }}
                         title="Hapus Pesan"
-                        className="p-1.5 hover:bg-red-50 text-zinc-500 hover:text-red-600 rounded-md transition-colors"
+                        className="p-1.5 hover:bg-red-50 text-zinc-500 hover:text-red-600 rounded-lg transition-colors"
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
+                        <Trash2 className="h-3.5 w-3.5 text-red-500" />
                       </button>
                     )}
                   </div>
@@ -849,9 +910,22 @@ export function ChatWindow({
                     </p>
                     <p className="text-xs text-zinc-600 truncate">{ticket.judul}</p>
                   </div>
-                  <Badge variant="outline" className="text-[10px] shrink-0">
-                    {ticket.status}
-                  </Badge>
+                  {(() => {
+                    const s = ticket.status?.toLowerCase() || '';
+                    if (s === 'solve' || s === 'closed' || s === 'selesai') {
+                      return <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] shrink-0 font-semibold">solve</Badge>;
+                    }
+                    if (s === 'open' || s === 'buka') {
+                      return <Badge className="bg-sky-50 text-sky-700 border border-sky-200 text-[10px] shrink-0 font-semibold">open</Badge>;
+                    }
+                    if (s === 'need_revision' || s === 'revisi') {
+                      return <Badge className="bg-orange-50 text-orange-700 border border-orange-200 text-[10px] shrink-0 font-semibold">need_revision</Badge>;
+                    }
+                    if (s === 'pending' || s === 'pending_user') {
+                      return <Badge className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] shrink-0 font-semibold">pending</Badge>;
+                    }
+                    return <Badge variant="outline" className="text-[10px] shrink-0">{ticket.status}</Badge>;
+                  })()}
                 </div>
               ))
             )}
@@ -874,6 +948,69 @@ export function ChatWindow({
               <X className="h-5 w-5" />
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Right-Click Context Menu Popup */}
+      {contextMenu && (
+        <div
+          style={{
+            top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 600) - 180),
+            left: Math.min(contextMenu.x, (typeof window !== 'undefined' ? window.innerWidth : 800) - 180),
+          }}
+          className="fixed z-50 bg-white/95 backdrop-blur-md border border-zinc-200/80 rounded-2xl shadow-xl p-1.5 min-w-[170px] text-xs font-medium text-zinc-700 space-y-0.5"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              setReplyingTo(contextMenu.message);
+              setContextMenu(null);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-sky-50 hover:text-sky-700 rounded-xl text-left transition-colors"
+          >
+            <CornerUpLeft className="h-4 w-4 text-sky-600" />
+            <span>Balas Pesan</span>
+          </button>
+
+          {contextMenu.message.body && (
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(contextMenu.message.body || '');
+                toast.success('Teks pesan disalin');
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-zinc-100 rounded-xl text-left transition-colors"
+            >
+              <Copy className="h-4 w-4 text-zinc-500" />
+              <span>Salin Teks</span>
+            </button>
+          )}
+
+          {contextMenu.message.sender_id === currentUser.id && contextMenu.message.body && (
+            <button
+              onClick={() => {
+                setEditingMessage(contextMenu.message);
+                setInputText(contextMenu.message.body || '');
+                setContextMenu(null);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-sky-50 hover:text-sky-700 rounded-xl text-left transition-colors"
+            >
+              <Edit2 className="h-4 w-4 text-sky-600" />
+              <span>Edit Pesan</span>
+            </button>
+          )}
+
+          {(contextMenu.message.sender_id === currentUser.id || isAdmin) && (
+            <button
+              onClick={() => {
+                handleDeleteMessage(contextMenu.message.id);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-red-50 text-red-600 rounded-xl text-left transition-colors border-t border-zinc-100 mt-1 pt-1.5"
+            >
+              <Trash2 className="h-4 w-4 text-red-500" />
+              <span className="font-semibold">Hapus Pesan</span>
+            </button>
+          )}
         </div>
       )}
     </div>

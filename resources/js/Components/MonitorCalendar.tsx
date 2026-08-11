@@ -23,6 +23,18 @@ interface MonitorCalendarProps {
  calendarData: CalendarDay[];
 }
 
+const isVehicleAsset = (tipe?: string, name?: string) => {
+  const t = (tipe || '').toLowerCase();
+  const n = (name || '').toLowerCase();
+  
+  if (t.includes('kendaraan') || t.includes('mobil') || t.includes('car') || t.includes('vehicle')) {
+    return true;
+  }
+  
+  const vehicleKeywords = ['panther', 'apv', 'grand max', 'elf', 'innova', 'avanza', 'xenia', 'mobil', 'bus', 'hiace'];
+  return vehicleKeywords.some(keyword => n.includes(keyword));
+};
+
 export default function MonitorCalendar({ calendarData = [] }: MonitorCalendarProps) {
  const [selectedDate, setSelectedDate] = useState(
  calendarData.length > 0 ? calendarData[0].date : ''
@@ -89,7 +101,7 @@ export default function MonitorCalendar({ calendarData = [] }: MonitorCalendarPr
  <tr key={i} className="border-b last:border-0">
  <td className="py-2 pr-4">
  <div className="flex items-center gap-2">
- {b.tipe === 'kendaraan'
+ {isVehicleAsset(b.tipe, b.nama_aset)
  ? <Car className="h-4 w-4 text-muted-foreground shrink-0" />
  : <DoorOpen className="h-4 w-4 text-muted-foreground shrink-0" />
  }

@@ -33,6 +33,9 @@ class User extends Authenticatable
         'divisi_id',
         'org_unit_id',
         'jabatan_id',
+        'notify_browser',
+        'notify_inapp',
+        'notify_sound',
     ];
 
     protected $hidden = [
@@ -44,6 +47,9 @@ class User extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'notify_browser' => 'boolean',
+            'notify_inapp' => 'boolean',
+            'notify_sound' => 'boolean',
         ];
     }
 

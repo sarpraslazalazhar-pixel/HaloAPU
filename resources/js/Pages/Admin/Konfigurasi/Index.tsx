@@ -21,6 +21,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  wa_api_key: configs.wa_api_key || '',
  wa_number_key: configs.wa_number_key || '',
  wa_gateway_url: configs.wa_gateway_url || '',
+ wa_notification_enabled: configs.wa_notification_enabled !== undefined ? Boolean(configs.wa_notification_enabled) : true,
  nomor_wa_utama: configs.nomor_wa_utama || '',
  nomor_wa_fallback: configs.nomor_wa_fallback || '',
  app_timezone: configs.app_timezone || 'Asia/Jakarta',
@@ -115,8 +116,18 @@ export default function KonfigurasiIndex({ configs }: any) {
 
  <TabsContent value="notifikasi" className="space-y-4 mt-4">
  <Card>
- <CardHeader><CardTitle>Notifikasi</CardTitle></CardHeader>
+ <CardHeader><CardTitle>Notifikasi WhatsApp & Email</CardTitle></CardHeader>
  <CardContent className="space-y-4">
+ <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/30 mb-4">
+ <div>
+ <Label className="font-semibold text-base">Aktifkan Notifikasi WhatsApp Sistem</Label>
+ <p className="text-xs text-muted-foreground">Sakelar utama untuk mengaktifkan atau mematikan pengiriman pesan WhatsApp secara global untuk seluruh sistem.</p>
+ </div>
+ <Switch
+ checked={data.wa_notification_enabled}
+ onCheckedChange={(checked) => setData('wa_notification_enabled', checked)}
+ />
+ </div>
  <div>
  <Label htmlFor="email_admin">Email Admin</Label>
  <Input id="email_admin" type="email" value={data.email_admin} onChange={(e) => setData('email_admin', e.target.value)} />

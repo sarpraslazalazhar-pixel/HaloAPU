@@ -10,15 +10,18 @@ use Inertia\Inertia;
 
 class NotificationController extends Controller
 {
+    private function getNotifiableUser(Request $request)
+    {
+        return $request->user('admin') ?? $request->user('web') ?? $request->user();
+    }
+
     /**
      * Ambil jumlah notifikasi yang belum dibaca.
-     * Dipanggil via usePoll() setiap 15 detik.
      */
     public function unreadCount(Request $request): JsonResponse
     {
-        $count = $request->user('admin')
-            ->unreadNotifications()
-            ->count();
+        $user = $this->getNotifiableUser($request);
+        $count = $user ? $user->unreadNotifications()->count() : 0;
 
         return response()->json([
             'unread_count' => $count,
@@ -30,7 +33,15 @@ class NotificationController extends Controller
      */
     public function index(Request $request)
     {
-        $query = $request->user('admin')->notifications();
+        $user = $this->getNotifiableUser($request);
+        if (!$user) {
+            if ($request->wantsJson()) {
+                return response()->json(['notifications' => ['data' => []]]);
+            }
+            return redirect()->back();
+        }
+
+        $query = $user->notifications();
 
         // Filter: status
         $status = $request->get('status');
@@ -55,7 +66,10 @@ class NotificationController extends Controller
             ]);
         }
 
-        return Inertia::render('Admin/Notifications/Index', [
+        $isAdmin = (bool)$request->user('admin');
+        $view = $isAdmin ? 'Admin/Notifications/Index' : 'User/Notifications/Index';
+
+        return Inertia::render($view, [
             'notifications' => $notifications,
             'filters' => [
                 'status' => $status,
@@ -69,18 +83,17 @@ class NotificationController extends Controller
      */
     public function markAsRead(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user('admin')
-            ->notifications()
-            ->findOrFail($id);
-
-        $notification->markAsRead();
+        $user = $this->getNotifiableUser($request);
+        if ($user) {
+            $notification = $user->notifications()->findOrFail($id);
+            $notification->markAsRead();
+        }
 
         return response()->json(['success' => true]);
     }
 
     /**
-     * Snooze notifikasi — set snoozed_until di kolom data.
-     * Scheduler akan re-notify saat expired.
+     * Snooze notifikasi.
      */
     public function snooze(Request $request, string $id): JsonResponse
     {
@@ -88,42 +101,45 @@ class NotificationController extends Controller
             'snooze_minutes' => 'required|integer|in:15,30,60,120,1440',
         ]);
 
-        $notification = $request->user('admin')
-            ->notifications()
-            ->findOrFail($id);
+        $user = $this->getNotifiableUser($request);
+        if ($user) {
+            $notification = $user->notifications()->findOrFail($id);
 
-        $data = $notification->data;
-        $data['snoozed_until'] = now()->addMinutes($validated['snooze_minutes'])->toISOString();
-        $data['snoozed'] = true;
+            $data = $notification->data;
+            $data['snoozed_until'] = now()->addMinutes($validated['snooze_minutes'])->toISOString();
+            $data['snoozed'] = true;
 
-        $notification->update([
-            'data' => $data,
-            'read_at' => now(), // Mark as read saat di-snooze
-        ]);
+            $notification->update([
+                'data' => $data,
+                'read_at' => now(),
+            ]);
 
-        return response()->json([
-            'success' => true,
-            'snoozed_until' => $data['snoozed_until'],
-        ]);
+            return response()->json([
+                'success' => true,
+                'snoozed_until' => $data['snoozed_until'],
+            ]);
+        }
+
+        return response()->json(['success' => false], 401);
     }
 
     /**
      * Tandai notifikasi sebagai selesai (done).
-     * Menambahkan flag done_at di data JSON.
      */
     public function markAsDone(Request $request, string $id): JsonResponse
     {
-        $notification = $request->user('admin')
-            ->notifications()
-            ->findOrFail($id);
+        $user = $this->getNotifiableUser($request);
+        if ($user) {
+            $notification = $user->notifications()->findOrFail($id);
 
-        $data = $notification->data;
-        $data['done_at'] = now()->toISOString();
+            $data = $notification->data;
+            $data['done_at'] = now()->toISOString();
 
-        $notification->update([
-            'data' => $data,
-            'read_at' => $notification->read_at ?? now(),
-        ]);
+            $notification->update([
+                'data' => $data,
+                'read_at' => $notification->read_at ?? now(),
+            ]);
+        }
 
         return response()->json(['success' => true]);
     }
@@ -133,7 +149,10 @@ class NotificationController extends Controller
      */
     public function markAllAsRead(Request $request): JsonResponse
     {
-        $request->user('admin')->unreadNotifications->markAsRead();
+        $user = $this->getNotifiableUser($request);
+        if ($user) {
+            $user->unreadNotifications->markAsRead();
+        }
 
         return response()->json(['success' => true]);
     }

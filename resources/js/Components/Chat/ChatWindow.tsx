@@ -25,6 +25,7 @@ import {
   MessageSquare,
   Copy,
   MoreVertical,
+  ChevronLeft,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
@@ -105,6 +106,7 @@ interface ChatWindowProps {
     type: 'user' | 'admin';
   };
   isAdmin?: boolean;
+  onBack?: () => void;
 }
 
 const COMMON_EMOJIS = ['😊', '👍', '🙏', '🚀', '✅', '⚠️', '📄', '❤️', '👏', '🔥', '💡', '❓', '💬', '🎉'];
@@ -114,6 +116,7 @@ export function ChatWindow({
   initialMessages,
   currentUser,
   isAdmin = false,
+  onBack,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
@@ -442,6 +445,11 @@ export function ChatWindow({
         className="h-14 px-4 bg-white/70 backdrop-blur-md border-b border-zinc-200/60 flex items-center justify-between shrink-0 shadow-sm z-10"
       >
         <div className="flex items-center gap-3 min-w-0">
+          {onBack && (
+            <button onClick={onBack} className="p-1.5 -ml-2 rounded-xl text-zinc-500 hover:text-zinc-900 hover:bg-zinc-100 transition-colors md:hidden">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
           <div className="relative">
             <div className="h-9 w-9 rounded-full bg-sky-100 border border-sky-200 overflow-hidden flex items-center justify-center text-sky-700 font-bold text-sm shrink-0">
               {conversation.user?.avatar ? (

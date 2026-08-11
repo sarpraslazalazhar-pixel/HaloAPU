@@ -9,9 +9,11 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
+use App\Traits\FilterNotificationChannels;
+
 class TicketCreatedUserNotification extends Notification implements ShouldBroadcast
 {
-    use Queueable;
+    use Queueable, FilterNotificationChannels;
 
     public $ticket;
 
@@ -26,7 +28,7 @@ class TicketCreatedUserNotification extends Notification implements ShouldBroadc
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
-        return $channels;
+        return $this->filterChannels($channels, $notifiable);
     }
 
     /**

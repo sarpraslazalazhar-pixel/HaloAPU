@@ -8,9 +8,11 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
+use App\Traits\FilterNotificationChannels;
+
 class TicketRatedAdminNotification extends Notification
 {
-    use Queueable;
+    use Queueable, FilterNotificationChannels;
 
     public $ticket;
     public $rating;
@@ -25,7 +27,7 @@ class TicketRatedAdminNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return ['database', WebPushChannel::class];
+        return $this->filterChannels(['database', WebPushChannel::class], $notifiable);
     }
 
     public function toWebPush($notifiable, $notification)

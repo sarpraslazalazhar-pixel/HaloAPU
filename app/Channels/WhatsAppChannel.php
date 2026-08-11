@@ -17,6 +17,13 @@ class WhatsAppChannel
      */
     public function send(mixed $notifiable, Notification $notification): void
     {
+        // Cek apakah notifikasi WhatsApp diaktifkan secara global di sistem
+        $waEnabled = SystemConfig::getValue('wa_notification_enabled', true);
+        if (!$waEnabled || $waEnabled === '0' || $waEnabled === 'false') {
+            Log::info("WhatsApp notification dibatalkan: Notifikasi WhatsApp dinonaktifkan di konfigurasi sistem.");
+            return;
+        }
+
         // Panggil method toWhatsApp() dari notification class
         if (!method_exists($notification, 'toWhatsApp')) {
             return;

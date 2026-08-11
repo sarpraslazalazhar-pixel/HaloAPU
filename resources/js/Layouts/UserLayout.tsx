@@ -21,6 +21,7 @@ import {
 } from "@/Components/ui/dropdown-menu";
 
 import ProfileModal from '@/Components/ProfileModal';
+import NotificationBell from '@/Components/NotificationBell';
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
 import { motion } from 'framer-motion';
@@ -30,8 +31,9 @@ import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
 
 interface UserLayoutProps {
- children: React.ReactNode;
- title?: string;
+  children: React.ReactNode;
+  title?: string;
+  hideBottomNav?: boolean;
 }
 
 interface NavItem {
@@ -67,7 +69,7 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
  );
 }
 
-export default function UserLayout({ children, title }: UserLayoutProps) {
+export default function UserLayout({ children, title, hideBottomNav }: UserLayoutProps) {
  const { auth, flash, appConfig } = usePage<any>().props;
  const user = auth.user;
  const [profileOpen, setProfileOpen] = useState(false);
@@ -115,25 +117,27 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
  ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
  }
 
- const channel =`App.Models.User.${user.id}`;
- 
- window.Echo.private(channel)
- .notification((notification: any) => {
- // Cek izin notifikasi browser
- if ('Notification' in window && Notification.permission === 'granted') {
- new Notification(notification.title || 'Pemberitahuan Baru', {
- body: notification.message || '',
- });
- }
- // Tampilkan juga toast fallback di in-app
- toast.success(notification.title || 'Pemberitahuan Baru', { id:`notif-${Date.now()}`});
- });
- 
- return () => {
- window.Echo.leave(channel);
- };
- }
- }, [flash, user]);
+      const channel = `App.Models.User.${user.id}`;
+      
+      window.Echo.private(channel)
+        .notification((notification: any) => {
+          // Cek preferensi notifikasi browser
+          if (user?.notify_browser !== false && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(notification.title || 'Pemberitahuan Baru', {
+              body: notification.message || '',
+            });
+          }
+          // Tampilkan juga toast fallback di in-app jika diizinkan
+          if (user?.notify_inapp !== false) {
+            toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });
+          }
+        });
+      
+      return () => {
+        window.Echo.leave(channel);
+      };
+    }
+  }, [flash, user]);
  
  const url = usePage().url;
  const systemName = appConfig?.nama_sistem || 'HALO APU';
@@ -180,7 +184,8 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
  );
 
  const bottomNavItems: BottomNavItem[] = [
- { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
+  { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
+  { label: 'Pesan', icon: MessageSquare, route: '/chat' },
  { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
  { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
  { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
@@ -199,7 +204,7 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
  <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
  <div className="flex-1" />
  
-
+ <NotificationBell />
  
  <DropdownMenu>
  <DropdownMenuTrigger asChild>
@@ -241,9 +246,8 @@ export default function UserLayout({ children, title }: UserLayoutProps) {
             {children}
           </PageTransition>
         </main>
- </div>
-
- <BottomNav items={bottomNavItems} />
- </div>
- );
+      </div>
+      {!hideBottomNav && <BottomNav items={bottomNavItems} />}
+    </div>
+  );
 }

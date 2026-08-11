@@ -9,9 +9,11 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
+use App\Traits\FilterNotificationChannels;
+
 class TicketCreatedAdminNotification extends Notification implements ShouldBroadcast
 {
-    use Queueable;
+    use Queueable, FilterNotificationChannels;
 
     public $ticket;
 
@@ -42,7 +44,7 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
             }
         }
 
-        return $channels;
+        return $this->filterChannels($channels, $notifiable);
     }
 
     /**

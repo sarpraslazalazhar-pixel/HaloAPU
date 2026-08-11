@@ -7,9 +7,11 @@ use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
 
+use App\Traits\FilterNotificationChannels;
+
 class TicketStatusUpdatedOperatorNotification extends Notification
 {
-    use Queueable;
+    use Queueable, FilterNotificationChannels;
 
     public $ticket;
     public $catatan;
@@ -28,7 +30,7 @@ class TicketStatusUpdatedOperatorNotification extends Notification
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
-        return $channels;
+        return $this->filterChannels($channels, $notifiable);
     }
 
     public function toWebPush($notifiable, $notification)

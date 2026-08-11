@@ -320,7 +320,10 @@ export default function Wizard({ unitList }: WizardProps) {
                           gridId="kanalGrid"
                           options={unitList}
                           value={data.unit_id}
-                          onChange={(val: string) => { setData('unit_id', val); setData('sub_unit_id', ''); }}
+                          onChange={(val: string) => {
+                            setData(prev => ({ ...prev, unit_id: val, sub_unit_id: '' }));
+                            subUnits.load(val);
+                          }}
                           labelKey="nama_unit"
                           showIcon={true}
                         />

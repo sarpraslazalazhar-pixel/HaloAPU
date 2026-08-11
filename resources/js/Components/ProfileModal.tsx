@@ -4,7 +4,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/u
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Camera, Loader2, User } from 'lucide-react';
+import { Switch } from '@/Components/ui/switch';
+import { Bell, Volume2, Globe, Camera, Loader2, User } from 'lucide-react';
 import { motion } from 'framer-motion';
 import ReactCrop, { type Crop, type PixelCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
@@ -37,6 +38,9 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  no_wa: user?.no_wa || '',
  password: '',
  password_confirmation: '',
+ notify_browser: user?.notify_browser !== undefined ? Boolean(user.notify_browser) : true,
+ notify_inapp: user?.notify_inapp !== undefined ? Boolean(user.notify_inapp) : true,
+ notify_sound: user?.notify_sound !== undefined ? Boolean(user.notify_sound) : true,
  });
 
  // Sync form data when user changes
@@ -49,6 +53,9 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  no_wa: user.no_wa || '',
  password: '',
  password_confirmation: '',
+ notify_browser: user.notify_browser !== undefined ? Boolean(user.notify_browser) : true,
+ notify_inapp: user.notify_inapp !== undefined ? Boolean(user.notify_inapp) : true,
+ notify_sound: user.notify_sound !== undefined ? Boolean(user.notify_sound) : true,
  });
  }
  }, [user, open]);
@@ -121,7 +128,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
 
  return (
  <Dialog open={open} onOpenChange={onOpenChange}>
- <DialogContent className="sm:max-w-md">
+ <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
  <DialogHeader>
  <DialogTitle className="text-lg font-semibold">Edit Profil</DialogTitle>
  </DialogHeader>
@@ -251,54 +258,99 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  </div>
  </div>
 
- <div className="border-t pt-4">
- <div className="flex items-center justify-between">
- <div>
- <p className="text-sm font-medium">Notifikasi Browser</p>
- <p className="text-xs text-muted-foreground">Terima popup notifikasi saat ada tiket baru atau update.</p>
- </div>
- <Button 
- type="button" 
- variant="outline" 
- size="sm"
- onClick={() => {
- if (!('Notification' in window)) {
- alert('Browser Anda tidak mendukung notifikasi.');
- return;
- }
- Notification.requestPermission().then((permission) => {
- if (permission === 'granted') {
- alert('Izin notifikasi diberikan! Anda akan menerima notifikasi.');
- // dummy notif
- new Notification('Notifikasi Aktif', { body: 'Anda akan menerima update tiket di sini.' });
- } else {
- alert('Izin notifikasi ditolak.');
- }
- });
- }}
- >
- Request Izin
- </Button>
- </div>
- </div>
+              {/* Pengaturan Notifikasi */}
+              <div className="border-t pt-4 space-y-3">
+                <p className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Bell className="w-4 h-4 text-primary" /> Pengaturan Notifikasi
+                </p>
 
-        <div className="flex justify-end gap-2 pt-2">
-          <motion.div whileTap={{ scale: 0.95 }}>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Batal
-            </Button>
-          </motion.div>
-          <motion.div whileTap={{ scale: 0.95 }}>
-            <Button type="submit" disabled={processing}>
-              {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Simpan
-            </Button>
-          </motion.div>
-        </div>
- </form>
- </>
- )}
- </DialogContent>
- </Dialog>
- );
+                {/* Notifikasi Browser (Web Push) */}
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                      <Globe className="w-3.5 h-3.5 text-blue-500" />
+                      <span>Notifikasi Browser</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Web Push popup saat tiket baru / update</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm"
+                      className="text-xs h-7 px-2"
+                      onClick={() => {
+                        if (!('Notification' in window)) {
+                          alert('Browser Anda tidak mendukung notifikasi.');
+                          return;
+                        }
+                        Notification.requestPermission().then((permission) => {
+                          if (permission === 'granted') {
+                            alert('Izin notifikasi diberikan!');
+                            new Notification('Notifikasi Aktif', { body: 'Anda akan menerima update tiket di sini.' });
+                          } else {
+                            alert('Izin notifikasi ditolak.');
+                          }
+                        });
+                      }}
+                    >
+                      Izin Browser
+                    </Button>
+                    <Switch
+                      checked={data.notify_browser}
+                      onCheckedChange={(checked) => setData('notify_browser', checked)}
+                    />
+                  </div>
+                </div>
+
+                {/* Notifikasi Aplikasi (In-App) */}
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                      <Bell className="w-3.5 h-3.5 text-emerald-500" />
+                      <span>Notifikasi Aplikasi</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Simpan & tampilkan di ikon lonceng header</p>
+                  </div>
+                  <Switch
+                    checked={data.notify_inapp}
+                    onCheckedChange={(checked) => setData('notify_inapp', checked)}
+                  />
+                </div>
+
+                {/* Suara Notifikasi */}
+                <div className="flex items-center justify-between gap-2 p-2.5 rounded-lg border bg-muted/30">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-1.5 text-sm font-medium">
+                      <Volume2 className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Suara Notifikasi</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Putar nada saat tiket / pesan masuk</p>
+                  </div>
+                  <Switch
+                    checked={data.notify_sound}
+                    onCheckedChange={(checked) => setData('notify_sound', checked)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3">
+                <motion.div whileTap={{ scale: 0.95 }}>
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Batal
+                  </Button>
+                </motion.div>
+                <motion.div whileTap={{ scale: 0.95 }}>
+                  <Button type="submit" disabled={processing}>
+                    {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Simpan
+                  </Button>
+                </motion.div>
+              </div>
+            </form>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
 }

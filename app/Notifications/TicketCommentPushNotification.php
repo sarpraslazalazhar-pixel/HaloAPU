@@ -9,14 +9,16 @@ use Illuminate\Notifications\Notification;
 use NotificationChannels\WebPush\WebPushMessage;
 use NotificationChannels\WebPush\WebPushChannel;
 
+use App\Traits\FilterNotificationChannels;
+
 class TicketCommentPushNotification extends Notification
 {
-    use Queueable;
+    use Queueable, FilterNotificationChannels;
 
-    protected $ticket;
-    protected $senderName;
-    protected $commentText;
-    protected $url;
+    public $ticket;
+    public $senderName;
+    public $commentText;
+    public $url;
 
     /**
      * Create a new notification instance.
@@ -36,7 +38,7 @@ class TicketCommentPushNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return ['database', WebPushChannel::class];
+        return $this->filterChannels(['database', WebPushChannel::class], $notifiable);
     }
 
     public function toDatabase(object $notifiable): array

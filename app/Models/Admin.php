@@ -23,6 +23,9 @@ class Admin extends Authenticatable
         'name',
         'no_wa',
         'avatar_path',
+        'notify_browser',
+        'notify_inapp',
+        'notify_sound',
     ];
 
     protected $hidden = [
@@ -34,6 +37,9 @@ class Admin extends Authenticatable
     {
         return [
             'password' => 'hashed',
+            'notify_browser' => 'boolean',
+            'notify_inapp' => 'boolean',
+            'notify_sound' => 'boolean',
         ];
     }
 

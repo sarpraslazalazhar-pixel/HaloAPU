@@ -9,9 +9,11 @@ use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
 
+use App\Traits\FilterNotificationChannels;
+
 class TicketAssignedOperatorNotification extends Notification implements ShouldBroadcast
 {
-    use Queueable;
+    use Queueable, FilterNotificationChannels;
 
     public $ticket;
 
@@ -38,7 +40,7 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
             // Anonymous fallback not needed for operator assignment since it always targets a specific admin.
         }
 
-        return $channels;
+        return $this->filterChannels($channels, $notifiable);
     }
 
     /**

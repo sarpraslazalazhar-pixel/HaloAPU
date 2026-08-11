@@ -20,12 +20,24 @@ class ProfileController extends Controller
             'email' => 'required|email|max:100|unique:admins,email,' . $admin->id,
             'no_wa' => 'nullable|string|max:20',
             'password' => ['nullable', 'confirmed', Password::min(8)],
+            'notify_browser' => 'boolean',
+            'notify_inapp' => 'boolean',
+            'notify_sound' => 'boolean',
         ]);
 
         $admin->name = $validated['name'];
         $admin->username = $validated['username'];
         $admin->email = $validated['email'];
         $admin->no_wa = $validated['no_wa'];
+        if ($request->has('notify_browser')) {
+            $admin->notify_browser = $request->boolean('notify_browser');
+        }
+        if ($request->has('notify_inapp')) {
+            $admin->notify_inapp = $request->boolean('notify_inapp');
+        }
+        if ($request->has('notify_sound')) {
+            $admin->notify_sound = $request->boolean('notify_sound');
+        }
 
         if (!empty($validated['password'])) {
             $admin->password = Hash::make($validated['password']);

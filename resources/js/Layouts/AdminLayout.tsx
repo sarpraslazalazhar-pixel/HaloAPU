@@ -53,6 +53,7 @@ import { useNotificationSound } from '@/hooks/useNotificationSound';
 interface AdminLayoutProps {
  children: React.ReactNode;
  title?: string;
+ hideBottomNav?: boolean;
 }
 
 interface NavSubItem {
@@ -284,7 +285,7 @@ function NavDropdown({ item, isCollapsed, url, permissions }: { item: NavItem; i
   );
 }
 
-export default function AdminLayout({ children, title }: AdminLayoutProps) {
+export default function AdminLayout({ children, title, hideBottomNav }: AdminLayoutProps) {
  const { auth, flash, appConfig } = usePage<any>().props;
  const admin = auth.admin || auth.user;
  const [profileOpen, setProfileOpen] = useState(false);
@@ -296,102 +297,108 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
     ? `/system/notification-sound?v=${encodeURIComponent(appConfig.notification_sound_path)}`
     : '/sounds/ting-ting-ting.wav';
 
-  const { isMuted, play } = useNotificationSound({ soundUrl });
+  const soundEnabled = admin?.notify_sound !== false;
+  const { isMuted, play } = useNotificationSound({ soundUrl, enabled: soundEnabled });
   const isMutedRef = useRef(isMuted);
 
- // Sync isMuted state ke ref
- useEffect(() => {
-   isMutedRef.current = isMuted;
- }, [isMuted]);
+  // Sync isMuted state ke ref
+  useEffect(() => {
+    isMutedRef.current = isMuted;
+  }, [isMuted]);
 
   const playNotificationSound = useCallback(() => {
-    if (!isMutedRef.current) {
-        play();
+    if (!isMutedRef.current && soundEnabled) {
+      play();
     }
-  }, [play]);
+  }, [play, soundEnabled]);
 
- // Collapsed sidebar state with localStorage persistence
- const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
- if (typeof window !== 'undefined') {
- return localStorage.getItem('admin_sidebar_collapsed') === 'true';
- }
- return false;
- });
+  // Collapsed sidebar state with localStorage persistence
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('admin_sidebar_collapsed') === 'true';
+    }
+    return false;
+  });
 
- const toggleCollapse = () => {
- setIsCollapsed(prev => {
- const next = !prev;
- if (typeof window !== 'undefined') {
- localStorage.setItem('admin_sidebar_collapsed', String(next));
- }
- return next;
- });
- };
+  const toggleCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('admin_sidebar_collapsed', String(next));
+      }
+      return next;
+    });
+  };
 
- useIdleTimer('/admin/logout');
+  useIdleTimer('/admin/logout');
 
- useEffect(() => {
- if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
- if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
- if (flash?.message) toast(flash.message, { id: 'flash-message' });
+  useEffect(() => {
+    if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
+    if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
+    if (flash?.message) toast(flash.message, { id: 'flash-message' });
 
- // Listen for Echo notifications
- if (window.Echo && admin) {
- // Cek apakah sudah ditanya hari ini
- const lastAskedStr = localStorage.getItem('notif_last_asked');
- const lastAsked = lastAskedStr ? parseInt(lastAskedStr, 10) : 0;
- const now = Date.now();
- const oneDay = 24 * 60 * 60 * 1000;
- const shouldAsk = (now - lastAsked) > oneDay;
+    // Listen for Echo notifications
+    if (window.Echo && admin) {
+      // Cek apakah sudah ditanya hari ini
+      const lastAskedStr = localStorage.getItem('notif_last_asked');
+      const lastAsked = lastAskedStr ? parseInt(lastAskedStr, 10) : 0;
+      const now = Date.now();
+      const oneDay = 24 * 60 * 60 * 1000;
+      const shouldAsk = (now - lastAsked) > oneDay;
 
- // Proactive notification permission request
- if ('Notification' in window && Notification.permission === 'default' && shouldAsk) {
- toast((t) => (
- <div className="flex flex-col gap-2">
- <span className="text-sm font-medium">Aktifkan Notifikasi Browser</span>
- <span className="text-xs text-muted-foreground">Terima pemberitahuan saat ada tiket baru atau update.</span>
- <div className="flex gap-2 justify-end mt-1">
- <Button size="sm" variant="outline" onClick={() => {
- localStorage.setItem('notif_last_asked', Date.now().toString());
- toast.dismiss(t.id);
- }}>Nanti</Button>
- <Button size="sm" onClick={() => {
- localStorage.setItem('notif_last_asked', Date.now().toString());
- toast.dismiss(t.id);
- Notification.requestPermission().then((permission) => {
- if (permission === 'granted') {
- subscribe();
- toast.success('Notifikasi diaktifkan!');
- }
- });
- }}>Aktifkan</Button>
- </div>
- </div>
- ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
- }
+      // Proactive notification permission request
+      if ('Notification' in window && Notification.permission === 'default' && shouldAsk) {
+        toast((t) => (
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium">Aktifkan Notifikasi Browser</span>
+            <span className="text-xs text-muted-foreground">Terima pemberitahuan saat ada tiket baru atau update.</span>
+            <div className="flex gap-2 justify-end mt-1">
+              <Button size="sm" variant="outline" onClick={() => {
+                localStorage.setItem('notif_last_asked', Date.now().toString());
+                toast.dismiss(t.id);
+              }}>Nanti</Button>
+              <Button size="sm" onClick={() => {
+                localStorage.setItem('notif_last_asked', Date.now().toString());
+                toast.dismiss(t.id);
+                Notification.requestPermission().then((permission) => {
+                  if (permission === 'granted') {
+                    subscribe();
+                    toast.success('Notifikasi diaktifkan!');
+                  }
+                });
+              }}>Aktifkan</Button>
+            </div>
+          </div>
+        ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
+      }
 
- const channel = admin.hasOwnProperty('username') && !admin.hasOwnProperty('divisi_id')
- ?`App.Models.Admin.${admin.id}`
- :`App.Models.User.${admin.id}`;
+      const channel = admin.hasOwnProperty('username') && !admin.hasOwnProperty('divisi_id')
+        ? `App.Models.Admin.${admin.id}`
+        : `App.Models.User.${admin.id}`;
 
- window.Echo.private(channel)
- .notification((notification: any) => {
- // Mainkan suara notifikasi
- playNotificationSound();
+      window.Echo.private(channel)
+        .notification((notification: any) => {
+          // Mainkan suara notifikasi jika diizinkan
+          if (admin?.notify_sound !== false) {
+            playNotificationSound();
+          }
 
- if ('Notification' in window && Notification.permission === 'granted') {
- new Notification(notification.title || 'Pemberitahuan Baru', {
- body: notification.message || '',
- });
- }
- toast.success(notification.title || 'Pemberitahuan Baru', { id:`notif-${Date.now()}`});
- });
+          if (admin?.notify_browser !== false && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(notification.title || 'Pemberitahuan Baru', {
+              body: notification.message || '',
+            });
+          }
 
- return () => {
- window.Echo.leave(channel);
- };
- }
- }, [flash, admin]);
+          if (admin?.notify_inapp !== false) {
+            toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });
+          }
+        });
+
+      return () => {
+        window.Echo.leave(channel);
+      };
+    }
+  }, [flash, admin]);
 
  const url = usePage().url;
  const isActive = (routePath: string) => isRouteActive(url, routePath);
@@ -516,7 +523,7 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
  { label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
  { label: 'Tiket', icon: Ticket, route: '/admin/tiket' },
  { label: 'Monitor', icon: Grid3X3, route: '/admin/monitor' },
- { label: 'CSAT', icon: Star, route: '/admin/csat' },
+ { label: 'Pesan', icon: MessageSquare, route: '/admin/chat' },
  { label: 'Lainnya', icon: MoreHorizontal, onClick: () => setSidebarOpen(true) },
  ];
 
@@ -601,9 +608,8 @@ export default function AdminLayout({ children, title }: AdminLayoutProps) {
             {children}
           </PageTransition>
         </main>
- </div>
-
- <BottomNav items={bottomNavItems} />
- </div>
- );
+      </div>
+      {!hideBottomNav && <BottomNav items={bottomNavItems} />}
+    </div>
+  );
 }

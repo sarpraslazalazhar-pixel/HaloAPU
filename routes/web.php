@@ -86,9 +86,18 @@ Route::middleware('auth')->group(function () {
         Route::post('/conversations/{conversation}/messages', [\App\Http\Controllers\ChatController::class, 'storeMessage'])->name('messages.store');
         Route::put('/messages/{message}', [\App\Http\Controllers\ChatController::class, 'updateMessage'])->name('messages.update');
         Route::delete('/messages/{message}', [\App\Http\Controllers\ChatController::class, 'destroyMessage'])->name('messages.destroy');
-        Route::post('/conversations/{conversation}/read', [\App\Http\Controllers\ChatController::class, 'markAsRead'])->name('read');
         Route::post('/conversations/{conversation}/typing', [\App\Http\Controllers\ChatController::class, 'typing'])->name('typing');
         Route::get('/download/{attachment}', [\App\Http\Controllers\ChatController::class, 'downloadAttachment'])->name('download');
+    });
+
+    // Notifications User
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('unread-count', [\App\Http\Controllers\Admin\NotificationController::class, 'unreadCount'])->name('unread-count');
+        Route::get('/', [\App\Http\Controllers\Admin\NotificationController::class, 'index'])->name('index');
+        Route::patch('{id}/read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAsRead'])->name('read');
+        Route::patch('{id}/snooze', [\App\Http\Controllers\Admin\NotificationController::class, 'snooze'])->name('snooze');
+        Route::patch('{id}/done', [\App\Http\Controllers\Admin\NotificationController::class, 'markAsDone'])->name('done');
+        Route::post('mark-all-read', [\App\Http\Controllers\Admin\NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
     });
 });
 

@@ -201,7 +201,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  </div>
  
  <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 ">
- <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
+ <header className="relative z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
  <div className="flex-1" />
  
  <NotificationBell />

@@ -55,7 +55,7 @@ export default function UserChatIndex({
       <Head title="Pesan & Chat Realtime" />
 
       <div className="h-[calc(100vh-130px)] md:min-h-[450px] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0 relative">
-        <div className={`md:block h-full w-full ${isMobile && activeId ? 'hidden' : 'block'}`}>
+        <div className={`md:flex flex-col min-h-0 h-full w-full ${isMobile && activeId ? 'hidden' : 'flex'}`}>
           <ConversationList
             conversations={conversations}
             activeId={activeId}
@@ -71,7 +71,7 @@ export default function UserChatIndex({
               animate={{ x: 0 }}
               exit={isMobile ? { x: '100%' } : undefined}
               transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-              className={`absolute inset-0 z-10 bg-white md:static md:block md:w-full md:h-full ${!activeId && isMobile ? 'hidden' : ''}`}
+              className={`absolute inset-0 z-10 bg-white md:static md:flex md:w-full md:h-full flex-col min-h-0 ${!activeId && isMobile ? 'hidden' : 'flex'}`}
             >
               <ChatWindow
                 conversation={currentConv}

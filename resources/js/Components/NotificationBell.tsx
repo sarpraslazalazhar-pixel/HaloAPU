@@ -213,7 +213,7 @@ export default function NotificationBell() {
               initial="initial"
               animate="animate"
               exit="exit"
-              className="absolute right-0 mt-2 w-96 bg-background border rounded-2xl shadow-2xl z-50 overflow-hidden flex flex-col"
+              className="absolute right-0 mt-2 w-96 bg-background border rounded-2xl shadow-2xl z-[100] overflow-hidden flex flex-col"
             >
               <div className="flex items-center justify-between p-4 border-b bg-muted/30">
                 <h3 className="font-semibold text-sm">Notifikasi</h3>

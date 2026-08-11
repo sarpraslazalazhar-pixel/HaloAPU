@@ -39,7 +39,7 @@ export default function AdminChatIndex({
     <AdminLayout title="Manajemen Chat & Pesan Realtime">
       <Head title="Pesan & Chat Realtime" />
 
-      <div className="h-[calc(100vh-140px)] min-h-[500px] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr]">
+      <div className="h-[calc(100vh-130px)] min-h-[450px] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0">
         <ConversationList
           conversations={conversations}
           activeId={activeId}

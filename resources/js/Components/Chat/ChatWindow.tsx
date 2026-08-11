@@ -398,7 +398,7 @@ export function ChatWindow({
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-zinc-50/50 relative overflow-hidden">
+    <div className="flex-1 flex flex-col h-full min-h-0 bg-zinc-50/50 relative overflow-hidden">
       {/* 1. Header */}
       <motion.div 
         initial={{ y: -20, opacity: 0 }}
@@ -453,7 +453,7 @@ export function ChatWindow({
       </motion.div>
 
       {/* 2. Messages Body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth min-h-0 custom-scrollbar">
         <AnimatePresence initial={false}>
         {messages.length === 0 ? (
           <motion.div 

@@ -131,4 +131,17 @@
         border-radius: 999px;
     }
 
+    .custom-scrollbar::-webkit-scrollbar {
+        width: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+        background: rgba(156, 163, 175, 0.4);
+        border-radius: 999px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+        background: rgba(107, 114, 128, 0.6);
+    }
 }

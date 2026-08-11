@@ -74,9 +74,9 @@ export function ConversationList({
   };
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-zinc-200">
+    <div className="flex flex-col h-full min-h-0 bg-white border-r border-zinc-200 overflow-hidden">
       {/* Header & Search */}
-      <div className="p-3.5 border-b border-zinc-100 flex flex-col gap-2.5 bg-zinc-50/50">
+      <div className="p-3.5 border-b border-zinc-100 flex flex-col gap-2.5 bg-zinc-50/50 shrink-0">
         <div className="flex items-center justify-between">
           <h2 className="text-base font-bold text-zinc-900 flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-sky-600" />
@@ -101,14 +101,14 @@ export function ConversationList({
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cari nama atau pesan..."
-            className="pl-8 h-8 text-xs bg-white rounded-xl border-zinc-200 focus-visible:ring-sky-500"
+            placeholder="Cari percakapan..."
+            className="pl-8 h-8 text-xs bg-white border-zinc-200 rounded-xl"
           />
         </div>
       </div>
 
       {/* List Content */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 space-y-1 min-h-0 custom-scrollbar">
         <AnimatePresence mode="popLayout">
           {filtered.length === 0 ? (
             <motion.div

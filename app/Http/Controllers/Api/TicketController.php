@@ -778,14 +778,18 @@ class TicketController extends Controller
     public function serveAttachment(Request $request)
     {
         $path = $request->query('path');
-        if (!$path || !Storage::disk('public')->exists($path)) {
-            return response()->json(['message' => 'File not found'], 404);
+        if (!$path) {
+            return response()->json(['message' => 'Path file tidak disertakan'], 400);
+        }
+
+        // Hapus prefix storage/ atau public/ jika ada
+        $cleanPath = preg_replace('/^(storage\/|public\/|\/)+/', '', $path);
+        
+        if (!Storage::disk('public')->exists($cleanPath)) {
+            return response()->json(['message' => 'File tidak ditemukan: ' . $cleanPath], 404);
         }
         
-        $fullPath = storage_path('app/public/' . $path);
-        
-        // Let Laravel handle the file response. Because this route is in api.php,
-        // the global CORS middleware will automatically attach the correct headers.
+        $fullPath = storage_path('app/public/' . $cleanPath);
         return response()->file($fullPath);
     }
 }

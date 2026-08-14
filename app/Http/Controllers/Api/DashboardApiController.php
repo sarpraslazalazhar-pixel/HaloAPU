@@ -31,7 +31,7 @@ class DashboardApiController extends Controller
                     }
                 });
             }
-        } else {
+        } elseif ($user) {
             $query->where('user_id', $user->id);
         }
 
@@ -52,26 +52,29 @@ class DashboardApiController extends Controller
 
         // Recent tickets
         $recentTickets = (clone $query)
-            ->with(['subUnit:id,nama_layanan'])
+            ->with(['subUnit:id,nama_layanan', 'user:id,name,username'])
             ->orderBy('created_at', 'desc')
             ->take(5)
             ->get()
             ->map(function ($ticket) {
                 $flutterStatus = match(strtolower($ticket->status)) {
                     'open' => 'open',
-                    'assigned' => 'assigned',
-                    'on_proses' => 'processing',
-                    'solve', 'selesai' => 'solved',
-                    'reject', 'dibatalkan' => 'rejected',
+                    'assigned', 'on_proses', 'processing' => 'on_proses',
+                    'solve', 'selesai', 'solved' => 'solve',
+                    'reject', 'rejected' => 'reject',
+                    'dibatalkan', 'cancelled' => 'dibatalkan',
+                    'need_revision' => 'need_revision',
                     default => 'open'
                 };
 
                 return [
                     'id' => $ticket->formatted_id ?? (string) $ticket->id,
-                    'title' => $ticket->judul,
+                    'title' => $ticket->judul ?? $ticket->title ?? 'Tiket Layanan',
+                    'description' => $ticket->deskripsi ?? $ticket->description ?? '',
+                    'requesterName' => $ticket->user ? ($ticket->user->name ?? $ticket->user->username) : 'Pengguna',
                     'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : 'General',
                     'status' => $flutterStatus,
-                    'createdAt' => $ticket->created_at->toIso8601String(),
+                    'createdAt' => $ticket->created_at ? $ticket->created_at->toIso8601String() : now()->toIso8601String(),
                 ];
             });
 

@@ -23,6 +23,8 @@ class Admin extends Authenticatable
         'name',
         'no_wa',
         'avatar_path',
+        'device_id',
+        'device_name',
         'notify_browser',
         'notify_inapp',
         'notify_sound',

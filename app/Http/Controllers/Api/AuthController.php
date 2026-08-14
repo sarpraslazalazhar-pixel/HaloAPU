@@ -22,9 +22,13 @@ class AuthController extends Controller
             'email' => 'required|string',
             'password' => 'required|string',
             'is_admin' => 'nullable|boolean',
+            'device_id' => 'nullable|string',
+            'device_name' => 'nullable|string',
         ]);
 
         $isAdmin = $request->input('is_admin', false);
+        $deviceId = $request->input('device_id');
+        $deviceName = $request->input('device_name');
 
         if ($isAdmin) {
             $user = Admin::where('email', $request->email)
@@ -40,6 +44,23 @@ class AuthController extends Controller
             return response()->json([
                 'message' => 'Email/username atau password salah'
             ], 401);
+        }
+
+        // 1 Akun 1 HP: Validasi Pengikatan Perangkat (Device ID Binding)
+        if (!empty($deviceId)) {
+            if (empty($user->device_id)) {
+                // Kunci akun ini ke HP pertama yang login
+                $user->device_id = $deviceId;
+                $user->device_name = $deviceName ?? 'Smartphone Android';
+                $user->save();
+            } elseif ($user->device_id !== $deviceId) {
+                // Ditolak karena login dari HP yang berbeda
+                $deviceInfo = $user->device_name ? " (" . $user->device_name . ")" : "";
+                return response()->json([
+                    'message' => 'Akun ini telah terikat pada perangkat lain' . $deviceInfo . '. 1 akun hanya dapat digunakan pada 1 HP.',
+                    'error_code' => 'DEVICE_MISMATCH',
+                ], 403);
+            }
         }
 
         // Revoke existing tokens for this device if needed, or just create new
@@ -192,13 +213,36 @@ class AuthController extends Controller
     }
 
     /**
+     * Delete user account permanently.
+     */
+    public function deleteAccount(Request $request)
+    {
+        $user = $request->user();
+
+        // Delete avatar file if exists
+        if ($user->avatar_path && Storage::disk('public')->exists($user->avatar_path)) {
+            Storage::disk('public')->delete($user->avatar_path);
+        }
+
+        // Revoke all tokens
+        $user->tokens()->delete();
+
+        // Delete user record from database
+        $user->delete();
+
+        return response()->json([
+            'message' => 'Akun berhasil dihapus dari database'
+        ], 200);
+    }
+
+    /**
      * Format user profile data for API response.
      */
     private function formatUserProfile(User $user): array
     {
         $avatarUrl = null;
         if ($user->avatar_path) {
-            $avatarUrl = url('storage/' . $user->avatar_path);
+            $avatarUrl = url('api/attachments/serve?path=' . $user->avatar_path);
         }
 
         return [
@@ -210,7 +254,7 @@ class AuthController extends Controller
             'department' => $user->orgUnit ? $user->orgUnit->nama_unit_organisasi : '',
             'division' => $user->divisi ? $user->divisi->nama_divisi : '',
             'position' => $user->jabatan ? $user->jabatan->nama_jabatan : '',
-            'avatarUrl' => $avatarUrl ?? 'https://ui-avatars.com/api/?name=' . urlencode($user->name) . '&background=random',
+            'avatarUrl' => $avatarUrl ?? '',
         ];
     }
 
@@ -218,7 +262,7 @@ class AuthController extends Controller
     {
         $avatarUrl = null;
         if ($admin->avatar_path) {
-            $avatarUrl = url('storage/' . $admin->avatar_path);
+            $avatarUrl = url('api/attachments/serve?path=' . $admin->avatar_path);
         }
 
         $roleName = $admin->getRoleNames()->first() ?? 'Admin';
@@ -233,7 +277,7 @@ class AuthController extends Controller
             'department' => 'Sistem Administrator',
             'division' => 'Role: ' . $formattedRole,
             'position' => $formattedRole,
-            'avatarUrl' => $avatarUrl ?? 'https://ui-avatars.com/api/?name=' . urlencode($admin->name) . '&background=random',
+            'avatarUrl' => $avatarUrl ?? '',
         ];
     }
 }

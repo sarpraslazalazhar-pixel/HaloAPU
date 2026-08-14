@@ -30,6 +30,8 @@ class User extends Authenticatable
         'password',
         'no_wa',
         'avatar_path',
+        'device_id',
+        'device_name',
         'divisi_id',
         'org_unit_id',
         'jabatan_id',

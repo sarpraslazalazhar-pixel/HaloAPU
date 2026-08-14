@@ -17,19 +17,20 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Set up CocoaPods
-        run: sudo gem install cocoapods
-
-      - name: Prepare Clean Workspace (No Spaces)
+      - name: Prepare Clean Workspace
         run: |
           mkdir -p "$RUNNER_TEMP/flutter_app"
           cp -R "./Mobile App Flutter/Halo APU mobile/." "$RUNNER_TEMP/flutter_app/"
+          mkdir -p "$RUNNER_TEMP/flutter_app/build/ios/SourcePackages"
 
-      - name: Get Flutter Dependencies
+      - name: Configure Flutter & Get Dependencies
         working-directory: ${{ runner.temp }}/flutter_app
-        run: flutter pub get
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter config --no-analytics
+          flutter pub get
 
-      - name: Install CocoaPods
+      - name: Install CocoaPods Dependencies
         working-directory: ${{ runner.temp }}/flutter_app/ios
         run: pod install --repo-update
 
@@ -43,7 +44,7 @@ jobs:
           mkdir -p build/ios/iphoneos/Payload
           cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
           cd build/ios/iphoneos
-          zip -r HaloAPU-iOS.ipa Payload
+          zip -r -q HaloAPU-iOS.ipa Payload
           cd ../../..
           cp build/ios/iphoneos/HaloAPU-iOS.ipa "${{ github.workspace }}/HaloAPU-iOS.ipa"
 
@@ -78,10 +79,10 @@ jobs:
 
       - name: Build Android APK
         working-directory: './Mobile App Flutter/Halo APU mobile'
-        run: flutter build apk --release
+        run: flutter build apk --debug
 
       - name: Upload Android APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: HaloAPU-Android-APK
-          path: Mobile App Flutter/Halo APU mobile/build/app/outputs/flutter-apk/app-release.apk
+          path: Mobile App Flutter/Halo APU mobile/build/app/outputs/flutter-apk/app-debug.apk

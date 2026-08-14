@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Shield, Pencil, Trash2, Plus, Search, UserCog, Phone } from 'lucide-react';
+import { Shield, Pencil, Trash2, Plus, Search, UserCog, Phone, Unlock, Smartphone } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -39,6 +39,8 @@ interface Admin {
  username: string;
  email: string;
  no_wa: string | null;
+ device_id?: string | null;
+ device_name?: string | null;
  created_at: string;
  roles: Role[];
  sub_units: SubUnit[];
@@ -276,10 +278,39 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
  </div>
  </td>
  <td className="p-3 align-top">
- <div className="flex gap-1">
- <Button variant="outline" size="icon" onClick={() => openEdit(admin)} className="h-8 w-8">
- <Pencil className="w-3.5 h-3.5" />
- </Button>
+                        <div className="flex gap-1">
+                          {admin.device_id && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Buka Kunci Perangkat">
+                                  <Unlock className="w-3.5 h-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Buka Kunci Perangkat Operator?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Buka kunci perangkat untuk operator <strong>"{admin.name || admin.username}"</strong>?
+                                    <br /><br />
+                                    Perangkat saat ini: <strong>{admin.device_name || 'Smartphone Android'}</strong>.
+                                    Setelah dibuka, operator dapat login kembali di HP baru.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => router.post(route('manajemen-operator.reset-device', admin.id), {}, { preserveScroll: true })}
+                                    className="bg-amber-600 text-white hover:bg-amber-700"
+                                  >
+                                    Buka Kunci
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => openEdit(admin)} className="h-8 w-8">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
  <AlertDialog>
  <AlertDialogTrigger asChild>
  <Button variant="outline" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 ">

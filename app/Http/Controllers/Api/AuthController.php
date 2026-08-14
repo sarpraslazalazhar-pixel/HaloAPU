@@ -47,7 +47,8 @@ class AuthController extends Controller
         }
 
         // 1 Akun 1 HP: Validasi Pengikatan Perangkat (Device ID Binding)
-        if (!empty($deviceId)) {
+        $isDeviceLockEnabled = (bool) \App\Models\SystemConfig::getValue('device_lock_enabled', true);
+        if ($isDeviceLockEnabled && !empty($deviceId)) {
             if (empty($user->device_id)) {
                 // Kunci akun ini ke HP pertama yang login
                 $user->device_id = $deviceId;
@@ -57,7 +58,7 @@ class AuthController extends Controller
                 // Ditolak karena login dari HP yang berbeda
                 $deviceInfo = $user->device_name ? " (" . $user->device_name . ")" : "";
                 return response()->json([
-                    'message' => 'Akun ini telah terikat pada perangkat lain' . $deviceInfo . '. 1 akun hanya dapat digunakan pada 1 HP.',
+                    'message' => 'Akun ini telah terikat pada perangkat lain' . $deviceInfo . '. 1 akun hanya dapat digunakan pada 1 HP. Silakan hubungi Admin untuk reset kunci perangkat.',
                     'error_code' => 'DEVICE_MISMATCH',
                 ], 403);
             }
@@ -279,5 +280,139 @@ class AuthController extends Controller
             'position' => $formattedRole,
             'avatarUrl' => $avatarUrl ?? '',
         ];
+    }
+
+    /**
+     * Get list of users with device binding status for Admin
+     */
+    public function getAdminUsersList(Request $request)
+    {
+        $admin = $request->user();
+        if (!$admin instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat mengakses data ini'], 403);
+        }
+
+        $search = $request->query('search', '');
+        $query = User::with(['divisi', 'orgUnit', 'jabatan']);
+
+        if (!empty($search)) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('username', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
+            });
+        }
+
+        $users = $query->orderBy('name')->paginate($request->get('per_page', 50));
+
+        $formatted = $users->getCollection()->map(function ($u) {
+            return [
+                'id' => $u->id,
+                'name' => $u->name ?? $u->username,
+                'username' => $u->username ?? '',
+                'email' => $u->email ?? '',
+                'department' => $u->orgUnit ? $u->orgUnit->nama_unit_organisasi : ($u->divisi ? $u->divisi->nama_divisi : ''),
+                'deviceId' => $u->device_id,
+                'deviceName' => $u->device_name,
+                'isDeviceLocked' => !empty($u->device_id),
+            ];
+        });
+
+        return response()->json([
+            'data' => $formatted,
+            'meta' => [
+                'current_page' => $users->currentPage(),
+                'last_page' => $users->lastPage(),
+                'total' => $users->total(),
+            ],
+            'device_lock_enabled' => (bool) \App\Models\SystemConfig::getValue('device_lock_enabled', true),
+        ], 200);
+    }
+
+    /**
+     * Reset / Unlock device binding for a user
+     */
+    public function resetUserDevice(Request $request, $id)
+    {
+        $admin = $request->user();
+        if (!$admin instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat membuka kunci perangkat'], 403);
+        }
+
+        $user = User::find($id);
+        if (!$user) {
+            return response()->json(['message' => 'User tidak ditemukan'], 404);
+        }
+
+        $user->device_id = null;
+        $user->device_name = null;
+        $user->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kunci perangkat user ' . ($user->name ?? $user->username) . ' berhasil dibuka.',
+        ], 200);
+    }
+
+    /**
+     * Reset / Unlock device binding for an admin
+     */
+    public function resetAdminDevice(Request $request, $id)
+    {
+        $currentAdmin = $request->user();
+        if (!$currentAdmin instanceof Admin) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        $admin = Admin::find($id);
+        if (!$admin) {
+            return response()->json(['message' => 'Admin tidak ditemukan'], 404);
+        }
+
+        $admin->device_id = null;
+        $admin->device_name = null;
+        $admin->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Kunci perangkat admin ' . ($admin->name ?? $admin->username) . ' berhasil dibuka.',
+        ], 200);
+    }
+
+    /**
+     * Get device lock setting
+     */
+    public function getDeviceLockSetting(Request $request)
+    {
+        $admin = $request->user();
+        if (!$admin instanceof Admin) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        return response()->json([
+            'enabled' => (bool) \App\Models\SystemConfig::getValue('device_lock_enabled', true),
+        ], 200);
+    }
+
+    /**
+     * Toggle device lock setting
+     */
+    public function toggleDeviceLockSetting(Request $request)
+    {
+        $admin = $request->user();
+        if (!$admin instanceof Admin) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        $enabled = $request->boolean('enabled', true);
+        \App\Models\SystemConfig::setValue('device_lock_enabled', $enabled);
+
+        return response()->json([
+            'success' => true,
+            'enabled' => $enabled,
+            'message' => $enabled 
+                ? 'Pembatasan 1 Akun 1 HP berhasil diaktifkan.' 
+                : 'Pembatasan 1 Akun 1 HP berhasil dinonaktifkan.',
+        ], 200);
     }
 }

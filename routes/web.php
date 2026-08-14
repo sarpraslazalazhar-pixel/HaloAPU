@@ -159,9 +159,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::middleware('permission:akses-manajemen-akun')->group(function () {
             // Manajemen Operator
             Route::resource('manajemen-operator', AdminManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-operator');
+            Route::post('manajemen-operator/{manajemen_operator}/reset-device', [AdminManagementController::class, 'resetDevice'])->name('manajemen-operator.reset-device');
             
             // Manajemen User
             Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-user');
+            Route::post('manajemen-user/{user}/reset-device', [UserManagementController::class, 'resetDevice'])->name('manajemen-user.reset-device');
             
             // Manajemen Peran
             Route::resource('manajemen-peran', \App\Http\Controllers\Admin\RoleManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-peran');

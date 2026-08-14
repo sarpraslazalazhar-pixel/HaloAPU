@@ -134,4 +134,15 @@ class AdminManagementController extends Controller
 
         return back()->with('success', "Operator {$admin->username} berhasil dihapus.");
     }
+
+    public function resetDevice(Admin $manajemen_operator)
+    {
+        $admin = $manajemen_operator;
+        $admin->update([
+            'device_id' => null,
+            'device_name' => null,
+        ]);
+
+        return back()->with('success', 'Kunci perangkat admin ' . ($admin->name ?? $admin->username) . ' berhasil dibuka / di-reset.');
+    }
 }

@@ -6,7 +6,6 @@ import 'package:halo_apu_mobile/core/services/auth_service.dart';
 import 'package:halo_apu_mobile/core/services/biometric_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:halo_apu_mobile/core/config/api_config.dart';
 import 'package:halo_apu_mobile/presentation/profile/providers/user_profile_provider.dart';
 import 'package:halo_apu_mobile/presentation/notifications/providers/notification_provider.dart';
 import 'package:halo_apu_mobile/data/repositories/dashboard_repository.dart';
@@ -187,54 +186,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // Header
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppTheme.oceanWater.withValues(alpha: 0.15),
-                                  blurRadius: 40,
-                                  spreadRadius: 10,
-                                ),
-                              ],
-                            ),
-                          ),
-                          Image.network(
-                            'https://lh3.googleusercontent.com/aida-public/AB6AXuCZMOv3eP3XCfm25f_YWhibtiBikYrzdS21Qo1RwftKHKwOJzX-1yUbw4YnKvyO7FDFvm9d7-9TxXGt12xonKj_ez1Kd6Ju8gEBRoxqd6__jjF-RV1RklCFNZTOGiLUsDUvM3UwRBwRsDmMGSh4WAaQS2yHVgM9OsB7NStDr01E4PxFqbKeFOt12sLiSOXv9zTLWasQmq-S1ljY0gZcRMuiaQnTYDCxTv2WDQaz8j1ogdVuAuwwfF0_kefy52BL9EaxIGomR7srrn0',
-                            width: 112,
-                            height: 112,
-                            fit: BoxFit.contain,
-                            errorBuilder: (context, error, stackTrace) {
-                              return const Icon(Icons.support_agent, size: 80, color: AppTheme.oceanWater);
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Halo APU',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.oceanWater,
-                          letterSpacing: -0.5,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          height: 70,
+                          fit: BoxFit.contain,
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Icon(Icons.support_agent, size: 70, color: AppTheme.oceanWater);
+                          },
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Ajukan, Pantau, Selesai',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontStyle: FontStyle.italic,
-                          color: Colors.blueGrey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 24),
 
                       // Glass Card Form
                       Container(
@@ -426,33 +389,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           _buildFooterIcon(Icons.help_outline, 'Bantuan', () => context.push('/help')),
-                          const SizedBox(width: 24),
+                          const SizedBox(width: 32),
                           _buildFooterIcon(Icons.contact_support_outlined, 'Hubungi Admin', () => context.push('/contact-admin')),
-                          const SizedBox(width: 24),
-                          _buildFooterIcon(Icons.dns_outlined, 'Host Server', _showServerSettingsModal),
                         ],
                       ),
-                      const SizedBox(height: 20),
-                      GestureDetector(
-                        onTap: _showServerSettingsModal,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppTheme.oceanWater.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Text(
-                            'API: ${ApiConfig.baseUrl}',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontFamily: 'monospace',
-                              color: AppTheme.oceanWater,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 24),
                       Text(
                         'VERSI 1.0.0 • © 2026 HALO APU',
                         style: TextStyle(
@@ -513,219 +454,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showServerSettingsModal() {
-    final hostController = TextEditingController(text: ApiConfig.baseUrl);
-    bool isTesting = false;
-    String? testResult;
-    bool? testSuccess;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              padding: EdgeInsets.only(
-                top: 24,
-                left: 24,
-                right: 24,
-                bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-              ),
-              decoration: const BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.dns_rounded, color: AppTheme.oceanWater),
-                          SizedBox(width: 8),
-                          Text(
-                            'Konfigurasi Host Server',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Pilih preset jaringan atau masukkan URL/IP server backend Laravel Anda.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Quick presets
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      ActionChip(
-                        avatar: const Icon(Icons.wifi, size: 16, color: AppTheme.oceanWater),
-                        label: const Text('Wi-Fi (192.168.3.116)', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          setModalState(() {
-                            hostController.text = 'http://192.168.3.116:8000/api';
-                            testResult = null;
-                          });
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.usb, size: 16, color: AppTheme.oceanWater),
-                        label: const Text('USB Reverse (127.0.0.1)', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          setModalState(() {
-                            hostController.text = 'http://127.0.0.1:8000/api';
-                            testResult = null;
-                          });
-                        },
-                      ),
-                      ActionChip(
-                        avatar: const Icon(Icons.cloud_outlined, size: 16, color: AppTheme.oceanWater),
-                        label: const Text('Live cPanel', style: TextStyle(fontSize: 12)),
-                        onPressed: () {
-                          setModalState(() {
-                            hostController.text = ApiConfig.cpanelUrl;
-                            testResult = null;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  TextField(
-                    controller: hostController,
-                    decoration: InputDecoration(
-                      labelText: 'Base API URL',
-                      hintText: 'http://192.168.3.116:8000/api',
-                      prefixIcon: const Icon(Icons.link, color: AppTheme.oceanWater),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (testResult != null) ...[
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: (testSuccess == true ? Colors.green : Colors.red).withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: (testSuccess == true ? Colors.green : Colors.red).withValues(alpha: 0.3),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            testSuccess == true ? Icons.check_circle : Icons.error_outline,
-                            color: testSuccess == true ? Colors.green : Colors.red,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              testResult!,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: testSuccess == true ? Colors.green.shade800 : Colors.red.shade800,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                  ],
-
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: isTesting
-                              ? null
-                              : () async {
-                                  setModalState(() {
-                                    isTesting = true;
-                                    testResult = null;
-                                  });
-                                  final ok = await ApiConfig.testConnection(hostController.text);
-                                  setModalState(() {
-                                    isTesting = false;
-                                    testSuccess = ok;
-                                    testResult = ok
-                                        ? '🟢 Berhasil terhubung ke server!'
-                                        : '🔴 Gagal terhubung (Timeout/Refused). Coba preset lain.';
-                                  });
-                                },
-                          icon: isTesting
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : const Icon(Icons.network_check, size: 18),
-                          label: const Text('Tes Koneksi'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () async {
-                            final target = hostController.text.trim();
-                            if (target.isNotEmpty) {
-                              final messenger = ScaffoldMessenger.of(context);
-                              final nav = Navigator.of(ctx);
-                              await ApiConfig.setCustomBaseUrl(target);
-                              if (mounted) setState(() {});
-                              nav.pop();
-                              messenger.showSnackBar(
-                                SnackBar(
-                                  content: Text('Host server diubah ke: ${ApiConfig.baseUrl}'),
-                                  backgroundColor: AppTheme.oceanWater,
-                                ),
-                              );
-                            }
-                          },
-                          icon: const Icon(Icons.save, size: 18),
-                          label: const Text('Simpan'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.oceanWater,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }

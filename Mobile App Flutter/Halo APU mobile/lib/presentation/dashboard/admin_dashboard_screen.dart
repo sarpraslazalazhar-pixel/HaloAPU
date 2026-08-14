@@ -176,7 +176,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
       floatingActionButton: CustomFloatingActionButton(
         icon: Icons.language,
         onPressed: () async {
-          final Uri url = Uri.parse('https://dev.haloapu.id');
+          final Uri url = Uri.parse('https://dev.haloapu.id/admin/login');
           await launchUrl(url, mode: LaunchMode.externalApplication);
         },
       ),

@@ -25,6 +25,7 @@ class SystemConfigController extends Controller
             'wa_notification_enabled' => (bool) SystemConfig::getValue('wa_notification_enabled', true),
             'nomor_wa_utama' => SystemConfig::getValue('nomor_wa_utama'),
             'nomor_wa_fallback' => SystemConfig::getValue('nomor_wa_fallback'),
+            'device_lock_enabled' => (bool) SystemConfig::getValue('device_lock_enabled', true),
             'app_timezone' => SystemConfig::getValue('app_timezone', 'Asia/Jakarta'),
             'jam_kerja' => SystemConfig::getValue('jam_kerja', [
                 'senin' => ['08:00', '16:00'],
@@ -51,6 +52,7 @@ class SystemConfigController extends Controller
             'wa_number_key' => 'nullable|string|max:255',
             'wa_gateway_url' => 'nullable|string|max:255',
             'wa_notification_enabled' => 'nullable|boolean',
+            'device_lock_enabled' => 'nullable|boolean',
             'nomor_wa_utama' => 'nullable|string|max:20',
             'nomor_wa_fallback' => 'nullable|string|max:20',
             'app_timezone' => 'required|string|max:50|timezone',
@@ -70,6 +72,7 @@ class SystemConfigController extends Controller
         SystemConfig::setValue('wa_number_key', $validated['wa_number_key']);
         SystemConfig::setValue('wa_gateway_url', $validated['wa_gateway_url']);
         SystemConfig::setValue('wa_notification_enabled', $request->boolean('wa_notification_enabled'));
+        SystemConfig::setValue('device_lock_enabled', $request->boolean('device_lock_enabled', true));
         SystemConfig::setValue('nomor_wa_utama', $validated['nomor_wa_utama']);
         SystemConfig::setValue('nomor_wa_fallback', $validated['nomor_wa_fallback']);
         SystemConfig::setValue('app_timezone', $validated['app_timezone']);

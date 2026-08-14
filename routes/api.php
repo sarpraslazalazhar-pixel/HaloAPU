@@ -58,4 +58,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/{id}/read', [NotificationApiController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [NotificationApiController::class, 'markAllAsRead']);
     Route::delete('/notifications/{id}', [NotificationApiController::class, 'destroy']);
+
+    // Admin Device & User Management
+    Route::get('/admin/users', [AuthController::class, 'getAdminUsersList']);
+    Route::post('/admin/users/{id}/reset-device', [AuthController::class, 'resetUserDevice']);
+    Route::post('/admin/admins/{id}/reset-device', [AuthController::class, 'resetAdminDevice']);
+    Route::get('/admin/settings/device-lock', [AuthController::class, 'getDeviceLockSetting']);
+    Route::post('/admin/settings/device-lock', [AuthController::class, 'toggleDeviceLockSetting']);
 });

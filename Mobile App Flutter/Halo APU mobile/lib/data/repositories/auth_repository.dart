@@ -197,4 +197,45 @@ class AuthRepository {
       throw Exception('Gagal mengubah password: ${e.message}');
     }
   }
+
+  /// Fetch list of users for device management
+  Future<Map<String, dynamic>> getAdminUsersList({String search = ''}) async {
+    try {
+      final response = await _apiClient.dio.get(
+        '/admin/users',
+        queryParameters: {'search': search},
+      );
+      if (response.statusCode == 200) {
+        return response.data as Map<String, dynamic>;
+      }
+      throw Exception('Gagal mengambil daftar pengguna');
+    } catch (e) {
+      throw Exception('Gagal mengambil data user: $e');
+    }
+  }
+
+  /// Reset device lock for a user
+  Future<void> resetUserDevice(int userId) async {
+    try {
+      final response = await _apiClient.dio.post('/admin/users/$userId/reset-device');
+      if (response.statusCode != 200) {
+        throw Exception(response.data['message'] ?? 'Gagal membuka kunci perangkat');
+      }
+    } catch (e) {
+      throw Exception('Gagal membuka kunci perangkat: $e');
+    }
+  }
+
+  /// Toggle device lock setting
+  Future<bool> toggleDeviceLockSetting(bool enabled) async {
+    try {
+      final response = await _apiClient.dio.post(
+        '/admin/settings/device-lock',
+        data: {'enabled': enabled},
+      );
+      return response.data['enabled'] ?? enabled;
+    } catch (e) {
+      throw Exception('Gagal mengubah pengaturan kunci perangkat: $e');
+    }
+  }
 }

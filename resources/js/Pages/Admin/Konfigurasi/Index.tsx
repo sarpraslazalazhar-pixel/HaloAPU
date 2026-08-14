@@ -22,6 +22,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  wa_number_key: configs.wa_number_key || '',
  wa_gateway_url: configs.wa_gateway_url || '',
  wa_notification_enabled: configs.wa_notification_enabled !== undefined ? Boolean(configs.wa_notification_enabled) : true,
+ device_lock_enabled: configs.device_lock_enabled !== undefined ? Boolean(configs.device_lock_enabled) : true,
  nomor_wa_utama: configs.nomor_wa_utama || '',
  nomor_wa_fallback: configs.nomor_wa_fallback || '',
  app_timezone: configs.app_timezone || 'Asia/Jakarta',
@@ -220,6 +221,27 @@ export default function KonfigurasiIndex({ configs }: any) {
  )}
  </div>
  ))}
+ </CardContent>
+ </Card>
+
+ <Card>
+ <CardHeader><CardTitle>Keamanan & Batasan Perangkat (1 Akun 1 HP)</CardTitle></CardHeader>
+ <CardContent className="space-y-4">
+ <div className="flex items-center justify-between">
+ <div className="space-y-0.5">
+ <Label htmlFor="device_lock_enabled" className="text-base font-medium">
+ Aktifkan Kunci 1 Akun 1 HP
+ </Label>
+ <p className="text-sm text-muted-foreground">
+ Setiap akun user/admin hanya bisa login pada 1 perangkat smartphone. Admin dapat membuka kunci perangkat melalui menu Manajemen User/Operator.
+ </p>
+ </div>
+ <Switch
+ id="device_lock_enabled"
+ checked={data.device_lock_enabled}
+ onCheckedChange={(checked) => setData('device_lock_enabled', checked)}
+ />
+ </div>
  </CardContent>
  </Card>
  </TabsContent>

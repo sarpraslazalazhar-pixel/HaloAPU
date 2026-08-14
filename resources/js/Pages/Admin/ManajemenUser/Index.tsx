@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Users, Pencil, Trash2, Plus, Search, UserX, Phone } from 'lucide-react';
+import { Users, Pencil, Trash2, Plus, Search, UserX, Phone, Smartphone, Unlock } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -37,6 +37,8 @@ interface UserData {
  username: string;
  email: string;
  no_wa: string | null;
+ device_id: string | null;
+ device_name: string | null;
  divisi_id: number | null;
  org_unit_id: number | null;
  jabatan_id: number | null;
@@ -243,98 +245,127 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  <Card>
  <CardContent className="p-0">
  <div className="overflow-x-auto">
- <table className="w-full text-sm">
- <thead>
- <tr className="border-b bg-muted/30 text-left text-muted-foreground">
- <th className="p-3 font-medium w-12">#</th>
- <th className="p-3 font-medium">Nama</th>
- <th className="p-3 font-medium">Username</th>
- <th className="p-3 font-medium">Email</th>
- <th className="p-3 font-medium">No. WA</th>
- <th className="p-3 font-medium">Divisi</th>
- <th className="p-3 font-medium">Unit</th>
- <th className="p-3 font-medium">Jabatan</th>
- <th className="p-3 font-medium w-24">Aksi</th>
- </tr>
- </thead>
- <tbody>
- {users?.data?.length === 0 && (
- <tr>
- <td colSpan={9} className="p-8 text-center text-muted-foreground">
- <div className="flex flex-col items-center gap-2">
- <UserX className="h-10 w-10 text-muted-foreground/50" />
- <p className="font-medium">Tidak ada user ditemukan</p>
- <p className="text-xs">Coba ubah filter pencarian atau tambah user baru</p>
- </div>
- </td>
- </tr>
- )}
- {users?.data?.map((user: UserData, i: number) => (
- <tr key={user.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
- <td className="p-3 text-muted-foreground">
- {(users.current_page - 1) * users.per_page + i + 1}
- </td>
- <td className="p-3 font-medium">{user.name || user.username}</td>
- <td className="p-3 text-muted-foreground">{user.username}</td>
- <td className="p-3">{user.email}</td>
- <td className="p-3">
- {user.no_wa ? (
- <span className="flex items-center gap-1.5 text-muted-foreground">
- <Phone className="h-3.5 w-3.5" />
- {user.no_wa}
- </span>
- ) : (
- <span className="text-muted-foreground/50">-</span>
- )}
- </td>
- <td className="p-3">
- {user.divisi ? (
- <Badge variant="outline" className="font-normal">
- {user.divisi.nama_divisi}
- </Badge>
- ) : (
- <span className="text-muted-foreground/50">-</span>
- )}
- </td>
- <td className="p-3 text-sm">
- {user.org_unit?.nama_unit_organisasi || <span className="text-muted-foreground/50">-</span>}
- </td>
- <td className="p-3 text-sm">
- {user.jabatan?.nama_jabatan || <span className="text-muted-foreground/50">-</span>}
- </td>
- <td className="p-3">
- <div className="flex gap-1">
- <Button variant="outline" size="icon" onClick={() => openEdit(user)} className="h-8 w-8">
- <Pencil className="w-3.5 h-3.5" />
- </Button>
- <AlertDialog>
- <AlertDialogTrigger asChild>
- <Button variant="outline" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 ">
- <Trash2 className="w-3.5 h-3.5" />
- </Button>
- </AlertDialogTrigger>
- <AlertDialogContent>
- <AlertDialogHeader>
- <AlertDialogTitle>Hapus User?</AlertDialogTitle>
- <AlertDialogDescription>
- Apakah Anda yakin ingin menghapus user <strong>"{user.name || user.username}"</strong>?
- {' '}Tindakan ini tidak dapat dibatalkan. User yang memiliki tiket aktif tidak bisa dihapus.
- </AlertDialogDescription>
- </AlertDialogHeader>
- <AlertDialogFooter>
- <AlertDialogCancel>Batal</AlertDialogCancel>
- <AlertDialogAction onClick={() => handleDelete(user)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
- Hapus
- </AlertDialogAction>
- </AlertDialogFooter>
- </AlertDialogContent>
- </AlertDialog>
- </div>
- </td>
- </tr>
- ))}
- </tbody>
- </table>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30 text-left text-muted-foreground">
+                    <th className="p-3 font-medium w-12">#</th>
+                    <th className="p-3 font-medium">Nama</th>
+                    <th className="p-3 font-medium">Username</th>
+                    <th className="p-3 font-medium">Email</th>
+                    <th className="p-3 font-medium">Perangkat HP</th>
+                    <th className="p-3 font-medium">Divisi</th>
+                    <th className="p-3 font-medium">Unit</th>
+                    <th className="p-3 font-medium">Jabatan</th>
+                    <th className="p-3 font-medium w-32">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users?.data?.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="p-8 text-center text-muted-foreground">
+                        <div className="flex flex-col items-center gap-2">
+                          <UserX className="h-10 w-10 text-muted-foreground/50" />
+                          <p className="font-medium">Tidak ada user ditemukan</p>
+                          <p className="text-xs">Coba ubah filter pencarian atau tambah user baru</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  {users?.data?.map((user: UserData, i: number) => (
+                    <tr key={user.id} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
+                      <td className="p-3 text-muted-foreground">
+                        {(users.current_page - 1) * users.per_page + i + 1}
+                      </td>
+                      <td className="p-3 font-medium">{user.name || user.username}</td>
+                      <td className="p-3 text-muted-foreground">{user.username}</td>
+                      <td className="p-3">{user.email}</td>
+                      <td className="p-3">
+                        {user.device_id ? (
+                          <Badge variant="outline" className="font-normal gap-1 bg-amber-50 text-amber-800 border-amber-300">
+                            <Smartphone className="h-3.5 w-3.5" />
+                            {user.device_name || 'Terikat HP'}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-xs">Belum Terikat</span>
+                        )}
+                      </td>
+                      <td className="p-3">
+                        {user.divisi ? (
+                          <Badge variant="outline" className="font-normal">
+                            {user.divisi.nama_divisi}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground/50">-</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-sm">
+                        {user.org_unit?.nama_unit_organisasi || <span className="text-muted-foreground/50">-</span>}
+                      </td>
+                      <td className="p-3 text-sm">
+                        {user.jabatan?.nama_jabatan || <span className="text-muted-foreground/50">-</span>}
+                      </td>
+                      <td className="p-3">
+                        <div className="flex gap-1">
+                          {user.device_id && (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Buka Kunci Perangkat">
+                                  <Unlock className="w-3.5 h-3.5" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Buka Kunci Perangkat?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Apakah Anda yakin ingin membuka kunci perangkat untuk user <strong>"{user.name || user.username}"</strong>?
+                                    <br /><br />
+                                    Perangkat saat ini: <strong>{user.device_name || 'Smartphone Android'}</strong>.
+                                    Setelah dibuka, user dapat login kembali menggunakan HP baru.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => router.post(route('manajemen-user.reset-device', user.id), {}, { preserveScroll: true })}
+                                    className="bg-amber-600 text-white hover:bg-amber-700"
+                                  >
+                                    Buka Kunci
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
+                          <Button variant="outline" size="icon" onClick={() => openEdit(user)} className="h-8 w-8">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 ">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Hapus User?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Apakah Anda yakin ingin menghapus user <strong>"{user.name || user.username}"</strong>?
+                                  {' '}Tindakan ini tidak dapat dibatalkan. User yang memiliki tiket aktif tidak bisa dihapus.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDelete(user)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  Hapus
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
  </div>
  </CardContent>
  </Card>

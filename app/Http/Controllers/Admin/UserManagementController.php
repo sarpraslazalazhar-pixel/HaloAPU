@@ -120,4 +120,14 @@ class UserManagementController extends Controller
 
         return back()->with('success', 'User berhasil dihapus.');
     }
+
+    public function resetDevice(User $user)
+    {
+        $user->update([
+            'device_id' => null,
+            'device_name' => null,
+        ]);
+
+        return back()->with('success', 'Kunci perangkat user ' . ($user->name ?? $user->username) . ' berhasil dibuka / di-reset.');
+    }
 }

@@ -773,6 +773,14 @@ class _DashboardHeader extends StatelessWidget {
   }
 }
 
+int _parseInt(dynamic val) {
+  if (val == null) return 0;
+  if (val is int) return val;
+  if (val is num) return val.toInt();
+  if (val is String) return int.tryParse(val) ?? 0;
+  return 0;
+}
+
 class _StatisticsRow extends StatelessWidget {
   final Map<String, dynamic>? stats;
 
@@ -780,10 +788,10 @@ class _StatisticsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final aktif = stats?['aktif'] ?? 0;
-    final selesai = stats?['selesai'] ?? 0;
-    final diproses = stats?['diproses'] ?? 0;
-    final ditolak = stats?['ditolak'] ?? 0;
+    final aktif = _parseInt(stats?['aktif']);
+    final selesai = _parseInt(stats?['selesai']);
+    final diproses = _parseInt(stats?['diproses']);
+    final ditolak = _parseInt(stats?['ditolak']);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 4.0),

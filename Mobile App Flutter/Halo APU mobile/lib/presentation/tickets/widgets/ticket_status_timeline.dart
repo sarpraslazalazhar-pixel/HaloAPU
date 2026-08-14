@@ -10,98 +10,109 @@ class TicketStatusTimeline extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final status = ticket.status;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+        border: Border.all(color: const Color(0xFFE2E8F0), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 18,
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 14,
             offset: const Offset(0, 4),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16),
-      child: Stack(
-        clipBehavior: Clip.none,
+      padding: const EdgeInsets.all(18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Ambient decorative blob (simulating the blur-2xl)
-          Positioned(
-            top: -20,
-            right: -20,
-            child: Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                color: AppTheme.oceanWater.withValues(alpha: 0.1),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-          
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'STATUS PERJALANAN',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.2,
-                  color: Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 16),
-              
-              // Timeline Steps
-              Stack(
+              const Row(
                 children: [
-                  // Vertical Line
-                  Positioned(
-                    left: 11,
-                    top: 8,
-                    bottom: 24, // adjust to stop before last item
-                    child: Container(
-                      width: 2,
-                      color: Colors.grey.withValues(alpha: 0.3),
+                  Icon(Icons.timeline_rounded, size: 16, color: Color(0xFF00768C)),
+                  SizedBox(width: 6),
+                  Text(
+                    'PROGRES STATUS TIKET',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: Color(0xFF475569),
                     ),
                   ),
-                  
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Step 1: Dibuat
-                      _buildTimelineStep(
-                        title: 'Dibuat',
-                        subtitle: DateFormat('dd MMM yyyy, hh:mm a').format(ticket.createdAt),
-                        isCompleted: true,
-                        isActive: ticket.status == TicketStatus.open,
-                      ),
-                      
-                      // Step 2: Diproses
-                      if (ticket.status != TicketStatus.open)
-                        _buildTimelineStep(
-                          title: 'Diproses',
-                          subtitle: ticket.status == TicketStatus.needRevision ? 'Tiket sedang direvisi.' : 'Sedang dalam penanganan teknisi.',
-                          isCompleted: ticket.status == TicketStatus.solved || ticket.status == TicketStatus.rejected || ticket.status == TicketStatus.cancelled,
-                          isActive: ticket.status == TicketStatus.processing || ticket.status == TicketStatus.needRevision,
-                          showEstimasi: ticket.status == TicketStatus.processing,
-                        ),
-                        
-                      // Step 3: Selesai / Ditolak / Dibatalkan
-                      if (ticket.status == TicketStatus.solved || ticket.status == TicketStatus.rejected || ticket.status == TicketStatus.cancelled)
-                        _buildTimelineStep(
-                          title: ticket.status == TicketStatus.solved ? 'Selesai' : (ticket.status == TicketStatus.rejected ? 'Ditolak' : 'Dibatalkan'),
-                          subtitle: ticket.status == TicketStatus.solved ? 'Tiket telah diselesaikan' : 'Tiket dibatalkan/ditolak',
-                          isCompleted: true,
-                          isActive: true,
-                          isLast: true,
-                          color: ticket.status == TicketStatus.solved ? AppTheme.success : (ticket.status == TicketStatus.rejected ? AppTheme.danger : Colors.grey),
-                        ),
-                    ],
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getStatusBg(status),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _getStatusColor(status).withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  ticket.statusIndonesianLabel,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _getStatusColor(status),
                   ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          
+          // Timeline Steps
+          Stack(
+            children: [
+              // Vertical connecting line
+              Positioned(
+                left: 11,
+                top: 12,
+                bottom: 24,
+                child: Container(
+                  width: 2,
+                  color: const Color(0xFFE2E8F0),
+                ),
+              ),
+              
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Step 1: Dibuat
+                  _buildTimelineStep(
+                    title: 'Tiket Dibuat',
+                    subtitle: DateFormat('dd MMM yyyy, HH:mm').format(ticket.createdAt),
+                    isCompleted: true,
+                    isActive: status == TicketStatus.open,
+                  ),
+                  
+                  // Step 2: Diproses
+                  if (status != TicketStatus.open)
+                    _buildTimelineStep(
+                      title: status == TicketStatus.needRevision ? 'Menunggu Revisi' : 'Sedang Diproses',
+                      subtitle: status == TicketStatus.needRevision 
+                          ? 'Perlu perbaikan data dari pemohon.' 
+                          : (ticket.assignedTo != null ? 'Ditangani oleh ${ticket.assignedTo}' : 'Sedang dalam penanganan teknisi/admin.'),
+                      isCompleted: status == TicketStatus.solved || status == TicketStatus.rejected || status == TicketStatus.cancelled,
+                      isActive: status == TicketStatus.processing || status == TicketStatus.needRevision,
+                    ),
+                    
+                  // Step 3: Selesai / Ditolak / Dibatalkan
+                  if (status == TicketStatus.solved || status == TicketStatus.rejected || status == TicketStatus.cancelled)
+                    _buildTimelineStep(
+                      title: status == TicketStatus.solved ? 'Selesai' : (status == TicketStatus.rejected ? 'Ditolak' : 'Dibatalkan'),
+                      subtitle: status == TicketStatus.solved ? 'Solusi telah diserahkan & tiket ditutup.' : 'Permintaan tiket ditolak/dibatalkan.',
+                      isCompleted: true,
+                      isActive: true,
+                      isLast: true,
+                      color: status == TicketStatus.solved ? AppTheme.success : (status == TicketStatus.rejected ? AppTheme.danger : const Color(0xFF64748B)),
+                    ),
                 ],
               ),
             ],
@@ -111,60 +122,90 @@ class TicketStatusTimeline extends StatelessWidget {
     );
   }
 
+  Color _getStatusColor(TicketStatus status) {
+    switch (status) {
+      case TicketStatus.open:
+        return const Color(0xFF0284C7);
+      case TicketStatus.processing:
+      case TicketStatus.needRevision:
+        return const Color(0xFFD97706);
+      case TicketStatus.solved:
+        return const Color(0xFF16A34A);
+      case TicketStatus.rejected:
+        return const Color(0xFFDC2626);
+      case TicketStatus.cancelled:
+      case TicketStatus.pending:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  Color _getStatusBg(TicketStatus status) {
+    switch (status) {
+      case TicketStatus.open:
+        return const Color(0xFFE0F2FE);
+      case TicketStatus.processing:
+      case TicketStatus.needRevision:
+        return const Color(0xFFFEF3C7);
+      case TicketStatus.solved:
+        return const Color(0xFFDCFCE7);
+      case TicketStatus.rejected:
+        return const Color(0xFFFEE2E2);
+      case TicketStatus.cancelled:
+      case TicketStatus.pending:
+        return const Color(0xFFF1F5F9);
+    }
+  }
+
   Widget _buildTimelineStep({
     required String title,
     required String subtitle,
     bool isCompleted = false,
     bool isActive = false,
-    bool showEstimasi = false,
     bool isLast = false,
     Color? color,
   }) {
-    final statusColor = color ?? (isCompleted ? AppTheme.success : (isActive ? AppTheme.oceanWater : Colors.grey));
+    final statusColor = color ?? (isCompleted ? AppTheme.success : (isActive ? const Color(0xFF00768C) : const Color(0xFFCBD5E1)));
     
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Indicator
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              if (isActive && !isCompleted && !isLast)
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.2),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  color: statusColor,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white, width: 2),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 4,
-                    )
-                  ],
-                ),
-                child: Center(
-                  child: Icon(
-                    isCompleted || isLast ? Icons.check : Icons.sync,
-                    color: Colors.white,
-                    size: 14,
-                  ),
-                ),
+          // Indicator Dot
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: isCompleted ? statusColor : Colors.white,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: statusColor,
+                width: isCompleted ? 0 : 2.5,
               ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: statusColor.withValues(alpha: 0.25),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: isCompleted
+                ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
+                : (isActive
+                    ? Center(
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      )
+                    : null),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           // Content
           Expanded(
             child: Column(
@@ -174,49 +215,19 @@ class TicketStatusTimeline extends StatelessWidget {
                   title,
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: isActive ? statusColor : Colors.black87,
+                    fontSize: 13.5,
+                    color: isActive || isCompleted ? const Color(0xFF0F172A) : const Color(0xFF64748B),
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   subtitle,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                    fontSize: 12,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFF64748B),
+                    height: 1.3,
                   ),
                 ),
-                if (showEstimasi)
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: statusColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Estimasi selesai: 2 Jam',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: statusColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
               ],
             ),
           ),

@@ -43,11 +43,11 @@ class DashboardApiController extends Controller
             ->mapWithKeys(fn ($item, $key) => [strtolower($key) => $item]);
 
         $stats = [
-            'menunggu' => $ticketCounts['open'] ?? 0,
-            'diproses' => ($ticketCounts['on_proses'] ?? 0) + ($ticketCounts['assigned'] ?? 0),
-            'selesai' => ($ticketCounts['solve'] ?? 0) + ($ticketCounts['selesai'] ?? 0),
-            'ditolak' => ($ticketCounts['reject'] ?? 0) + ($ticketCounts['dibatalkan'] ?? 0),
-            'aktif' => collect($ticketCounts)->except(['solve', 'selesai', 'reject', 'dibatalkan'])->sum(),
+            'menunggu' => (int) ($ticketCounts['open'] ?? 0),
+            'diproses' => (int) (($ticketCounts['on_proses'] ?? 0) + ($ticketCounts['assigned'] ?? 0)),
+            'selesai' => (int) (($ticketCounts['solve'] ?? 0) + ($ticketCounts['selesai'] ?? 0)),
+            'ditolak' => (int) (($ticketCounts['reject'] ?? 0) + ($ticketCounts['dibatalkan'] ?? 0)),
+            'aktif' => (int) collect($ticketCounts)->except(['solve', 'selesai', 'reject', 'dibatalkan'])->sum(),
         ];
 
         // Recent tickets

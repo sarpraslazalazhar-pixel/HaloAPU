@@ -33,12 +33,13 @@ class DashboardRepository {
         await _saveCache(data);
 
         final tickets = _parseTickets(data['recentTickets']);
+        final stats = _parseStats(data['stats']);
 
         return {
           'success': true,
           'statusCode': 200,
           'isOffline': false,
-          'stats': data['stats'] ?? _defaultStats(),
+          'stats': stats,
           'recentTickets': tickets,
         };
       }
@@ -103,12 +104,32 @@ class DashboardRepository {
     return list;
   }
 
-  Map<String, dynamic> _defaultStats() {
+  Map<String, int> _parseStats(dynamic raw) {
+    if (raw is! Map) return _defaultStats();
     return {
-      'aktif': 0,
-      'selesai': 0,
+      'menunggu': _toInt(raw['menunggu']),
+      'diproses': _toInt(raw['diproses']),
+      'selesai': _toInt(raw['selesai']),
+      'ditolak': _toInt(raw['ditolak']),
+      'aktif': _toInt(raw['aktif']),
+    };
+  }
+
+  int _toInt(dynamic val) {
+    if (val == null) return 0;
+    if (val is int) return val;
+    if (val is num) return val.toInt();
+    if (val is String) return int.tryParse(val) ?? 0;
+    return 0;
+  }
+
+  Map<String, int> _defaultStats() {
+    return {
+      'menunggu': 0,
       'diproses': 0,
+      'selesai': 0,
       'ditolak': 0,
+      'aktif': 0,
     };
   }
 
@@ -124,11 +145,12 @@ class DashboardRepository {
       if (cached != null) {
         final data = jsonDecode(cached);
         final tickets = _parseTickets(data['recentTickets']);
+        final stats = _parseStats(data['stats']);
         return {
           'success': true,
           'isOffline': true,
           'message': reason,
-          'stats': data['stats'] ?? _defaultStats(),
+          'stats': stats,
           'recentTickets': tickets,
         };
       }

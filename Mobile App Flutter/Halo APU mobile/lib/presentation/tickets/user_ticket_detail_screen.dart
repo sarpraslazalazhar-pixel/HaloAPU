@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 import '../../../../core/config/api_config.dart';
 import '../../../../domain/models/ticket_model.dart';
 import '../../../../core/services/ticket_service.dart';
@@ -640,78 +641,343 @@ class _UserTicketDetailScreenState extends ConsumerState<UserTicketDetailScreen>
   }
 
   Widget _buildDetailTab() {
+    final activeFormFields = _formFields.where((field) {
+      final val = _formData[field['id'].toString()];
+      if (val == null || val.toString().trim().isEmpty) return false;
+      return true;
+    }).toList();
+
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       children: [
+        // Card 1: Informasi Utama
         Container(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
             boxShadow: [
-              BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 2)),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.02),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailItem('Judul Tiket', _currentTicket.title),
-              const Divider(height: 32),
-
-              // Show form fields with their labels and values
-              if (_formFields.isNotEmpty && _formData.isNotEmpty) ...[
-                ..._formFields.map((field) {
-                  final value = _formData[field['id'].toString()];
-                  if (value == null || value.toString().isEmpty) return const SizedBox.shrink();
-                  return Column(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Row(
                     children: [
-                      _buildDetailItem(field['label'] ?? 'Field', value.toString()),
-                      const Divider(height: 32),
+                      Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF00768C)),
+                      SizedBox(width: 6),
+                      Text(
+                        'INFORMASI UTAMA',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.8,
+                          color: Color(0xFF475569),
+                        ),
+                      ),
                     ],
-                  );
-                }),
-              ] else ...[
-                _buildDetailItem('Deskripsi', _currentTicket.formattedDescription),
-                const Divider(height: 32),
-              ],
-
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildDetailItem('Kategori', _currentTicket.category)),
-                  Expanded(child: _buildDetailItem('Pembuat', _currentTicket.requesterName)),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      '#${_currentTicket.id}',
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ),
                 ],
               ),
-              const Divider(height: 32),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _buildDetailItem('Ditugaskan', _currentTicket.assignedTo ?? 'Belum ada')),
-                  Expanded(child: _buildDetailItem('Tanggal', '${_currentTicket.createdAt.day}/${_currentTicket.createdAt.month}/${_currentTicket.createdAt.year}')),
-                ],
+              const SizedBox(height: 14),
+              Text(
+                _currentTicket.title,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A),
+                  letterSpacing: -0.3,
+                ),
               ),
-              if (_csatData != null) ...[
-                const Divider(height: 32),
-                _buildDetailItem('Rating CSAT', '${'⭐' * (_csatData!['rating'] ?? 0)} (${_csatData!['rating']}/5)'),
-                if (_csatData!['comment'] != null && _csatData!['comment'].toString().isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  _buildDetailItem('Komentar Rating', _csatData!['comment'].toString()),
-                ],
-              ],
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: Color(0xFFF1F5F9)),
+              const SizedBox(height: 14),
+              _buildDetailRow(Icons.category_outlined, 'Kategori Layanan', _currentTicket.category),
+              const SizedBox(height: 12),
+              _buildDetailRow(Icons.person_outline_rounded, 'Nama Pemohon', _currentTicket.requesterName.isNotEmpty ? _currentTicket.requesterName : '-'),
+              const SizedBox(height: 12),
+              _buildDetailRow(Icons.engineering_outlined, 'Ditugaskan Ke', _currentTicket.assignedTo ?? 'Belum ada teknisi'),
+              const SizedBox(height: 12),
+              _buildDetailRow(Icons.calendar_today_outlined, 'Waktu Diajukan', DateFormat('dd MMMM yyyy, HH:mm').format(_currentTicket.createdAt)),
             ],
           ),
         ),
+
+        const SizedBox(height: 14),
+
+        // Card 2: Rincian Formulir
+        if (activeFormFields.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.assignment_outlined, size: 16, color: Color(0xFF00768C)),
+                    SizedBox(width: 6),
+                    Text(
+                      'RINCIAN FORMULIR',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ...activeFormFields.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  final field = entry.value;
+                  final val = _formData[field['id'].toString()]?.toString() ?? '-';
+                  final label = field['label']?.toString() ?? 'Field';
+                  final isLast = idx == activeFormFields.length - 1;
+
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: isLast ? 0 : 12),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            label,
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            val,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          )
+        else if (_currentTicket.summaryItems.isNotEmpty)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.assignment_outlined, size: 16, color: Color(0xFF00768C)),
+                    SizedBox(width: 6),
+                    Text(
+                      'RINCIAN FORMULIR',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: Color(0xFF475569),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                ..._currentTicket.summaryItems.map((item) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (item.key.isNotEmpty)
+                            Text(
+                              item.key,
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFF64748B),
+                              ),
+                            ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.value,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                              color: Color(0xFF1E293B),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+
+        // Card 3: Penilaian CSAT
+        if (_csatData != null) ...[
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFFDE68A)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.star_rounded, size: 18, color: Color(0xFFD97706)),
+                    SizedBox(width: 6),
+                    Text(
+                      'PENILAIAN KEPUASAN (CSAT)',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.8,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    ...List.generate(5, (index) {
+                      final ratingVal = (_csatData!['rating'] is int ? _csatData!['rating'] : int.tryParse(_csatData!['rating'].toString())) ?? 0;
+                      return Icon(
+                        index < ratingVal ? Icons.star_rounded : Icons.star_border_rounded,
+                        color: const Color(0xFFF59E0B),
+                        size: 24,
+                      );
+                    }),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${_csatData!['rating']}/5',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ],
+                ),
+                if (_csatData!['comment'] != null && _csatData!['comment'].toString().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '"${_csatData!['comment']}"',
+                    style: const TextStyle(
+                      fontStyle: FontStyle.italic,
+                      fontSize: 12.5,
+                      color: Color(0xFF78350F),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
       ],
     );
   }
 
-  Widget _buildDetailItem(String label, String value) {
-    return Column(
+  Widget _buildDetailRow(IconData icon, String label, String value) {
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-        const SizedBox(height: 6),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        Icon(icon, size: 16, color: const Color(0xFF64748B)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF64748B),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -786,7 +1052,7 @@ class _UserTicketDetailScreenState extends ConsumerState<UserTicketDetailScreen>
           children: [
             Icon(Icons.attach_file, size: 48, color: Colors.grey.shade400),
             const SizedBox(height: 12),
-            Text('Belum ada lampiran', style: TextStyle(color: Colors.grey.shade500)),
+            Text('Belum ada lampiran pada tiket ini', style: TextStyle(color: Colors.grey.shade500)),
           ],
         ),
       );
@@ -795,10 +1061,10 @@ class _UserTicketDetailScreenState extends ConsumerState<UserTicketDetailScreen>
     return ListView.separated(
       padding: const EdgeInsets.all(20),
       itemCount: _attachments.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final att = _attachments[index];
-        final fileName = att['fileName'] ?? att['original_name'] ?? 'File';
+        final fileName = att['fileName'] ?? att['original_name'] ?? 'Lampiran';
         final mimeType = att['mimeType'] ?? att['mime_type'] ?? '';
         final isImage = mimeType.toString().startsWith('image') ||
             ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fileName.toString().split('.').last.toLowerCase());
@@ -815,58 +1081,71 @@ class _UserTicketDetailScreenState extends ConsumerState<UserTicketDetailScreen>
               }
             }
           },
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(16),
           child: Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.grey.shade200),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.02),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Row(
               children: [
                 if (isImage && url.isNotEmpty)
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(10),
                     child: Image.network(
                       url,
-                      width: 44,
-                      height: 44,
+                      width: 48,
+                      height: 48,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        width: 44,
-                        height: 44,
+                        width: 48,
+                        height: 48,
                         color: Colors.blue.shade50,
-                        child: const Icon(Icons.image, color: Colors.blue, size: 22),
+                        child: const Icon(Icons.image, color: Colors.blue, size: 24),
                       ),
                     ),
                   )
                 else
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: isImage ? Colors.blue.shade50 : Colors.orange.shade50,
-                      borderRadius: BorderRadius.circular(10),
+                      color: isImage ? Colors.blue.shade50 : Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(12),
                     ),
                     child: Icon(
-                      isImage ? Icons.image : Icons.insert_drive_file,
-                      color: isImage ? Colors.blue : Colors.orange,
+                      isImage ? Icons.image_rounded : Icons.insert_drive_file_rounded,
+                      color: isImage ? Colors.blue : Colors.amber.shade800,
+                      size: 24,
                     ),
                   ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(fileName.toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), overflow: TextOverflow.ellipsis),
                       Text(
-                        att['fileSize'] != null ? '${(int.tryParse(att['fileSize'].toString()) ?? 0) ~/ 1024} KB' : mimeType.toString(),
-                        style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                        fileName.toString(),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5, color: Color(0xFF1E293B)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        att['fileSize'] != null ? '${(int.tryParse(att['fileSize'].toString()) ?? 0) ~/ 1024} KB' : (mimeType.toString().isNotEmpty ? mimeType.toString() : 'Dokumen'),
+                        style: TextStyle(color: Colors.grey.shade500, fontSize: 11.5),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.open_in_new_rounded, size: 18, color: Colors.grey),
+                const Icon(Icons.open_in_new_rounded, size: 18, color: Color(0xFF64748B)),
               ],
             ),
           ),

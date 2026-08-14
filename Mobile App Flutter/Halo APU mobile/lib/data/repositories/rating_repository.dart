@@ -51,7 +51,18 @@ class RatingRepository {
 
       if (response.statusCode == 200) {
         final List<dynamic> data = response.data['data'] ?? [];
-        return data.map((json) => RatingModel.fromJson(json)).toList();
+        return data.map((json) {
+          final map = Map<String, dynamic>.from(json as Map);
+          final rawScore = map['score'];
+          if (rawScore is String) {
+            map['score'] = int.tryParse(rawScore) ?? 0;
+          } else if (rawScore is num) {
+            map['score'] = rawScore.toInt();
+          } else if (rawScore == null) {
+            map['score'] = 0;
+          }
+          return RatingModel.fromJson(map);
+        }).toList();
       } else {
         throw Exception('Gagal memuat riwayat rating');
       }

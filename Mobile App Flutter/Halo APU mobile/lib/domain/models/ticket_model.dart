@@ -88,20 +88,74 @@ sealed class TicketReply with _$TicketReply {
 }
 
 extension TicketModelX on TicketModel {
+  String get statusIndonesianLabel {
+    switch (status) {
+      case TicketStatus.open:
+        return 'Menunggu';
+      case TicketStatus.processing:
+        return 'Diproses';
+      case TicketStatus.solved:
+        return 'Selesai';
+      case TicketStatus.rejected:
+        return 'Ditolak';
+      case TicketStatus.needRevision:
+        return 'Perlu Revisi';
+      case TicketStatus.cancelled:
+        return 'Dibatalkan';
+      case TicketStatus.pending:
+        return 'Tertunda';
+    }
+  }
+
+  Map<String, dynamic>? get parsedFormData {
+    if (description.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(description);
+      if (decoded is Map<String, dynamic>) return decoded;
+      if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Format ringkasan form data cerdas untuk kartu tiket
+  List<MapEntry<String, String>> get summaryItems {
+    final map = parsedFormData;
+    if (map == null || map.isEmpty) return [];
+
+    final List<MapEntry<String, String>> items = [];
+
+    map.forEach((rawKey, value) {
+      if (value == null) return;
+      final valStr = value.toString().trim();
+      if (valStr.isEmpty) return;
+
+      // Jangan ulangi field jika nilainya persis sama dengan judul tiket
+      if (valStr.toLowerCase() == title.toLowerCase()) return;
+
+      // Jika key murni angka (field ID database seperti '57', '58'), kosongkan agar tidak muncul angka aneh
+      String cleanKey = '';
+      if (int.tryParse(rawKey.trim()) == null) {
+        cleanKey = rawKey
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+            .join(' ');
+      }
+
+      items.add(MapEntry(cleanKey, valStr));
+    });
+
+    return items;
+  }
+
   String get formattedDescription {
     if (description.isEmpty) return '-';
-    try {
-      final Map<String, dynamic> decoded = jsonDecode(description);
-      final List<String> parts = [];
-      decoded.forEach((key, value) {
-        if (value != null && value.toString().isNotEmpty) {
-          parts.add('$value');
-        }
-      });
-      return parts.join(' - ');
-    } catch (e) {
-      // If it's not valid JSON, just return the raw string
-      return description;
+    final items = summaryItems;
+    if (items.isNotEmpty) {
+      return items.map((e) => e.key.isNotEmpty ? '${e.key}: ${e.value}' : e.value).join(' • ');
     }
+    return description;
   }
 }

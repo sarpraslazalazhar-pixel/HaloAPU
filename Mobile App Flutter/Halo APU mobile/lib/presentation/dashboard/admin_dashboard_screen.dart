@@ -148,7 +148,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
                       delay: const Duration(milliseconds: 180),
                       child: _buildHeroAction(
                         context,
-                        waitingCount: _dashboardData?['stats']?['menunggu'] ?? 0,
+                        waitingCount: _parseInt(_dashboardData?['stats']?['menunggu']),
                       ),
                     ),
                     EntranceAnimation(
@@ -593,6 +593,14 @@ class _AdminStatsSkeleton extends StatelessWidget {
   }
 }
 
+int _parseInt(dynamic val) {
+  if (val == null) return 0;
+  if (val is int) return val;
+  if (val is num) return val.toInt();
+  if (val is String) return int.tryParse(val) ?? 0;
+  return 0;
+}
+
 class _AdminStatsRow extends StatelessWidget {
   final Map<String, dynamic>? stats;
 
@@ -600,10 +608,10 @@ class _AdminStatsRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final open = stats?['menunggu'] ?? 0;
-    final processing = stats?['diproses'] ?? 0;
-    final solved = stats?['selesai'] ?? 0;
-    final rejected = stats?['ditolak'] ?? 0;
+    final open = _parseInt(stats?['menunggu']);
+    final processing = _parseInt(stats?['diproses']);
+    final solved = _parseInt(stats?['selesai']);
+    final rejected = _parseInt(stats?['ditolak']);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
@@ -757,7 +765,7 @@ class _AdminTicketCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
-                  ticket.status.name,
+                  ticket.statusIndonesianLabel,
                   style: TextStyle(
                     color: visual.$2,
                     fontSize: 10.5,

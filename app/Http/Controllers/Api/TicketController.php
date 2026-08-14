@@ -715,10 +715,29 @@ class TicketController extends Controller
             default => 'open'
         };
 
+        // Eager-load or resolve form field labels if available
+        $formData = $ticket->form_data ?? [];
+        $resolvedFormData = [];
+        if (is_array($formData) && !empty($formData)) {
+            $ticket->loadMissing('subUnit.formFields');
+            $formFields = $ticket->subUnit?->formFields;
+            if ($formFields && $formFields->isNotEmpty()) {
+                $fieldMap = $formFields->pluck('label', 'id')->toArray();
+                foreach ($formData as $k => $v) {
+                    $keyLabel = $fieldMap[$k] ?? (string) $k;
+                    $resolvedFormData[$keyLabel] = $v;
+                }
+            } else {
+                $resolvedFormData = $formData;
+            }
+        } else {
+            $resolvedFormData = $formData;
+        }
+
         return [
             'id' => $ticket->formatted_id ?? (string) $ticket->id,
             'title' => $ticket->judul,
-            'description' => isset($ticket->form_data) ? (is_array($ticket->form_data) ? json_encode($ticket->form_data) : $ticket->form_data) : '',
+            'description' => is_array($resolvedFormData) ? json_encode($resolvedFormData) : (is_array($ticket->form_data) ? json_encode($ticket->form_data) : ($ticket->form_data ?? '')),
             'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : 'General',
             'status' => $flutterStatus,
             'createdAt' => $ticket->created_at->toIso8601String(),
@@ -773,7 +792,7 @@ class TicketController extends Controller
     }
 
     /**
-     * Serve attachment file with CORS headers for Flutter Web
+     * Serve attachment file with CORS headers for Flutter Mobile & Web
      */
     public function serveAttachment(Request $request)
     {
@@ -785,11 +804,24 @@ class TicketController extends Controller
         // Hapus prefix storage/ atau public/ jika ada
         $cleanPath = preg_replace('/^(storage\/|public\/|\/)+/', '', $path);
         
-        if (!Storage::disk('public')->exists($cleanPath)) {
-            return response()->json(['message' => 'File tidak ditemukan: ' . $cleanPath], 404);
+        $headers = [
+            'Access-Control-Allow-Origin' => '*',
+            'Access-Control-Allow-Methods' => 'GET, OPTIONS',
+            'Access-Control-Allow-Headers' => '*',
+        ];
+
+        if (Storage::disk('public')->exists($cleanPath)) {
+            return response()->file(Storage::disk('public')->path($cleanPath), $headers);
+        }
+
+        if (file_exists(storage_path('app/public/' . $cleanPath))) {
+            return response()->file(storage_path('app/public/' . $cleanPath), $headers);
+        }
+
+        if (file_exists(public_path('storage/' . $cleanPath))) {
+            return response()->file(public_path('storage/' . $cleanPath), $headers);
         }
         
-        $fullPath = storage_path('app/public/' . $cleanPath);
-        return response()->file($fullPath);
+        return response()->json(['message' => 'File tidak ditemukan: ' . $cleanPath], 404);
     }
 }

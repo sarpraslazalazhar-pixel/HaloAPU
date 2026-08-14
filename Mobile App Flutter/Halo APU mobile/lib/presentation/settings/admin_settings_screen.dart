@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/services/auth_service.dart';
 import '../profile/providers/user_profile_provider.dart';
 import '../widgets/custom_bottom_nav.dart';
 import '../widgets/entrance_animation.dart';
@@ -184,6 +185,17 @@ class AdminSettingsScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final authService = AuthService();
+      await authService.logout();
+
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // dismiss loading dialog
       context.go('/login');
     }
   }

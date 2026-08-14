@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/biometric_service.dart';
+import '../../core/services/auth_service.dart';
 import '../../domain/models/user_profile_model.dart';
 import '../widgets/custom_bottom_nav.dart';
 import '../widgets/entrance_animation.dart';
@@ -120,6 +121,17 @@ class ProfileScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
+
+      final authService = AuthService();
+      await authService.logout();
+
+      if (!context.mounted) return;
+      Navigator.of(context, rootNavigator: true).pop(); // dismiss loading dialog
       context.go('/login');
     }
   }

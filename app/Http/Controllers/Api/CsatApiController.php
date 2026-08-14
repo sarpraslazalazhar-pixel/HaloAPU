@@ -103,7 +103,7 @@ class CsatApiController extends Controller
                 'ticketId' => $csat->ticket ? ($csat->ticket->formatted_id ?? (string) $csat->ticket->id) : '',
                 'ticketTitle' => $csat->ticket ? $csat->ticket->judul : '',
                 'category' => $csat->ticket && $csat->ticket->subUnit ? $csat->ticket->subUnit->nama_layanan : '',
-                'score' => $csat->rating,
+                'score' => (int) $csat->rating,
                 'comment' => $csat->komentar,
                 'createdAt' => $csat->created_at->toIso8601String(),
             ];

@@ -769,18 +769,24 @@ class TicketController extends Controller
     private function notifyAdminsNewTicket(Ticket $ticket)
     {
         try {
-            $ticket->loadMissing('subUnit');
-            $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
-                $query->where('units.id', $ticket->subUnit?->unit_id);
-            })->orWhereHas('roles', function ($q) {
-                $q->where('name', 'superadmin');
+            $ticket->loadMissing(['subUnit', 'user']);
+            $notifiedAdmins = \App\Models\Admin::where(function ($q) use ($ticket) {
+                $q->whereHas('units', function ($query) use ($ticket) {
+                    $query->where('units.id', $ticket->unit_id ?? $ticket->subUnit?->unit_id);
+                })->orWhereHas('roles', function ($roleQuery) {
+                    $roleQuery->whereIn('name', ['Super Admin', 'superadmin', 'super_admin']);
+                });
+            })->whereDoesntHave('roles', function ($q) {
+                $q->where('name', 'Operator');
             })->get();
 
-            if ($notifiedAdmins->isNotEmpty() && class_exists(\App\Notifications\NewTicketPushNotification::class)) {
-                \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\NewTicketPushNotification($ticket));
+            if ($notifiedAdmins->isNotEmpty()) {
+                \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketCreatedAdminNotification($ticket));
+            } else {
+                \Illuminate\Support\Facades\Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new \App\Notifications\TicketCreatedAdminNotification($ticket));
             }
         } catch (\Exception $e) {
-            // Silently ignore notification errors to not block ticket creation
+            \Illuminate\Support\Facades\Log::error("Gagal mengirim notifikasi admin tiket baru #{$ticket->id}: " . $e->getMessage());
         }
     }
 

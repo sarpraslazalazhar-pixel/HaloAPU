@@ -37,14 +37,20 @@ class ApiClient {
         // Penanganan error global ramah pengguna
         String errorMessage = 'Terjadi kesalahan sistem';
 
-        if (e.type == DioExceptionType.connectionTimeout ||
+        if (e.response?.statusCode == 401) {
+          // Token tidak valid/kadaluarsa -> bersihkan sesi aktif otomatis
+          _storage.delete(key: 'auth_token');
+          _storage.delete(key: 'user_data');
+          _storage.delete(key: 'user_role');
+          errorMessage = 'Sesi telah berakhir. Silakan login kembali.';
+        } else if (e.type == DioExceptionType.connectionTimeout ||
             e.type == DioExceptionType.receiveTimeout) {
           errorMessage = 'Koneksi ke server habis (Timeout). Silakan coba lagi.';
         } else if (e.type == DioExceptionType.connectionError) {
           errorMessage = 'Tidak dapat terhubung ke server. Periksa jaringan Anda.';
         } else if (e.response != null) {
           final data = e.response?.data;
-          if (data is Map && data.containsKey('message')) {
+          if (data is Map && data.containsKey('message') && data['message'] != 'Unauthenticated.') {
             errorMessage = data['message'].toString();
           } else {
             switch (e.response?.statusCode) {

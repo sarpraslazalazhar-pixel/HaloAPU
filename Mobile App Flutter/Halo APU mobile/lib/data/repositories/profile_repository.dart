@@ -21,11 +21,15 @@ class ProfileRepository {
       if (response.statusCode == 200) {
         final data = response.data['data'];
         await _storage.write(key: 'user_data', value: jsonEncode(data));
-        return {'success': true, 'data': data};
+        return {'success': true, 'data': data, 'statusCode': 200};
       }
-      return {'success': false, 'message': 'Gagal mengambil profil'};
+      return {'success': false, 'message': 'Gagal mengambil profil', 'statusCode': response.statusCode};
     } on DioException catch (e) {
-      return {'success': false, 'message': e.error?.toString() ?? 'Kesalahan saat mengambil profil'};
+      return {
+        'success': false,
+        'statusCode': e.response?.statusCode,
+        'message': e.error?.toString() ?? 'Kesalahan saat mengambil profil',
+      };
     }
   }
 

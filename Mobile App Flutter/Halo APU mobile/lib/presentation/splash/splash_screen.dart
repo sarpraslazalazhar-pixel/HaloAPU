@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:halo_apu_mobile/core/theme/app_theme.dart';
+import 'package:halo_apu_mobile/data/repositories/profile_repository.dart';
 import 'package:halo_apu_mobile/presentation/profile/providers/user_profile_provider.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -99,7 +100,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     precacheImage(const AssetImage('assets/images/splash_logo.png'), context);
   }
 
-  /// Pengecekan sesi & lazy warming dilakukan paralel bersamaan dengan animasi
+  /// Pengecekan sesi & validasi token dilakukan paralel bersamaan dengan animasi
   Future<void> _startParallelInit() async {
     try {
       final token = await _storage.read(key: 'auth_token');
@@ -107,13 +108,33 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
       if (isAuth) {
         final role = await _storage.read(key: 'user_role');
-        // Pre-warm profile provider jika token ada
-        if (role == 'admin') {
-          ref.read(adminProfileProvider.notifier).refresh();
-          _targetRoute = '/dashboard/admin';
+        final profileRepo = ref.read(profileRepositoryProvider);
+        final profileRes = await profileRepo.getProfile();
+
+        if (profileRes['success'] == true) {
+          // Sesi valid 100%!
+          if (role == 'admin') {
+            ref.read(adminProfileProvider.notifier).refresh();
+            _targetRoute = '/dashboard/admin';
+          } else {
+            ref.read(userProfileProvider.notifier).refresh();
+            _targetRoute = '/dashboard/user';
+          }
+        } else if (profileRes['statusCode'] == 401 ||
+            profileRes['message'].toString().toLowerCase().contains('unauthenticated') ||
+            profileRes['message'].toString().toLowerCase().contains('sesi telah berakhir')) {
+          // Token kadaluarsa -> bersihkan sesi aktif & arahkan ke login
+          await _storage.delete(key: 'auth_token');
+          await _storage.delete(key: 'user_data');
+          await _storage.delete(key: 'user_role');
+          _targetRoute = '/login';
         } else {
-          ref.read(userProfileProvider.notifier).refresh();
-          _targetRoute = '/dashboard/user';
+          // Kasus offline/tidak ada internet -> tetap izinkan masuk dashboard dengan cache
+          if (role == 'admin') {
+            _targetRoute = '/dashboard/admin';
+          } else {
+            _targetRoute = '/dashboard/user';
+          }
         }
       } else {
         _targetRoute = '/login';

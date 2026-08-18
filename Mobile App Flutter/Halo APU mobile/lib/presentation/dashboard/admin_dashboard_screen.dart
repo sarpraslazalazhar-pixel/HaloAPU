@@ -32,6 +32,12 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _fetchDashboardData();
+    PushNotificationService.startRealtimePoller();
+    PushNotificationService.onNotificationReceived = () {
+      if (mounted) {
+        ref.read(notificationProvider.notifier).refresh();
+      }
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppPermissionDialog.showIfRequired(context);
       PushNotificationService.syncFcmTokenWithBackend();

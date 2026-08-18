@@ -30,6 +30,12 @@ class _UserDashboardScreenState extends ConsumerState<UserDashboardScreen> {
   void initState() {
     super.initState();
     _fetchDashboardData();
+    PushNotificationService.startRealtimePoller();
+    PushNotificationService.onNotificationReceived = () {
+      if (mounted) {
+        ref.read(notificationProvider.notifier).refresh();
+      }
+    };
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppPermissionDialog.showIfRequired(context);
       PushNotificationService.syncFcmTokenWithBackend();

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -31,6 +32,10 @@ class PushNotificationService {
   );
 
   static bool _isInitialized = false;
+  static Timer? _pollingTimer;
+  static int _lastUnreadCount = 0;
+  static String? _lastKnownNotifId;
+  static VoidCallback? onNotificationReceived;
 
   /// Inisialisasi Firebase Messaging dan Flutter Local Notifications
   static Future<void> init() async {
@@ -97,6 +102,7 @@ class PushNotificationService {
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         debugPrint('FCM Foreground message: ${message.notification?.title}');
         _showLocalNotification(message);
+        onNotificationReceived?.call();
       });
 
       // 7. Listener saat notifikasi diklik ketika aplikasi di background
@@ -110,7 +116,6 @@ class PushNotificationService {
           await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
         debugPrint('FCM Initial message found: ${initialMessage.data}');
-        // Delay sedikit agar router sudah siap
         Future.delayed(const Duration(milliseconds: 800), () {
           _handleNotificationData(initialMessage.data);
         });
@@ -129,14 +134,83 @@ class PushNotificationService {
     }
   }
 
-  /// Menampilkan notifikasi lokal heads-up banner saat pesan diterima di foreground
-  static Future<void> _showLocalNotification(RemoteMessage message) async {
-    final notification = message.notification;
-    final data = message.data;
+  /// Memulai Real-time Poller untuk memeriksa notifikasi baru secara instan saat aplikasi aktif
+  static void startRealtimePoller() {
+    _pollingTimer?.cancel();
+    _checkNewNotifications(isInitial: true);
 
-    final title = notification?.title ?? data['title'] ?? 'Halo APU';
-    final body = notification?.body ?? data['body'] ?? data['message'] ?? 'Ada pembaruan tiket baru';
+    _pollingTimer = Timer.periodic(const Duration(seconds: 7), (_) {
+      _checkNewNotifications();
+    });
+  }
 
+  /// Menghentikan Poller saat logout
+  static void stopRealtimePoller() {
+    _pollingTimer?.cancel();
+    _pollingTimer = null;
+  }
+
+  /// Memeriksa notifikasi baru dan membunyikan alert lokal jika ada pembaruan status
+  static Future<void> _checkNewNotifications({bool isInitial = false}) async {
+    try {
+      const storage = FlutterSecureStorage();
+      final token = await storage.read(key: 'auth_token');
+      if (token == null || token.isEmpty) return;
+
+      final apiClient = ApiClient();
+      final response = await apiClient.dio.get('/notifications/unread-count');
+      if (response.statusCode != 200) return;
+
+      final int count = response.data['data']?['count'] ?? 0;
+
+      if (isInitial) {
+        _lastUnreadCount = count;
+        return;
+      }
+
+      // Jika unread count bertambah, ambil detail notifikasi terbaru dan bunyikan notifikasi HP
+      if (count > _lastUnreadCount) {
+        _lastUnreadCount = count;
+        onNotificationReceived?.call();
+
+        final notifListResponse = await apiClient.dio.get(
+          '/notifications',
+          queryParameters: {'page': 1, 'per_page': 1},
+        );
+
+        if (notifListResponse.statusCode == 200) {
+          final List<dynamic> list = notifListResponse.data['data'] ?? [];
+          if (list.isNotEmpty) {
+            final latest = list.first as Map<String, dynamic>;
+            final id = latest['id']?.toString();
+
+            if (id != _lastKnownNotifId) {
+              _lastKnownNotifId = id;
+              await showNotificationAlert(
+                title: latest['title'] ?? 'Pembaruan Tiket',
+                body: latest['body'] ?? 'Ada perubahan status pada tiket Anda',
+                data: {
+                  'ticket_id': latest['ticketId'] ?? latest['ticket_id'],
+                  'id': id,
+                },
+              );
+            }
+          }
+        }
+      } else {
+        _lastUnreadCount = count;
+      }
+    } catch (_) {
+      // Abaikan error jaringan polling sementara
+    }
+  }
+
+  /// Menampilkan banner notifikasi pop-up native OS + suara + getar
+  static Future<void> showNotificationAlert({
+    required String title,
+    required String body,
+    Map<String, dynamic>? data,
+  }) async {
     final AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
       _channel.id,
@@ -166,7 +240,22 @@ class PushNotificationService {
       title: title,
       body: body,
       notificationDetails: platformDetails,
-      payload: jsonEncode(data),
+      payload: data != null ? jsonEncode(data) : null,
+    );
+  }
+
+  /// Menampilkan notifikasi lokal heads-up banner saat pesan diterima dari FCM foreground
+  static Future<void> _showLocalNotification(RemoteMessage message) async {
+    final notification = message.notification;
+    final data = message.data;
+
+    final title = notification?.title ?? data['title'] ?? 'Halo APU';
+    final body = notification?.body ?? data['body'] ?? data['message'] ?? 'Ada pembaruan tiket baru';
+
+    await showNotificationAlert(
+      title: title,
+      body: body,
+      data: data,
     );
   }
 
@@ -229,7 +318,6 @@ class PushNotificationService {
           }
         } catch (e) {
           debugPrint('Error fetching ticket detail for notification deep link: $e');
-          // Fallback to ticket list or notification screen
         }
       }
 

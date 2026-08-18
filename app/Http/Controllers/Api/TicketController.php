@@ -693,6 +693,22 @@ class TicketController extends Controller
             }
         }
 
+        // Notifikasi ke User Pembuat Tiket (Push FCM, In-App Database, & WhatsApp)
+        try {
+            $ticket->load('user', 'subUnit');
+            if ($ticket->user) {
+                $ticket->user->notify(new \App\Notifications\TicketStatusUpdatedNotification($ticket, $request->catatan));
+                
+                if (!empty($request->catatan)) {
+                    $senderName = $user->name ?? $user->username;
+                    $url = route('tiket.show', $ticket->id);
+                    $ticket->user->notify(new \App\Notifications\TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
+                }
+            }
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());
+        }
+
         return response()->json([
             'message' => 'Status tiket berhasil diperbarui',
             'data' => $this->formatTicket($ticket->fresh()),

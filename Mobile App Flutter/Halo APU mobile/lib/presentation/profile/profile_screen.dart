@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/biometric_service.dart';
@@ -317,6 +319,26 @@ class _BiometricSectionState extends State<_BiometricSection> {
         return;
       }
       await _service.setEnabled(true);
+      const storage = FlutterSecureStorage();
+      final token = await storage.read(key: 'auth_token');
+      final role = await storage.read(key: 'user_role') ?? 'user';
+      final userData = await storage.read(key: 'user_data') ?? '{}';
+      if (token != null) {
+        String name = 'Pengguna';
+        String email = '';
+        try {
+          final decoded = jsonDecode(userData);
+          name = decoded['name'] ?? decoded['username'] ?? 'Pengguna';
+          email = decoded['email'] ?? '';
+        } catch (_) {}
+        await _service.saveBiometricSession(
+          token: token,
+          role: role,
+          name: name,
+          email: email,
+          userData: userData,
+        );
+      }
     } else {
       await _service.setEnabled(false);
     }

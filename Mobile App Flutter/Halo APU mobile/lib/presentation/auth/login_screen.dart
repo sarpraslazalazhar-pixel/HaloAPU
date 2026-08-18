@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:halo_apu_mobile/core/theme/app_theme.dart';
 import 'package:halo_apu_mobile/core/services/auth_service.dart';
 import 'package:halo_apu_mobile/core/services/biometric_service.dart';
@@ -26,6 +25,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
   bool _biometricVisible = false;
+  Map<String, String>? _savedBiometricUser;
   int _biometricFailures = 0;
 
   @override
@@ -35,13 +35,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _initBiometric() async {
-    const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'auth_token');
-    final hasSession = token != null;
     final enabled = await _biometricService.isEnabled();
     final supported = await _biometricService.canAuthenticate();
-    if (mounted && enabled && hasSession && supported) {
-      setState(() => _biometricVisible = true);
+    final savedUser = await _biometricService.getSavedBiometricUser();
+
+    if (mounted && enabled && supported && savedUser != null) {
+      setState(() {
+        _savedBiometricUser = savedUser;
+        _biometricVisible = true;
+      });
     }
   }
 
@@ -65,20 +67,32 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    const storage = FlutterSecureStorage();
-    final token = await storage.read(key: 'auth_token');
+    setState(() => _isLoading = true);
+
+    final restored = await _biometricService.restoreSessionFromBiometric();
     if (!mounted) return;
-    if (token == null) {
-      setState(() => _biometricVisible = false);
+
+    if (!restored) {
+      setState(() {
+        _isLoading = false;
+        _biometricVisible = false;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sesi berakhir, silakan login dengan password')),
+        const SnackBar(content: Text('Kredensial biometrik tidak ditemukan. Silakan login dengan password')),
       );
       return;
     }
 
-    final isAdmin = await storage.read(key: 'user_role') == 'admin';
-    if (!mounted) return;
-    if (isAdmin) {
+    ref.invalidate(userProfileProvider);
+    ref.invalidate(adminProfileProvider);
+    ref.invalidate(notificationProvider);
+    ref.invalidate(dashboardRepositoryProvider);
+
+    // Sync FCM token
+    PushNotificationService.syncFcmTokenWithBackend();
+
+    final role = _savedBiometricUser?['role'] ?? 'user';
+    if (role == 'admin') {
       context.go('/dashboard/admin');
     } else {
       context.go('/dashboard/user');
@@ -202,6 +216,129 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
+
+                      // Quick Biometric Login Card
+                      if (_biometricVisible && _savedBiometricUser != null) ...[
+                        Container(
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFF0F9FF), Color(0xFFE0F2FE)],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            borderRadius: BorderRadius.circular(22),
+                            border: Border.all(
+                              color: AppTheme.oceanWater.withValues(alpha: 0.3),
+                              width: 1.5,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppTheme.oceanWater.withValues(alpha: 0.15),
+                                blurRadius: 20,
+                                offset: const Offset(0, 8),
+                              ),
+                            ],
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppTheme.oceanWater.withValues(alpha: 0.2),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: const Icon(
+                                      Icons.fingerprint,
+                                      color: AppTheme.brilliantBlue,
+                                      size: 30,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'Login Cepat Biometrik',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppTheme.slateGrey,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          _savedBiometricUser!['name'] ?? 'Pengguna',
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF0F172A),
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 16),
+                              ElevatedButton.icon(
+                                onPressed: _isLoading ? null : _handleBiometricLogin,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.brilliantBlue,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  elevation: 4,
+                                  shadowColor: AppTheme.brilliantBlue.withValues(alpha: 0.35),
+                                ),
+                                icon: const Icon(Icons.touch_app, size: 20),
+                                label: Text(
+                                  _isLoading ? 'Memverifikasi...' : 'Masuk dengan Sidik Jari',
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 14),
+                              child: Text(
+                                'ATAU MASUK DENGAN PASSWORD',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: Colors.blueGrey.shade400,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                      ],
 
                       // Glass Card Form
                       Container(
@@ -365,23 +502,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                           ],
                                         ),
                                 ),
-
-                                if (_biometricVisible) ...[
-                                  const SizedBox(height: 16),
-                                  OutlinedButton.icon(
-                                    onPressed: _isLoading ? null : _handleBiometricLogin,
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppTheme.brilliantBlue,
-                                      side: BorderSide(color: AppTheme.brilliantBlue.withValues(alpha: 0.2), width: 2),
-                                      padding: const EdgeInsets.symmetric(vertical: 16),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    icon: const Icon(Icons.fingerprint, size: 22),
-                                    label: const Text('Login dengan Biometrik', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                                  ),
-                                ],
                               ],
                             ),
                           ),

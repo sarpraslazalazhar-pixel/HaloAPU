@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:halo_apu_mobile/presentation/splash/splash_screen.dart';
 import 'package:halo_apu_mobile/presentation/auth/login_screen.dart';
 import 'package:halo_apu_mobile/presentation/auth/forgot_password_screen.dart';
 import 'package:halo_apu_mobile/presentation/dashboard/user_dashboard_screen.dart';
@@ -49,17 +50,23 @@ Page<void> _fadeSlidePage(GoRouterState state, Widget child) {
 }
 
 final appRouter = GoRouter(
-  initialLocation: '/login',
+  initialLocation: '/splash',
   redirect: (context, state) async {
     const storage = FlutterSecureStorage();
     final token = await storage.read(key: 'auth_token');
     final isAuth = token != null && token.isNotEmpty;
-    final isPublicRoute = state.matchedLocation == '/login' ||
+    final isPublicRoute = state.matchedLocation == '/splash' ||
+        state.matchedLocation == '/login' ||
         state.matchedLocation == '/forgot-password' ||
         state.matchedLocation == '/help' ||
         state.matchedLocation == '/contact-admin';
 
-    // 1. Jika sudah punya sesi login dan membuka /login, jangan logout -> langsung ke dashboard
+    // 1. Biarkan /splash melakukan inisialisasi dan routing animasinya sendiri
+    if (state.matchedLocation == '/splash') {
+      return null;
+    }
+
+    // 2. Jika sudah punya sesi login dan membuka /login, langsung ke dashboard
     if (isAuth && state.matchedLocation == '/login') {
       final role = await storage.read(key: 'user_role');
       if (role == 'admin') {
@@ -69,7 +76,7 @@ final appRouter = GoRouter(
       }
     }
 
-    // 2. Jika belum login dan mencoba mengakses rute terlindungi -> arahkan ke /login
+    // 3. Jika belum login dan mencoba mengakses rute terlindungi -> arahkan ke /login
     if (!isAuth && !isPublicRoute) {
       return '/login';
     }
@@ -77,6 +84,10 @@ final appRouter = GoRouter(
     return null;
   },
   routes: [
+    GoRoute(
+      path: '/splash',
+      pageBuilder: (context, state) => _fadeSlidePage(state, const SplashScreen()),
+    ),
     GoRoute(
       path: '/login',
       pageBuilder: (context, state) => _fadeSlidePage(state, const LoginScreen()),

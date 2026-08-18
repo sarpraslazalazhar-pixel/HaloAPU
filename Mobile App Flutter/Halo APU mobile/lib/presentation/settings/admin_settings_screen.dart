@@ -1,9 +1,12 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/services/auth_service.dart';
+import '../../core/services/biometric_service.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../profile/providers/user_profile_provider.dart';
 import '../widgets/custom_bottom_nav.dart';
@@ -94,6 +97,8 @@ class AdminSettingsScreen extends ConsumerWidget {
                     subtitle: 'Perbarui nama, username, dan foto',
                     onTap: () => context.push('/settings/edit-admin'),
                   ),
+                  const Divider(height: 1, indent: 60, endIndent: 16),
+                  const _AdminBiometricTile(),
                   const Divider(height: 1, indent: 60, endIndent: 16),
                   _SettingsTile(
                     icon: Icons.phonelink_lock_rounded,
@@ -775,6 +780,119 @@ class _SettingsTile extends StatelessWidget {
               Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _AdminBiometricTile extends StatefulWidget {
+  const _AdminBiometricTile();
+
+  @override
+  State<_AdminBiometricTile> createState() => _AdminBiometricTileState();
+}
+
+class _AdminBiometricTileState extends State<_AdminBiometricTile> {
+  final BiometricService _service = BiometricService();
+  bool _enabled = false;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final enabled = await _service.isEnabled();
+    if (mounted) setState(() => _enabled = enabled);
+    _loading = false;
+  }
+
+  Future<void> _onChanged(bool value) async {
+    if (value) {
+      final supported = await _service.canAuthenticate();
+      if (!supported) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Perangkat tidak mendukung biometrik')),
+          );
+        }
+        return;
+      }
+      final ok = await _service.authenticate();
+      if (!ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Verifikasi biometrik gagal')),
+          );
+        }
+        return;
+      }
+      await _service.setEnabled(true);
+      const storage = FlutterSecureStorage();
+      final token = await storage.read(key: 'auth_token');
+      final role = await storage.read(key: 'user_role') ?? 'admin';
+      final userData = await storage.read(key: 'user_data') ?? '{}';
+      if (token != null) {
+        String name = 'Admin';
+        String email = '';
+        try {
+          final decoded = jsonDecode(userData);
+          name = decoded['name'] ?? decoded['username'] ?? 'Admin';
+          email = decoded['email'] ?? '';
+        } catch (_) {}
+        await _service.saveBiometricSession(
+          token: token,
+          role: role,
+          name: name,
+          email: email,
+          userData: userData,
+        );
+      }
+    } else {
+      await _service.setEnabled(false);
+    }
+    if (mounted) setState(() => _enabled = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.brilliantBlue.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.fingerprint, color: AppTheme.brilliantBlue, size: 22),
+          ),
+          const SizedBox(width: 14),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Login Biometrik',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black87),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Masuk cepat dengan sidik jari / Face ID',
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: _enabled,
+            onChanged: _loading ? null : _onChanged,
+            activeThumbColor: AppTheme.brilliantBlue,
+          ),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:halo_apu_mobile/core/config/api_config.dart';
 import 'package:halo_apu_mobile/core/services/device_service.dart';
+import 'package:halo_apu_mobile/core/services/biometric_service.dart';
 
 class AuthService {
   Dio get _dio => Dio(BaseOptions(
@@ -36,10 +37,29 @@ class AuthService {
       final data = response.data;
 
       if (response.statusCode == 200) {
+        final token = data['data']['token'] as String;
+        final userData = data['data']['user'] as Map<String, dynamic>;
+        final role = (data['data']['role'] ?? (isAdmin ? 'admin' : 'user')) as String;
+        final userDataJson = jsonEncode(userData);
+        final name = (userData['name'] ?? userData['username'] ?? 'Pengguna') as String;
+        final userEmail = (userData['email'] ?? email) as String;
+
         // Simpan token & user info di secure storage untuk persistensi sesi
-        await _storage.write(key: 'auth_token', value: data['data']['token']);
-        await _storage.write(key: 'user_data', value: jsonEncode(data['data']['user']));
-        await _storage.write(key: 'user_role', value: data['data']['role']);
+        await _storage.write(key: 'auth_token', value: token);
+        await _storage.write(key: 'user_data', value: userDataJson);
+        await _storage.write(key: 'user_role', value: role);
+
+        // Jika biometrik diaktifkan, otomatis simpan sesi ke biometric storage
+        final biometricService = BiometricService();
+        if (await biometricService.isEnabled()) {
+          await biometricService.saveBiometricSession(
+            token: token,
+            role: role,
+            name: name,
+            email: userEmail,
+            userData: userDataJson,
+          );
+        }
 
         return {'success': true, 'data': data};
       } else {

@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -25,10 +26,25 @@ class TicketCreatedUserNotification extends Notification implements ShouldBroadc
     public function via(object $notifiable): array
     {
         $channels = ['database', 'broadcast', \NotificationChannels\WebPush\WebPushChannel::class];
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
         return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? 'Umum';
+        return [
+            'title' => 'Tiket Berhasil Dibuat #' . $this->ticket->id,
+            'body' => "Tiket layanan {$layanan} telah diterima dan akan segera diproses.",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => route('tiket.show', $this->ticket->id),
+            'type' => 'ticket_created',
+        ];
     }
 
     /**

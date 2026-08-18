@@ -6,8 +6,9 @@ import '../../../domain/models/notification_model.dart';
 import '../tickets/providers/user_ticket_provider.dart';
 import '../tickets/providers/admin_ticket_provider.dart';
 import '../widgets/entrance_animation.dart';
-import '../widgets/pagination_footer.dart';
 import '../widgets/shimmer.dart';
+import '../widgets/pagination_footer.dart';
+import '../../../core/services/push_notification_service.dart';
 import 'providers/notification_provider.dart';
 
 class NotificationScreen extends ConsumerStatefulWidget {
@@ -93,6 +94,24 @@ class _NotificationScreenState extends ConsumerState<NotificationScreen> {
         backgroundColor: Colors.white,
         foregroundColor: Colors.black,
         actions: [
+          IconButton(
+            tooltip: 'Tes Notifikasi HP',
+            icon: const Icon(Icons.notifications_active_outlined, color: AppTheme.oceanWater),
+            onPressed: () async {
+              await PushNotificationService.showNotificationAlert(
+                title: 'Tes Notifikasi Sistem',
+                body: 'Notifikasi pop-up & suara di status bar HP berhasil berfungsi!',
+              );
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    behavior: SnackBarBehavior.floating,
+                    content: Text('Notifikasi telah dikirim ke status bar HP Anda!'),
+                  ),
+                );
+              }
+            },
+          ),
           if (unreadCount > 0)
             TextButton(
               onPressed: () =>

@@ -23,17 +23,17 @@ class PushNotificationService {
       FlutterLocalNotificationsPlugin();
 
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
-    'high_importance_channel',
+    'halo_apu_high_importance_v2',
     'Notifikasi Tiket Halo APU',
-    description: 'Channel untuk pembaruan tiket, komentar baru, dan pengumuman.',
+    description: 'Channel prioritas tinggi untuk pembaruan tiket dan pesan masuk.',
     importance: Importance.max,
     playSound: true,
     enableVibration: true,
+    showBadge: true,
   );
 
   static bool _isInitialized = false;
   static Timer? _pollingTimer;
-  static int _lastUnreadCount = 0;
   static String? _lastKnownNotifId;
   static VoidCallback? onNotificationReceived;
 
@@ -57,9 +57,9 @@ class PushNotificationService {
           AndroidInitializationSettings('@mipmap/ic_launcher');
       const DarwinInitializationSettings iosSettings =
           DarwinInitializationSettings(
-        requestAlertPermission: false,
-        requestBadgePermission: false,
-        requestSoundPermission: false,
+        requestAlertPermission: true,
+        requestBadgePermission: true,
+        requestSoundPermission: true,
       );
 
       const InitializationSettings initSettings = InitializationSettings(
@@ -127,6 +127,9 @@ class PushNotificationService {
         syncFcmTokenWithBackend(token: newToken);
       });
 
+      // 10. Mulai Real-time Poller otomatis
+      startRealtimePoller();
+
       _isInitialized = true;
       debugPrint('PushNotificationService initialized successfully');
     } catch (e) {
@@ -134,12 +137,12 @@ class PushNotificationService {
     }
   }
 
-  /// Memulai Real-time Poller untuk memeriksa notifikasi baru secara instan saat aplikasi aktif
+  /// Memulai Real-time Poller untuk memeriksa notifikasi baru secara instan
   static void startRealtimePoller() {
     _pollingTimer?.cancel();
     _checkNewNotifications(isInitial: true);
 
-    _pollingTimer = Timer.periodic(const Duration(seconds: 7), (_) {
+    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       _checkNewNotifications();
     });
   }
@@ -158,50 +161,38 @@ class PushNotificationService {
       if (token == null || token.isEmpty) return;
 
       final apiClient = ApiClient();
-      final response = await apiClient.dio.get('/notifications/unread-count');
-      if (response.statusCode != 200) return;
+      final notifListResponse = await apiClient.dio.get(
+        '/notifications',
+        queryParameters: {'page': 1, 'per_page': 1},
+      );
 
-      final int count = response.data['data']?['count'] ?? 0;
+      if (notifListResponse.statusCode == 200) {
+        final List<dynamic> list = notifListResponse.data['data'] ?? [];
+        if (list.isNotEmpty) {
+          final latest = list.first as Map<String, dynamic>;
+          final id = latest['id']?.toString();
 
-      if (isInitial) {
-        _lastUnreadCount = count;
-        return;
-      }
+          if (isInitial) {
+            _lastKnownNotifId = id;
+            return;
+          }
 
-      // Jika unread count bertambah, ambil detail notifikasi terbaru dan bunyikan notifikasi HP
-      if (count > _lastUnreadCount) {
-        _lastUnreadCount = count;
-        onNotificationReceived?.call();
-
-        final notifListResponse = await apiClient.dio.get(
-          '/notifications',
-          queryParameters: {'page': 1, 'per_page': 1},
-        );
-
-        if (notifListResponse.statusCode == 200) {
-          final List<dynamic> list = notifListResponse.data['data'] ?? [];
-          if (list.isNotEmpty) {
-            final latest = list.first as Map<String, dynamic>;
-            final id = latest['id']?.toString();
-
-            if (id != _lastKnownNotifId) {
-              _lastKnownNotifId = id;
-              await showNotificationAlert(
-                title: latest['title'] ?? 'Pembaruan Tiket',
-                body: latest['body'] ?? 'Ada perubahan status pada tiket Anda',
-                data: {
-                  'ticket_id': latest['ticketId'] ?? latest['ticket_id'],
-                  'id': id,
-                },
-              );
-            }
+          if (id != null && id != _lastKnownNotifId) {
+            _lastKnownNotifId = id;
+            await showNotificationAlert(
+              title: latest['title'] ?? 'Pembaruan Tiket',
+              body: latest['body'] ?? 'Ada perubahan status pada tiket Anda',
+              data: {
+                'ticket_id': latest['ticketId'] ?? latest['ticket_id'],
+                'id': id,
+              },
+            );
+            onNotificationReceived?.call();
           }
         }
-      } else {
-        _lastUnreadCount = count;
       }
     } catch (_) {
-      // Abaikan error jaringan polling sementara
+      // Abaikan error jaringan sementara
     }
   }
 
@@ -217,10 +208,13 @@ class PushNotificationService {
       _channel.name,
       channelDescription: _channel.description,
       importance: Importance.max,
-      priority: Priority.high,
+      priority: Priority.max,
       icon: '@mipmap/ic_launcher',
       playSound: true,
       enableVibration: true,
+      visibility: NotificationVisibility.public,
+      ticker: title,
+      category: AndroidNotificationCategory.message,
     );
 
     const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(

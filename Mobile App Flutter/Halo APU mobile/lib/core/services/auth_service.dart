@@ -42,22 +42,20 @@ class AuthService {
         final role = (data['data']['role'] ?? (isAdmin ? 'admin' : 'user')) as String;
         final userDataJson = jsonEncode(userData);
         final name = (userData['name'] ?? userData['username'] ?? 'Pengguna') as String;
-        final userEmail = (userData['email'] ?? email) as String;
 
         // Simpan token & user info di secure storage untuk persistensi sesi
         await _storage.write(key: 'auth_token', value: token);
         await _storage.write(key: 'user_data', value: userDataJson);
         await _storage.write(key: 'user_role', value: role);
 
-        // Jika biometrik diaktifkan, otomatis simpan sesi ke biometric storage
+        // Jika biometrik diaktifkan, simpan kredensial terenkripsi untuk 1-touch login
         final biometricService = BiometricService();
         if (await biometricService.isEnabled()) {
-          await biometricService.saveBiometricSession(
-            token: token,
-            role: role,
+          await biometricService.saveBiometricCredentials(
+            email: email,
+            password: password,
             name: name,
-            email: userEmail,
-            userData: userDataJson,
+            role: role,
           );
         }
 

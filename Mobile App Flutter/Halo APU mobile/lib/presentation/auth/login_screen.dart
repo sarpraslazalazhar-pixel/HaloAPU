@@ -69,10 +69,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     setState(() => _isLoading = true);
 
-    final restored = await _biometricService.restoreSessionFromBiometric();
+    final creds = await _biometricService.getBiometricCredentials();
     if (!mounted) return;
 
-    if (!restored) {
+    if (creds == null) {
       setState(() {
         _isLoading = false;
         _biometricVisible = false;
@@ -83,19 +83,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       return;
     }
 
-    ref.invalidate(userProfileProvider);
-    ref.invalidate(adminProfileProvider);
-    ref.invalidate(notificationProvider);
-    ref.invalidate(dashboardRepositoryProvider);
+    final isAdmin = creds['role'] == 'admin';
+    final result = await _authService.login(creds['email']!, creds['password']!, isAdmin);
 
-    // Sync FCM token
-    PushNotificationService.syncFcmTokenWithBackend();
+    if (!mounted) return;
+    setState(() => _isLoading = false);
 
-    final role = _savedBiometricUser?['role'] ?? 'user';
-    if (role == 'admin') {
-      context.go('/dashboard/admin');
+    if (result['success'] == true) {
+      ref.invalidate(userProfileProvider);
+      ref.invalidate(adminProfileProvider);
+      ref.invalidate(notificationProvider);
+      ref.invalidate(dashboardRepositoryProvider);
+
+      // Sync FCM token
+      PushNotificationService.syncFcmTokenWithBackend();
+
+      if (isAdmin) {
+        context.go('/dashboard/admin');
+      } else {
+        context.go('/dashboard/user');
+      }
     } else {
-      context.go('/dashboard/user');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(result['message'] ?? 'Login biometrik gagal. Silakan masukkan password.'),
+          backgroundColor: AppTheme.danger,
+        ),
+      );
     }
   }
 

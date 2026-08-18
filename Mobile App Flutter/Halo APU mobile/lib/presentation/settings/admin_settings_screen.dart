@@ -809,6 +809,52 @@ class _AdminBiometricTileState extends State<_AdminBiometricTile> {
     _loading = false;
   }
 
+  Future<String?> _promptPassword(BuildContext context) async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: const Text('Konfirmasi Password', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Masukkan kata sandi Admin Anda untuk mengaktifkan login biometrik:',
+              style: TextStyle(fontSize: 13, color: Colors.grey),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              obscureText: true,
+              decoration: InputDecoration(
+                hintText: 'Kata Sandi Admin',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.lock_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, null),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.brilliantBlue,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _onChanged(bool value) async {
     if (value) {
       final supported = await _service.canAuthenticate();
@@ -829,29 +875,43 @@ class _AdminBiometricTileState extends State<_AdminBiometricTile> {
         }
         return;
       }
-      await _service.setEnabled(true);
+
       const storage = FlutterSecureStorage();
-      final token = await storage.read(key: 'auth_token');
-      final role = await storage.read(key: 'user_role') ?? 'admin';
-      final userData = await storage.read(key: 'user_data') ?? '{}';
-      if (token != null) {
-        String name = 'Admin';
-        String email = '';
-        try {
-          final decoded = jsonDecode(userData);
-          name = decoded['name'] ?? decoded['username'] ?? 'Admin';
-          email = decoded['email'] ?? '';
-        } catch (_) {}
-        await _service.saveBiometricSession(
-          token: token,
-          role: role,
-          name: name,
+      final userDataStr = await storage.read(key: 'user_data') ?? '{}';
+      String name = 'Admin';
+      String email = '';
+      try {
+        final decoded = jsonDecode(userDataStr);
+        name = decoded['name'] ?? decoded['username'] ?? 'Admin';
+        email = decoded['email'] ?? decoded['username'] ?? '';
+      } catch (_) {}
+
+      var password = await storage.read(key: 'biometric_user_password');
+      if (password == null || password.isEmpty) {
+        if (mounted) {
+          final entered = await _promptPassword(context);
+          if (entered == null || entered.isEmpty) return;
+          password = entered;
+        }
+      }
+
+      if (password != null && password.isNotEmpty) {
+        await _service.setEnabled(true);
+        await _service.saveBiometricCredentials(
           email: email,
-          userData: userData,
+          password: password,
+          name: name,
+          role: 'admin',
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Login biometrik Admin aktif!')),
+          );
+        }
       }
     } else {
       await _service.setEnabled(false);
+      await _service.clearBiometricSession();
     }
     if (mounted) setState(() => _enabled = value);
   }

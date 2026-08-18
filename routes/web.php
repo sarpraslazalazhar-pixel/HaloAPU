@@ -200,6 +200,15 @@ Route::prefix('admin')->name('admin.')->group(function () {
             // Reminder Config
             Route::get('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'index'])->name('reminder-config.index');
             Route::put('reminder-config', [\App\Http\Controllers\Admin\ReminderConfigController::class, 'update'])->name('reminder-config.update');
+
+            // Peraturan Lock Device
+            Route::prefix('device-lock-config')->name('device-lock-config.')->group(function () {
+                Route::get('/', [\App\Http\Controllers\Admin\DeviceLockConfigController::class, 'index'])->name('index');
+                Route::put('/', [\App\Http\Controllers\Admin\DeviceLockConfigController::class, 'update'])->name('update');
+                Route::post('/reset-account/{type}/{id}', [\App\Http\Controllers\Admin\DeviceLockConfigController::class, 'resetAccountDevices'])->name('reset-account');
+                Route::post('/revoke-device/{deviceId}', [\App\Http\Controllers\Admin\DeviceLockConfigController::class, 'revokeDevice'])->name('revoke-device');
+                Route::post('/reset-all', [\App\Http\Controllers\Admin\DeviceLockConfigController::class, 'resetAllDevices'])->name('reset-all');
+            });
         });
 
         // Notifications

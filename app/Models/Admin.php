@@ -64,5 +64,10 @@ class Admin extends Authenticatable
     {
         return $this->morphMany(Message::class, 'sender');
     }
+
+    public function devices()
+    {
+        return $this->morphMany(AccountDevice::class, 'authenticatable');
+    }
 }
 

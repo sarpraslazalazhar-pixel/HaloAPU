@@ -21,6 +21,7 @@ import {
  Grid3X3,
  Sparkles,
  MessageSquare,
+ Smartphone,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -117,6 +118,7 @@ const adminNavItems: NavItem[] = [
  { label: 'Form', icon: FileEdit, route: '/admin/peraturan-form', permissionGroup: 'akses-konfigurasi' },
  { label: 'SLA', icon: Clock, route: '/admin/sla-config', permissionGroup: 'akses-konfigurasi' },
  { label: 'Reminder', icon: Bell, route: '/admin/reminder-config', permissionGroup: 'akses-konfigurasi' },
+ { label: 'Lock Device', icon: Smartphone, route: '/admin/device-lock-config', permissionGroup: 'akses-konfigurasi' },
  { label: 'Sistem', icon: Settings, route: '/admin/konfigurasi', permissionGroup: 'akses-konfigurasi' },
  ]
  },

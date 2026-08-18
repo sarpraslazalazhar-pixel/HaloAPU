@@ -128,6 +128,9 @@ class UserManagementController extends Controller
             'device_name' => null,
         ]);
 
+        // Also clear account_devices records
+        $user->devices()->delete();
+
         return back()->with('success', 'Kunci perangkat user ' . ($user->name ?? $user->username) . ' berhasil dibuka / di-reset.');
     }
 }

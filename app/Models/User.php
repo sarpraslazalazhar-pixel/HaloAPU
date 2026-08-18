@@ -84,4 +84,9 @@ class User extends Authenticatable
     {
         return $this->belongsTo(OrgJabatan::class, 'jabatan_id');
     }
+
+    public function devices()
+    {
+        return $this->morphMany(AccountDevice::class, 'authenticatable');
+    }
 }

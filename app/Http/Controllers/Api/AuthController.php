@@ -48,19 +48,72 @@ class AuthController extends Controller
 
         // 1 Akun 1 HP: Validasi Pengikatan Perangkat (Device ID Binding)
         $isDeviceLockEnabled = (bool) \App\Models\SystemConfig::getValue('device_lock_enabled', true);
-        if ($isDeviceLockEnabled && !empty($deviceId)) {
+        $deviceLockTarget = \App\Models\SystemConfig::getValue('device_lock_target', 'all');
+        $maxDevices = (int) \App\Models\SystemConfig::getValue('device_lock_max_devices', 1);
+        $autoUnlockDays = (int) \App\Models\SystemConfig::getValue('device_lock_auto_unlock_days', 0);
+
+        // Determine if lock applies to this account type
+        $lockApplies = $isDeviceLockEnabled && !empty($deviceId) && (
+            $deviceLockTarget === 'all' ||
+            ($deviceLockTarget === 'user' && !$isAdmin) ||
+            ($deviceLockTarget === 'admin' && $isAdmin)
+        );
+
+        if ($lockApplies) {
+            // Auto-unlock: remove stale devices if auto_unlock_days > 0
+            if ($autoUnlockDays > 0) {
+                $cutoff = now()->subDays($autoUnlockDays);
+                $user->devices()
+                    ->where('last_login_at', '<', $cutoff)
+                    ->delete();
+
+                // If primary device was among stale ones, clear it
+                $primaryStillExists = $user->devices()->where('device_id', $user->device_id)->exists();
+                if (!empty($user->device_id) && !$primaryStillExists) {
+                    $latestDevice = $user->devices()->orderBy('last_login_at', 'desc')->first();
+                    $user->device_id = $latestDevice?->device_id;
+                    $user->device_name = $latestDevice?->device_name;
+                    $user->save();
+                }
+            }
+
+            // Check if this device is already registered for this account
+            $existingDevice = $user->devices()->where('device_id', $deviceId)->first();
+
+            if ($existingDevice) {
+                // Device already known — update last login
+                $existingDevice->update([
+                    'last_login_at' => now(),
+                    'ip_address' => $request->ip(),
+                    'device_name' => $deviceName ?? $existingDevice->device_name,
+                ]);
+            } else {
+                // New device — check if max devices reached
+                $currentDeviceCount = $user->devices()->count();
+
+                if ($currentDeviceCount >= $maxDevices) {
+                    // Rejected: max devices reached
+                    $deviceInfo = $user->device_name ? " (" . $user->device_name . ")" : "";
+                    return response()->json([
+                        'message' => 'Akun ini telah terikat pada ' . $currentDeviceCount . ' perangkat' . $deviceInfo . '. Batas maksimal ' . $maxDevices . ' perangkat per akun. Silakan hubungi Admin untuk reset kunci perangkat.',
+                        'error_code' => 'DEVICE_MISMATCH',
+                    ], 403);
+                }
+
+                // Register new device
+                $user->devices()->create([
+                    'device_id' => $deviceId,
+                    'device_name' => $deviceName ?? 'Smartphone Android',
+                    'ip_address' => $request->ip(),
+                    'last_login_at' => now(),
+                ]);
+            }
+
+            // Keep primary device_id/device_name in sync (use the latest device)
             if (empty($user->device_id)) {
-                // Kunci akun ini ke HP pertama yang login
                 $user->device_id = $deviceId;
                 $user->device_name = $deviceName ?? 'Smartphone Android';
                 $user->save();
-            } elseif ($user->device_id !== $deviceId) {
-                // Ditolak karena login dari HP yang berbeda
-                $deviceInfo = $user->device_name ? " (" . $user->device_name . ")" : "";
-                return response()->json([
-                    'message' => 'Akun ini telah terikat pada perangkat lain' . $deviceInfo . '. 1 akun hanya dapat digunakan pada 1 HP. Silakan hubungi Admin untuk reset kunci perangkat.',
-                    'error_code' => 'DEVICE_MISMATCH',
-                ], 403);
             }
         }
 

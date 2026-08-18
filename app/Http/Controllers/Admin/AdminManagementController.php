@@ -143,6 +143,9 @@ class AdminManagementController extends Controller
             'device_name' => null,
         ]);
 
+        // Also clear account_devices records
+        $admin->devices()->delete();
+
         return back()->with('success', 'Kunci perangkat admin ' . ($admin->name ?? $admin->username) . ' berhasil dibuka / di-reset.');
     }
 }

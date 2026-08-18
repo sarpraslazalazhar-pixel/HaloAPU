@@ -96,7 +96,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // Pre-cache asset gambar agar langsung tampil instan tanpa flicker
-    precacheImage(const AssetImage('assets/images/logo.png'), context);
+    precacheImage(const AssetImage('assets/images/splash_logo.png'), context);
   }
 
   /// Pengecekan sesi & lazy warming dilakukan paralel bersamaan dengan animasi
@@ -236,30 +236,28 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                 ),
                               ),
 
-                              // Logo Card
+                              // Splash Logo Image with Shadow
                               Container(
-                                width: 120,
-                                height: 120,
-                                padding: const EdgeInsets.all(18),
+                                width: 135,
+                                height: 135,
                                 decoration: BoxDecoration(
-                                  color: Colors.white,
                                   shape: BoxShape.circle,
                                   boxShadow: [
                                     BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.2),
-                                      blurRadius: 25,
-                                      offset: const Offset(0, 10),
+                                      color: Colors.black.withValues(alpha: 0.25),
+                                      blurRadius: 30,
+                                      offset: const Offset(0, 12),
                                     ),
                                   ],
                                 ),
                                 child: Image.asset(
-                                  'assets/images/logo.png',
+                                  'assets/images/splash_logo.png',
                                   fit: BoxFit.contain,
                                   errorBuilder: (context, error, stackTrace) {
                                     return const Icon(
                                       Icons.support_agent_rounded,
-                                      size: 60,
-                                      color: Color(0xFF00B8D9),
+                                      size: 80,
+                                      color: Colors.white,
                                     );
                                   },
                                 ),

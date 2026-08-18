@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'fcm' => [
+        'key' => env('FCM_SERVER_KEY'),
+        'project_id' => env('FIREBASE_PROJECT_ID', 'halo-apu'),
+        'service_account_json' => env('FIREBASE_CREDENTIALS'),
+    ],
+
 ];

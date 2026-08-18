@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -38,7 +39,22 @@ class TicketCommentPushNotification extends Notification
      */
     public function via(object $notifiable): array
     {
-        return $this->filterChannels(['database', WebPushChannel::class], $notifiable);
+        $channels = ['database', WebPushChannel::class];
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+        return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        return [
+            'title' => 'Pesan Baru: Tiket #' . $this->ticket->id,
+            'body' => $this->senderName . ': ' . \Illuminate\Support\Str::limit($this->commentText, 120),
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => $this->url,
+            'type' => 'ticket_comment',
+        ];
     }
 
     public function toDatabase(object $notifiable): array

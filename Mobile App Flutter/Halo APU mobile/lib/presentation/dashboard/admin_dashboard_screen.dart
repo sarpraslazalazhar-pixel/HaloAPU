@@ -12,6 +12,8 @@ import 'package:halo_apu_mobile/presentation/widgets/custom_bottom_nav.dart';
 import 'package:halo_apu_mobile/presentation/widgets/entrance_animation.dart';
 import 'package:halo_apu_mobile/presentation/widgets/shimmer.dart';
 import 'package:halo_apu_mobile/presentation/widgets/app_avatar.dart';
+import 'package:halo_apu_mobile/presentation/widgets/app_permission_dialog.dart';
+import 'package:halo_apu_mobile/core/services/push_notification_service.dart';
 import 'package:halo_apu_mobile/data/repositories/dashboard_repository.dart';
 
 class AdminDashboardScreen extends ConsumerStatefulWidget {
@@ -30,6 +32,10 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
   void initState() {
     super.initState();
     _fetchDashboardData();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      AppPermissionDialog.showIfRequired(context);
+      PushNotificationService.syncFcmTokenWithBackend();
+    });
   }
 
   Future<void> _fetchDashboardData() async {

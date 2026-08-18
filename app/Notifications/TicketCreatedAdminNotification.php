@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -30,6 +31,9 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
             $channels[] = 'database';
             $channels[] = 'broadcast';
             $channels[] = \NotificationChannels\WebPush\WebPushChannel::class;
+            if (!empty($notifiable->fcm_token)) {
+                $channels[] = FcmChannel::class;
+            }
             // Jika admin punya nomor WA, kirim juga via WhatsApp
             if (!empty($notifiable->no_wa)) {
                 $channels[] = WhatsAppChannel::class;
@@ -45,6 +49,20 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
         }
 
         return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? 'Umum';
+        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+
+        return [
+            'title' => 'Tiket Baru Masuk #' . $this->ticket->id,
+            'body' => "Tiket baru dari {$pembuat} ({$layanan})",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url('/admin/tiket/' . $this->ticket->id),
+            'type' => 'ticket_created',
+        ];
     }
 
     /**

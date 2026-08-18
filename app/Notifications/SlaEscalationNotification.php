@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -22,12 +23,31 @@ class SlaEscalationNotification extends Notification
 
     public function via(object $notifiable): array
     {
+        $channels = ['database'];
         $priority = strtolower($this->priority);
         if ($priority === 'tinggi' || $priority === 'urgen') {
-            return ['database', WhatsAppChannel::class];
+            $channels[] = WhatsAppChannel::class;
+        } else {
+            $channels[] = 'mail';
         }
 
-        return ['database', 'mail'];
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+
+        return $channels;
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $jenisBreachLabel = $this->breachType === 'respon' ? 'Respon' : 'Penyelesaian';
+        return [
+            'title' => "⚠️ Breach SLA {$jenisBreachLabel}: Tiket #{$this->ticket->id}",
+            'body' => "Tiket \"{$this->ticket->judul}\" telah melewati batas SLA {$jenisBreachLabel}. Segera tangani!",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url('/admin/tiket/' . $this->ticket->id),
+            'type' => 'sla_escalation',
+        ];
     }
 
     public function toDatabase(object $notifiable): array

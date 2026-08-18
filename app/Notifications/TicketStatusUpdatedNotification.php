@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
@@ -28,7 +29,23 @@ class TicketStatusUpdatedNotification extends Notification
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
         return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        $catatanText = !empty($this->catatan) ? ' (Catatan: ' . $this->catatan . ')' : '';
+        return [
+            'title' => 'Status Tiket Diperbarui',
+            'body' => "Status tiket #{$this->ticket->id} berubah menjadi {$statusStr}{$catatanText}",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => route('tiket.show', $this->ticket->id),
+            'type' => 'ticket_status_updated',
+        ];
     }
 
     public function toWebPush($notifiable, $notification)

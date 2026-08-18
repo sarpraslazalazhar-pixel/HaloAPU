@@ -3,6 +3,7 @@
 namespace App\Notifications;
 
 use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -30,6 +31,9 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
             $channels[] = 'database';
             $channels[] = 'broadcast';
             $channels[] = \NotificationChannels\WebPush\WebPushChannel::class;
+            if (!empty($notifiable->fcm_token)) {
+                $channels[] = FcmChannel::class;
+            }
             // Jika admin punya nomor WA, kirim juga via WhatsApp
             if (!empty($notifiable->no_wa)) {
                 $channels[] = WhatsAppChannel::class;
@@ -41,6 +45,18 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
         }
 
         return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? 'Umum';
+        return [
+            'title' => 'Penugasan Tiket #' . $this->ticket->id,
+            'body' => "Anda telah ditugaskan untuk menangani tiket layanan {$layanan}.",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url('/admin/tiket/' . $this->ticket->id),
+            'type' => 'ticket_assigned',
+        ];
     }
 
     /**

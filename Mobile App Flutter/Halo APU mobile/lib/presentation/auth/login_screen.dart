@@ -6,6 +6,7 @@ import 'package:halo_apu_mobile/core/services/auth_service.dart';
 import 'package:halo_apu_mobile/core/services/biometric_service.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:halo_apu_mobile/core/services/push_notification_service.dart';
 import 'package:halo_apu_mobile/presentation/profile/providers/user_profile_provider.dart';
 import 'package:halo_apu_mobile/presentation/notifications/providers/notification_provider.dart';
 import 'package:halo_apu_mobile/data/repositories/dashboard_repository.dart';
@@ -119,6 +120,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ref.invalidate(adminProfileProvider);
         ref.invalidate(notificationProvider);
         ref.invalidate(dashboardRepositoryProvider);
+
+        // Sync FCM Token with backend
+        PushNotificationService.syncFcmTokenWithBackend();
 
         if (isAdmin) {
           context.go('/dashboard/admin');

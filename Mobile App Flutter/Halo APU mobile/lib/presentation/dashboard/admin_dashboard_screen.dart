@@ -45,6 +45,7 @@ class _AdminDashboardScreenState extends ConsumerState<AdminDashboardScreen> {
     });
 
     ref.read(adminProfileProvider.notifier).refresh();
+    ref.read(notificationProvider.notifier).refresh();
     final result = await _dashboardRepo.getDashboardData();
 
     if (mounted) {

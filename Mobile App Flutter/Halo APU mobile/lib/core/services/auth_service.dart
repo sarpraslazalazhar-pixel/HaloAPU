@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:halo_apu_mobile/core/config/api_config.dart';
 import 'package:halo_apu_mobile/core/services/device_service.dart';
@@ -22,6 +23,10 @@ class AuthService {
     try {
       final deviceId = await DeviceService.getDeviceId();
       final deviceName = await DeviceService.getDeviceName();
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance.getToken();
+      } catch (_) {}
 
       final response = await _dio.post(
         '/login',
@@ -31,6 +36,7 @@ class AuthService {
           'is_admin': isAdmin,
           'device_id': deviceId,
           'device_name': deviceName,
+          'fcm_token': fcmToken,
         },
       );
 

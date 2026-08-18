@@ -24,6 +24,7 @@ class AuthController extends Controller
             'is_admin' => 'nullable|boolean',
             'device_id' => 'nullable|string',
             'device_name' => 'nullable|string',
+            'fcm_token' => 'nullable|string',
         ]);
 
         $isAdmin = $request->input('is_admin', false);
@@ -115,6 +116,11 @@ class AuthController extends Controller
                 $user->device_name = $deviceName ?? 'Smartphone Android';
                 $user->save();
             }
+        // Save FCM token if provided
+        $fcmToken = $request->input('fcm_token');
+        if (!empty($fcmToken)) {
+            $user->fcm_token = $fcmToken;
+            $user->save();
         }
 
         // Revoke existing tokens for this device if needed, or just create new

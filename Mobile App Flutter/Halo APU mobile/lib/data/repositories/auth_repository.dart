@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../api/api_client.dart';
+import '../../core/services/device_service.dart';
 import '../../domain/models/user_profile_model.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
@@ -20,12 +22,22 @@ class AuthRepository {
   /// Returns the user profile data on success.
   Future<UserProfile> login(String email, String password, {bool isAdmin = false}) async {
     try {
+      final deviceId = await DeviceService.getDeviceId();
+      final deviceName = await DeviceService.getDeviceName();
+      String? fcmToken;
+      try {
+        fcmToken = await FirebaseMessaging.instance.getToken();
+      } catch (_) {}
+
       final response = await _apiClient.dio.post(
         '/login',
         data: {
           'email': email,
           'password': password,
           'is_admin': isAdmin,
+          'device_id': deviceId,
+          'device_name': deviceName,
+          'fcm_token': fcmToken,
         },
       );
 

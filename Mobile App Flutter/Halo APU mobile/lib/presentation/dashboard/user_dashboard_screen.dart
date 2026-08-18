@@ -43,6 +43,7 @@ class _UserDashboardScreenState extends ConsumerState<UserDashboardScreen> {
     });
 
     ref.read(userProfileProvider.notifier).refresh();
+    ref.read(notificationProvider.notifier).refresh();
     final result = await _dashboardRepo.getDashboardData();
 
     if (mounted) {

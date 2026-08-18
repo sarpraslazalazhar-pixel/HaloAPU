@@ -6,18 +6,19 @@ use App\Channels\WhatsAppChannel;
 use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Notifications\Messages\BroadcastMessage;
 use Illuminate\Notifications\Notification;
-
 use App\Traits\FilterNotificationChannels;
 
-class TicketStatusUpdatedNotification extends Notification
+class TicketStatusUpdatedNotification extends Notification implements ShouldBroadcast
 {
     use Queueable, FilterNotificationChannels;
 
     public $ticket;
     public $catatan;
 
-    public function __construct(Ticket $ticket, $catatan)
+    public function __construct(Ticket $ticket, $catatan = null)
     {
         $this->ticket = $ticket;
         $this->catatan = $catatan;
@@ -25,7 +26,7 @@ class TicketStatusUpdatedNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        $channels = ['database', \NotificationChannels\WebPush\WebPushChannel::class];
+        $channels = ['database', 'broadcast', \NotificationChannels\WebPush\WebPushChannel::class];
         if (!empty($notifiable->no_wa)) {
             $channels[] = WhatsAppChannel::class;
         }
@@ -48,6 +49,18 @@ class TicketStatusUpdatedNotification extends Notification
         ];
     }
 
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        return new BroadcastMessage([
+            'type' => 'ticket_status_updated',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Status Tiket Diubah',
+            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
+            'url' => route('tiket.show', $this->ticket->id),
+        ]);
+    }
+
     public function toWebPush($notifiable, $notification)
     {
         $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
@@ -66,14 +79,13 @@ class TicketStatusUpdatedNotification extends Notification
             'type' => 'ticket_status_updated',
             'ticket_id' => $this->ticket->id,
             'title' => 'Status Tiket Diubah',
-            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . '. Catatan: ' . $this->catatan,
+            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
             'url' => route('tiket.show', $this->ticket->id),
         ];
     }
 
     public function toWhatsApp(object $notifiable): array
     {
-        $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
         $nama = $notifiable->name ?: $notifiable->username;
         $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
         $url = route('tiket.show', $this->ticket->id);

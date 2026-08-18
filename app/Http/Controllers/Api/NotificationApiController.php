@@ -19,19 +19,44 @@ class NotificationApiController extends Controller
             ->paginate($request->get('per_page', 15));
 
         $formattedNotifications = $notifications->getCollection()->map(function ($notif) {
-            $data = $notif->data;
+            $data = $notif->data ?? [];
+            $rawType = strtolower($data['type'] ?? 'ticket');
 
-            // Determine notification type from the data or class
-            $type = $data['type'] ?? 'ticket';
+            // Map backend notification type to Flutter supported enum:
+            // [ticket, reply, solved, revision, rejected, csat, sla]
+            $type = match ($rawType) {
+                'ticket_created', 'ticket_assigned', 'ticket' => 'ticket',
+                'ticket_comment', 'reply', 'comment' => 'reply',
+                'solve', 'solved', 'ticket_solved' => 'solved',
+                'revision', 'need_revision', 'revision_requested' => 'revision',
+                'reject', 'rejected', 'ticket_rejected' => 'rejected',
+                'csat', 'csat_reminder' => 'csat',
+                'sla', 'sla_escalation' => 'sla',
+                'ticket_status_updated', 'ticket_status_updated_operator' => (function () use ($data) {
+                    $title = strtolower($data['title'] ?? '');
+                    $body = strtolower($data['message'] ?? $data['body'] ?? '');
+                    if (str_contains($body, 'solve') || str_contains($body, 'selesai') || str_contains($title, 'selesai')) {
+                        return 'solved';
+                    }
+                    if (str_contains($body, 'reject') || str_contains($body, 'tolak') || str_contains($title, 'tolak')) {
+                        return 'rejected';
+                    }
+                    if (str_contains($body, 'revisi')) {
+                        return 'revision';
+                    }
+                    return 'ticket';
+                })(),
+                default => 'ticket',
+            };
 
             return [
-                'id' => $notif->id,
-                'title' => $data['title'] ?? 'Notifikasi',
+                'id' => (string) $notif->id,
+                'title' => $data['title'] ?? 'Pembaruan Tiket',
                 'body' => $data['body'] ?? $data['message'] ?? '',
                 'type' => $type,
-                'createdAt' => $notif->created_at->toIso8601String(),
+                'createdAt' => $notif->created_at ? $notif->created_at->toIso8601String() : now()->toIso8601String(),
                 'isRead' => $notif->read_at !== null,
-                'ticketId' => $data['ticket_id'] ?? $data['ticketId'] ?? null,
+                'ticketId' => isset($data['ticket_id']) ? (string) $data['ticket_id'] : (isset($data['ticketId']) ? (string) $data['ticketId'] : null),
             ];
         });
 

@@ -116,6 +116,8 @@ class AuthController extends Controller
                 $user->device_name = $deviceName ?? 'Smartphone Android';
                 $user->save();
             }
+        }
+
         // Save FCM token if provided
         $fcmToken = $request->input('fcm_token');
         if (!empty($fcmToken)) {

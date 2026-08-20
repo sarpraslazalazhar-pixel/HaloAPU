@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Head, usePage } from '@inertiajs/react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Head, usePage, router } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import ConversationList, { ConversationItem } from '@/Components/Chat/ConversationList';
 import ChatWindow, { ChatMessage } from '@/Components/Chat/ChatWindow';
+import { useChatSound } from '@/hooks/useChatSound';
+import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface UserChatPageProps {
@@ -21,13 +23,107 @@ export default function UserChatIndex({
   const { auth } = usePage<any>().props;
   const user = auth.user;
 
+  const [convList, setConvList] = useState<ConversationItem[]>(conversations);
   const [activeId, setActiveId] = useState<number | null>(activeConversationId);
   const [currentConv, setCurrentConv] = useState<any>(activeConversation);
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
 
+  const { playSound } = useChatSound();
+
+  // Sync props to state when Inertia partial reload or page props change
+  useEffect(() => {
+    setConvList(conversations);
+  }, [conversations]);
+
+  useEffect(() => {
+    setActiveId(activeConversationId);
+    setCurrentConv(activeConversation);
+    setMessages(activeMessages);
+  }, [activeConversationId, activeConversation, activeMessages]);
+
+  const updateConversationOnMessage = useCallback((msg: ChatMessage, isFromActiveChat: boolean) => {
+    setConvList((prevList) => {
+      const snippet = msg.body || (msg.attachments && msg.attachments.length > 0 ? '[Lampiran]' : (msg.ticket ? '[Tiket]' : 'Pesan baru'));
+      const timestamp = msg.created_at || new Date().toISOString();
+      const isSelf = msg.sender_id === user.id && msg.sender_type.includes('User');
+
+      const index = prevList.findIndex((c) => c.id === msg.conversation_id);
+
+      if (index !== -1) {
+        const updated = { ...prevList[index] };
+        updated.last_message = snippet;
+        updated.last_message_at = timestamp;
+
+        if (!isFromActiveChat && !isSelf) {
+          updated.unread_count = (updated.unread_count || 0) + 1;
+        }
+
+        const remaining = prevList.filter((_, i) => i !== index);
+        return [updated, ...remaining];
+      } else {
+        const newConvItem: ConversationItem = {
+          id: msg.conversation_id,
+          title: msg.sender_name || 'Admin',
+          subtitle: msg.sender_type.includes('Admin') ? 'Admin' : 'Pengguna',
+          last_message: snippet,
+          last_message_at: timestamp,
+          unread_count: isFromActiveChat || isSelf ? 0 : 1,
+        };
+        return [newConvItem, ...prevList];
+      }
+    });
+  }, [user?.id]);
+
+  // Global Echo listener for user's personal channel and public global chat
+  useEffect(() => {
+    if (!user?.id || !(window as any).Echo) return;
+
+    const userChannelName = `App.Models.User.${user.id}`;
+    const publicChannelName = `chat.public_global`;
+
+    const userChannel = (window as any).Echo.private(userChannelName);
+    const publicChannel = (window as any).Echo.private(publicChannelName);
+
+    const handleIncomingMessage = (e: any) => {
+      const newMsg: ChatMessage = e.messageData;
+      if (!newMsg) return;
+
+      const isCurrentActive = activeId === newMsg.conversation_id;
+      updateConversationOnMessage(newMsg, isCurrentActive);
+
+      const isSelf = newMsg.sender_id === user.id && newMsg.sender_type.includes('User');
+      if (!isCurrentActive && !isSelf) {
+        playSound();
+        if (document.hidden) {
+          toast.success(`Pesan Baru dari ${newMsg.sender_name}`, { id: `chat-notif-${newMsg.id}` });
+        }
+      }
+    };
+
+    userChannel.listen('.ChatMessageSent', handleIncomingMessage);
+    publicChannel.listen('.ChatMessageSent', handleIncomingMessage);
+
+    return () => {
+      (window as any).Echo.leave(userChannelName);
+      (window as any).Echo.leave(publicChannelName);
+    };
+  }, [user?.id, activeId, playSound, updateConversationOnMessage]);
+
   const handleSelectConversation = (id: number) => {
     setActiveId(id);
-    window.location.href = `/chat?active=${id}`;
+    setConvList((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c))
+    );
+
+    router.get(
+      `/chat?active=${id}`,
+      {},
+      {
+        preserveState: true,
+        preserveScroll: true,
+        only: ['activeConversationId', 'activeConversation', 'activeMessages'],
+      }
+    );
   };
 
   const currentUser = {
@@ -57,7 +153,7 @@ export default function UserChatIndex({
       <div className="h-[calc(100vh-130px)] md:min-h-[450px] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0 relative">
         <div className={`md:flex flex-col min-h-0 h-full w-full ${isMobile && activeId ? 'hidden' : 'flex'}`}>
           <ConversationList
-            conversations={conversations}
+            conversations={convList}
             activeId={activeId}
             onSelect={handleSelectConversation}
             isAdmin={false}
@@ -79,6 +175,8 @@ export default function UserChatIndex({
                 currentUser={currentUser}
                 isAdmin={false}
                 onBack={isMobile ? handleBackToList : undefined}
+                onMessageSent={(msg) => updateConversationOnMessage(msg, true)}
+                onMessageReceived={(msg) => updateConversationOnMessage(msg, true)}
               />
             </motion.div>
           )}

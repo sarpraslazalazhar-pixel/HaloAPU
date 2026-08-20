@@ -15,6 +15,11 @@ class ChatMessageSent implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
     public array $messageData;
+    public ?int $conversationId = null;
+    public ?string $conversationType = null;
+    public ?int $participantUserId = null;
+    public ?int $participantAdminOneId = null;
+    public ?int $participantAdminTwoId = null;
 
     public function __construct(Message $message)
     {
@@ -26,7 +31,16 @@ class ChatMessageSent implements ShouldBroadcastNow
             'replyTo.sender',
             'replyTo.attachments',
             'reads',
+            'conversation',
         ]);
+
+        $this->conversationId = $message->conversation_id;
+        if ($message->conversation) {
+            $this->conversationType = $message->conversation->type;
+            $this->participantUserId = $message->conversation->user_id;
+            $this->participantAdminOneId = $message->conversation->admin_one_id;
+            $this->participantAdminTwoId = $message->conversation->admin_two_id;
+        }
 
         $this->messageData = [
             'id' => $message->id,
@@ -68,9 +82,27 @@ class ChatMessageSent implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [
-            new PrivateChannel('chat.conversation.' . $this->messageData['conversation_id']),
+        $channels = [
+            new PrivateChannel('chat.conversation.' . $this->conversationId),
         ];
+
+        if ($this->conversationType === 'public_global') {
+            $channels[] = new PrivateChannel('chat.public_global');
+        }
+
+        if ($this->participantUserId) {
+            $channels[] = new PrivateChannel('App.Models.User.' . $this->participantUserId);
+        }
+
+        if ($this->participantAdminOneId) {
+            $channels[] = new PrivateChannel('App.Models.Admin.' . $this->participantAdminOneId);
+        }
+
+        if ($this->participantAdminTwoId) {
+            $channels[] = new PrivateChannel('App.Models.Admin.' . $this->participantAdminTwoId);
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

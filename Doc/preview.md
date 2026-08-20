@@ -20,3 +20,6 @@
 - [x] Samping layanan tiketing ada nama operator yang bertugas
 - [x] Tanggal yang sudah lewat gak bisa di pilih
 - [x] edit foto untuk
+- [ ] doubel tiket dari app mobile
+- [ ] pesan belum ada notifikasi & icon belum baca
+- [ ] remainder pesan 

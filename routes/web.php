@@ -86,6 +86,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/conversations/{conversation}/messages', [\App\Http\Controllers\ChatController::class, 'storeMessage'])->name('messages.store');
         Route::put('/messages/{message}', [\App\Http\Controllers\ChatController::class, 'updateMessage'])->name('messages.update');
         Route::delete('/messages/{message}', [\App\Http\Controllers\ChatController::class, 'destroyMessage'])->name('messages.destroy');
+        Route::post('/conversations/{conversation}/read', [\App\Http\Controllers\ChatController::class, 'markAsRead'])->name('read');
         Route::post('/conversations/{conversation}/typing', [\App\Http\Controllers\ChatController::class, 'typing'])->name('typing');
         Route::get('/download/{attachment}', [\App\Http\Controllers\ChatController::class, 'downloadAttachment'])->name('download');
     });

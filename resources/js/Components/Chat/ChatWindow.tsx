@@ -107,6 +107,8 @@ interface ChatWindowProps {
   };
   isAdmin?: boolean;
   onBack?: () => void;
+  onMessageSent?: (message: ChatMessage) => void;
+  onMessageReceived?: (message: ChatMessage) => void;
 }
 
 const COMMON_EMOJIS = ['😊', '👍', '🙏', '🚀', '✅', '⚠️', '📄', '❤️', '👏', '🔥', '💡', '❓', '💬', '🎉'];
@@ -117,6 +119,8 @@ export function ChatWindow({
   currentUser,
   isAdmin = false,
   onBack,
+  onMessageSent,
+  onMessageReceived,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
@@ -168,6 +172,8 @@ export function ChatWindow({
           if (prev.some((m) => m.id === newMsg.id)) return prev;
           return [...prev, newMsg];
         });
+
+        onMessageReceived?.(newMsg);
 
         // If not sent by current user, play sound & toast
         const isSelf = newMsg.sender_id === currentUser.id &&
@@ -355,6 +361,7 @@ export function ChatWindow({
       if (newMsg) {
         setMessages((prev) => [...prev, newMsg]);
         scrollToBottom(true);
+        onMessageSent?.(newMsg);
       }
 
       setInputText('');

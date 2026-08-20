@@ -4,11 +4,15 @@ use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
-});
+}, ['guards' => ['web', 'admin']]);
 
 Broadcast::channel('App.Models.Admin.{id}', function ($user, $id) {
     return (int) $user->id === (int) $id;
-}, ['guards' => ['admin']]);
+}, ['guards' => ['admin', 'web']]);
+
+Broadcast::channel('chat.public_global', function ($user) {
+    return $user !== null;
+}, ['guards' => ['web', 'admin']]);
 
 Broadcast::channel('chat.conversation.{conversationId}', function ($user, $conversationId) {
     $conversation = \App\Models\Conversation::find($conversationId);
@@ -30,4 +34,5 @@ Broadcast::channel('chat.conversation.{conversationId}', function ($user, $conve
 
     return false;
 }, ['guards' => ['web', 'admin']]);
+
 

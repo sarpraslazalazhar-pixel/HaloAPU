@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:http_parser/http_parser.dart';
+import 'package:mime/mime.dart';
 import '../api/api_client.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
@@ -25,10 +27,11 @@ class ProfileRepository {
       }
       return {'success': false, 'message': 'Gagal mengambil profil', 'statusCode': response.statusCode};
     } on DioException catch (e) {
+      final msg = e.response?.data?['message'] ?? e.error?.toString() ?? 'Kesalahan saat mengambil profil';
       return {
         'success': false,
         'statusCode': e.response?.statusCode,
-        'message': e.error?.toString() ?? 'Kesalahan saat mengambil profil',
+        'message': msg,
       };
     }
   }
@@ -41,9 +44,10 @@ class ProfileRepository {
         await _storage.write(key: 'user_data', value: jsonEncode(data));
         return {'success': true, 'data': data};
       }
-      return {'success': false, 'message': 'Gagal perbarui profil'};
+      return {'success': false, 'message': response.data?['message'] ?? 'Gagal perbarui profil'};
     } on DioException catch (e) {
-      return {'success': false, 'message': e.error?.toString() ?? 'Kesalahan saat perbarui profil'};
+      final msg = e.response?.data?['message'] ?? e.error?.toString() ?? 'Kesalahan saat perbarui profil';
+      return {'success': false, 'message': msg};
     }
   }
 
@@ -51,18 +55,33 @@ class ProfileRepository {
     try {
       MultipartFile multipartFile;
       if (fileInput is List<int>) {
+        final mimeType = lookupMimeType('avatar.jpg', headerBytes: fileInput) ?? 'image/jpeg';
+        final mediaType = MediaType.parse(mimeType);
+        final ext = mimeType.contains('png') ? 'png' : 'jpg';
         multipartFile = MultipartFile.fromBytes(
           fileInput,
-          filename: 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          filename: 'avatar_${DateTime.now().millisecondsSinceEpoch}.$ext',
+          contentType: mediaType,
         );
       } else if (fileInput is String) {
-        // Fallback for path if needed
-        multipartFile = await MultipartFile.fromFile(fileInput, filename: fileInput.split('/').last);
+        final mimeType = lookupMimeType(fileInput) ?? 'image/jpeg';
+        final mediaType = MediaType.parse(mimeType);
+        multipartFile = await MultipartFile.fromFile(
+          fileInput,
+          filename: fileInput.split('/').last,
+          contentType: mediaType,
+        );
       } else {
         // XFile or similar
         final bytes = await fileInput.readAsBytes();
         final name = fileInput.name ?? 'avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
-        multipartFile = MultipartFile.fromBytes(bytes, filename: name);
+        final mimeType = lookupMimeType(name, headerBytes: bytes) ?? 'image/jpeg';
+        final mediaType = MediaType.parse(mimeType);
+        multipartFile = MultipartFile.fromBytes(
+          bytes,
+          filename: name,
+          contentType: mediaType,
+        );
       }
 
       final formData = FormData.fromMap({
@@ -79,9 +98,10 @@ class ProfileRepository {
         await _storage.write(key: 'user_data', value: jsonEncode(data));
         return {'success': true, 'data': data};
       }
-      return {'success': false, 'message': 'Gagal upload foto profil'};
+      return {'success': false, 'message': response.data?['message'] ?? 'Gagal upload foto profil'};
     } on DioException catch (e) {
-      return {'success': false, 'message': e.error?.toString() ?? 'Kesalahan upload foto'};
+      final msg = e.response?.data?['message'] ?? e.error?.toString() ?? 'Kesalahan upload foto';
+      return {'success': false, 'message': msg};
     } catch (e) {
       return {'success': false, 'message': 'Gagal upload foto: $e'};
     }

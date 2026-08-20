@@ -68,18 +68,19 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
     );
   }
 
-  Future<bool> updateProfile({
+  Future<Map<String, dynamic>> updateProfile({
     String? username,
     String? name,
     String? phone,
     String? avatarUrl,
     dynamic avatarFile,
   }) async {
-    bool profileSuccess = true;
     final updateData = <String, dynamic>{};
     if (username != null) updateData['username'] = username;
     if (name != null) updateData['name'] = name;
     if (phone != null) updateData['no_wa'] = phone;
+
+    String? errorMessage;
 
     // 1. Send text fields to backend
     if (updateData.isNotEmpty) {
@@ -87,7 +88,7 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
       if (result['success']) {
         state = _fromJson(result['data']);
       } else {
-        profileSuccess = false;
+        errorMessage = result['message']?.toString() ?? 'Gagal memperbarui data profil';
       }
     }
 
@@ -97,13 +98,17 @@ class UserProfileNotifier extends StateNotifier<UserProfile> {
       if (result['success']) {
         state = _fromJson(result['data']);
       } else {
-        profileSuccess = false;
+        final avatarMsg = result['message']?.toString() ?? 'Gagal mengunggah foto profil';
+        errorMessage = errorMessage != null ? '$errorMessage. $avatarMsg' : avatarMsg;
       }
     } else if (avatarUrl != null && avatarUrl.isNotEmpty && avatarUrl.startsWith('http')) {
       state = state.copyWith(avatarUrl: avatarUrl);
     }
 
-    return profileSuccess;
+    if (errorMessage != null) {
+      return {'success': false, 'message': errorMessage};
+    }
+    return {'success': true, 'message': 'Profil berhasil diperbarui'};
   }
 
   Future<Map<String, dynamic>> deleteAccount() async {

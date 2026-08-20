@@ -176,21 +176,24 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
 
     setState(() => _isSaving = true);
 
-    final success = await ref.read((widget.profileProvider ?? userProfileProvider).notifier).updateProfile(
+    final res = await ref.read((widget.profileProvider ?? userProfileProvider).notifier).updateProfile(
           username: _usernameController.text.trim(),
           name: _nameController.text.trim(),
           phone: _phoneController.text.trim(),
           avatarUrl: _avatarUrl,
-          avatarFile: _pickedImage,
+          avatarFile: _pickedImageBytes != null ? (_pickedImage ?? _pickedImageBytes) : null,
         );
 
     if (!mounted) return;
     setState(() => _isSaving = false);
 
+    final bool success = res['success'] == true;
+    final String msg = res['message']?.toString() ?? (success ? 'Profil berhasil diperbarui' : 'Gagal memperbarui profil');
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         behavior: SnackBarBehavior.floating,
-        content: Text(success ? 'Profil berhasil diperbarui' : 'Gagal memperbarui profil'),
+        content: Text(msg),
         backgroundColor: success ? Colors.green : Colors.red,
       ),
     );

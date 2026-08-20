@@ -184,13 +184,15 @@ class AuthController extends Controller
         $table = $isAdmin ? 'admins' : 'users';
 
         $validated = $request->validate([
-            'name' => 'sometimes|string|max:100',
-            'username' => 'sometimes|string|max:100|unique:'.$table.',username,' . $user->id,
-            'email' => 'sometimes|email|max:100|unique:'.$table.',email,' . $user->id,
-            'no_wa' => 'nullable|string|max:20',
+            'name' => 'sometimes|nullable|string|max:100',
+            'username' => 'sometimes|nullable|string|max:100|unique:'.$table.',username,' . $user->id,
+            'email' => 'sometimes|nullable|email|max:100|unique:'.$table.',email,' . $user->id,
+            'no_wa' => 'nullable|string|max:30',
         ]);
 
-        $user->fill($validated);
+        $user->fill(array_filter($validated, function ($v) {
+            return !is_null($v);
+        }));
         $user->save();
 
         if (!$isAdmin) {
@@ -206,7 +208,7 @@ class AuthController extends Controller
     public function uploadAvatar(Request $request)
     {
         $request->validate([
-            'avatar' => 'required|image|mimes:png,jpg,jpeg|max:5120',
+            'avatar' => 'required|file|max:10240',
         ]);
 
         $user = $request->user();
@@ -219,7 +221,10 @@ class AuthController extends Controller
         }
 
         $file = $request->file('avatar');
-        $filename = $prefix . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+        $ext = $file->getClientOriginalExtension() ?: ($file->guessExtension() ?: 'jpg');
+        $filename = $prefix . $user->id . '_' . time() . '.' . $ext;
+        
+        Storage::disk('public')->makeDirectory('avatars');
         Storage::disk('public')->put('avatars/' . $filename, file_get_contents($file->getPathname()));
 
         $user->avatar_path = 'avatars/' . $filename;

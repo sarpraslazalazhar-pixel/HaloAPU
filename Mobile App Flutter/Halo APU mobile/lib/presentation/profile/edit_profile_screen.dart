@@ -52,24 +52,25 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _handleSelectedImage(XFile image) async {
-    final rawBytes = await image.readAsBytes();
-    if (!mounted) return;
-
+  Future<void> _cropAvatar() async {
+    if (_pickedImageBytes == null) return;
     final croppedBytes = await Navigator.push<Uint8List>(
       context,
       MaterialPageRoute(
-        builder: (ctx) => CircularCropScreen(imageBytes: rawBytes),
+        builder: (ctx) => CircularCropScreen(imageBytes: _pickedImageBytes!),
       ),
     );
 
     if (croppedBytes != null && mounted) {
+      final isPng = _pickedImage?.name.toLowerCase().endsWith('.png') ?? false;
+      final ext = isPng ? 'png' : 'jpg';
+      final mime = isPng ? 'image/png' : 'image/jpeg';
       setState(() {
         _pickedImageBytes = croppedBytes;
         _pickedImage = XFile.fromData(
           croppedBytes,
-          name: 'avatar_${DateTime.now().millisecondsSinceEpoch}.png',
-          mimeType: 'image/png',
+          name: 'avatar_crop_${DateTime.now().millisecondsSinceEpoch}.$ext',
+          mimeType: mime,
         );
       });
     }
@@ -109,12 +110,14 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 Navigator.pop(sheetContext);
                 final XFile? image = await picker.pickImage(
                   source: ImageSource.gallery,
-                  maxWidth: 1600,
-                  maxHeight: 1600,
-                  imageQuality: 95,
+                  imageQuality: 100,
                 );
                 if (image != null) {
-                  await _handleSelectedImage(image);
+                  final bytes = await image.readAsBytes();
+                  setState(() {
+                    _pickedImage = image;
+                    _pickedImageBytes = bytes;
+                  });
                 }
               },
             ),
@@ -133,15 +136,35 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 Navigator.pop(sheetContext);
                 final XFile? image = await picker.pickImage(
                   source: ImageSource.camera,
-                  maxWidth: 1600,
-                  maxHeight: 1600,
-                  imageQuality: 95,
+                  imageQuality: 100,
                 );
                 if (image != null) {
-                  await _handleSelectedImage(image);
+                  final bytes = await image.readAsBytes();
+                  setState(() {
+                    _pickedImage = image;
+                    _pickedImageBytes = bytes;
+                  });
                 }
               },
             ),
+            if (_pickedImageBytes != null) ...[
+              const SizedBox(height: 8),
+              ListTile(
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.oceanWater.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.crop_rounded, color: AppTheme.oceanWater),
+                ),
+                title: const Text('Pangkas Bulat Foto Ini'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _cropAvatar();
+                },
+              ),
+            ],
           ],
         ),
       ),
@@ -233,6 +256,25 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
               ),
             ),
+            if (_pickedImageBytes != null) ...[
+              const SizedBox(height: 10),
+              Center(
+                child: OutlinedButton.icon(
+                  onPressed: _cropAvatar,
+                  icon: const Icon(Icons.crop_rounded, size: 15, color: AppTheme.oceanWater),
+                  label: const Text(
+                    'Pangkas Bulat / Sesuaikan',
+                    style: TextStyle(fontSize: 12, color: AppTheme.oceanWater, fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: AppTheme.oceanWater),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             TextFormField(
               controller: _usernameController,

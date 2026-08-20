@@ -51,10 +51,16 @@ class ImageDoodleScreen extends StatefulWidget {
     );
 
     if (resultBytes != null) {
+      final String originalName = file.name.toLowerCase();
+      final bool isPng = originalName.endsWith('.png');
+      final String ext = isPng ? 'png' : 'jpg';
+      final String mime = isPng ? 'image/png' : 'image/jpeg';
+      final String baseName = file.name.replaceAll(RegExp(r'\.[a-zA-Z0-9]+$'), '');
+
       return XFile.fromData(
         resultBytes,
-        name: 'doodle_${DateTime.now().millisecondsSinceEpoch}.jpg',
-        mimeType: 'image/jpeg',
+        name: '${baseName}_doodle_${DateTime.now().millisecondsSinceEpoch}.$ext',
+        mimeType: mime,
       );
     }
     return null;

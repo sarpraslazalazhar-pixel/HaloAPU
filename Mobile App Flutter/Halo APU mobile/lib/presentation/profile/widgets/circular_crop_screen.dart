@@ -53,8 +53,8 @@ class _CircularCropScreenState extends State<CircularCropScreen> {
         return;
       }
 
-      // Capture high resolution cropped circle (pixelRatio: 3.0 gives ~900x900px crisp image)
-      final ui.Image image = await boundary.toImage(pixelRatio: 3.0);
+      // Capture high resolution cropped circle (~1200x1200px crisp lossless image)
+      final ui.Image image = await boundary.toImage(pixelRatio: 4.0);
       final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
 
       if (byteData != null) {

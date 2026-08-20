@@ -75,9 +75,19 @@ class BookingReminderCommand extends Command
                 $user->notify(new \App\Notifications\BrowserNotification(
                     "Pengingat Booking",
                     "Booking tiket Anda #{$booking->ticket->formatted_id} hampir tiba tanggal mulainya.",
-                    "/user/tiket/{$booking->ticket->id}"
+                    "/tiket/{$booking->ticket->id}"
                 ));
                 $sent++;
+            }
+
+            // Kirim pesan pengingat langsung ke percakapan chat
+            if ($booking->ticket) {
+                $tipeLabel = $booking->tipe === 'ruang' ? 'Ruangan' : 'Kendaraan';
+                $tglMulai = \Carbon\Carbon::parse($booking->tanggal_mulai)->format('d M Y H:i');
+                $tglSelesai = \Carbon\Carbon::parse($booking->tanggal_selesai)->format('d M Y H:i');
+                $chatBody = "🔔 [PENGINGAT JADWAL BOOKING]\nPenggunaan {$tipeLabel} \"{$booking->nama_aset}\" dijadwalkan pada {$tglMulai} s/d {$tglSelesai}.\nMohon pastikan persiapan telah sesuai.";
+
+                \App\Services\ChatReminderService::sendTicketReminder($booking->ticket, $chatBody);
             }
         }
 

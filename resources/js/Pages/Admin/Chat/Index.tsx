@@ -109,22 +109,49 @@ export default function AdminChatIndex({
     };
   }, [admin?.id, activeId, playSound, updateConversationOnMessage]);
 
-  const handleSelectConversation = (id: number) => {
+  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
+
+  const handleSelectConversation = async (id: number) => {
+    if (id === activeId && currentConv) return;
+
     setActiveId(id);
     setConvList((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c))
     );
 
-    router.get(
-      `/admin/chat?active=${id}`,
-      {},
-      {
-        preserveState: true,
-        preserveScroll: true,
-        only: ['activeConversationId', 'activeConversation', 'activeMessages'],
-      }
-    );
+    window.history.pushState({ activeId: id }, '', `/admin/chat?active=${id}`);
+
+    setIsLoadingMessages(true);
+    try {
+      const res = await (window as any).axios.get(`/admin/chat/conversations/${id}`);
+      setCurrentConv(res.data.conversation);
+      setMessages(res.data.messages || []);
+    } catch {
+      toast.error('Gagal memuat pesan percakapan');
+    } finally {
+      setIsLoadingMessages(false);
+    }
   };
+
+  // Support browser Back/Forward buttons without reload
+  useEffect(() => {
+    const handlePopState = () => {
+      const params = new URLSearchParams(window.location.search);
+      const active = params.get('active');
+      if (active) {
+        const parsedId = parseInt(active, 10);
+        if (parsedId && parsedId !== activeId) {
+          handleSelectConversation(parsedId);
+        }
+      } else {
+        setActiveId(null);
+        setCurrentConv(null);
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [activeId]);
 
   const currentUser = {
     id: admin.id,
@@ -174,6 +201,7 @@ export default function AdminChatIndex({
                 initialMessages={messages}
                 currentUser={currentUser}
                 isAdmin={true}
+                isLoading={isLoadingMessages}
                 onBack={isMobile ? handleBackToList : undefined}
                 onMessageSent={(msg) => updateConversationOnMessage(msg, true)}
                 onMessageReceived={(msg) => updateConversationOnMessage(msg, true)}

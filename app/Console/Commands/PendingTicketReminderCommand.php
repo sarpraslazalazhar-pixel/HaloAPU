@@ -81,6 +81,10 @@ class PendingTicketReminderCommand extends Command
                     $item['admin']->notify(new PendingTicketReminderNotification($item['ticket']));
                     $sent++;
                 }
+
+                // Kirim pesan pengingat langsung ke percakapan chat
+                $chatBody = "⚠️ [PENGINGAT TIKET PENDING]\nTiket #{$ticket->formatted_id} masih berstatus Pending dan memerlukan tindak lanjut/tanggapan agar dapat segera diproses.";
+                \App\Services\ChatReminderService::sendTicketReminder($ticket, $chatBody);
             } catch (\Exception $e) {
                 Log::error("Gagal mengirim reminder pending untuk Tiket #{$ticket->id}: " . $e->getMessage());
             }

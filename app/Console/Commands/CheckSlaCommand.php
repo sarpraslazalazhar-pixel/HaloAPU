@@ -105,6 +105,12 @@ class CheckSlaCommand extends Command
                     $item['admin']->notify(new SlaEscalationNotification($ticket, $item['type'], $item['priority']));
                     $escalated++;
                 }
+
+                if (!empty($notificationsToDispatch)) {
+                    $typeLabel = $notificationsToDispatch[0]['type'] === 'respon' ? 'Batas Waktu Respon' : 'Batas Waktu Penyelesaian';
+                    $chatBody = "🚨 [PERINGATAN SLA BREACH]\nTiket #{$ticket->formatted_id} ({$typeLabel}) telah melewati batas waktu SLA. Mohon segera ditindaklanjuti.";
+                    \App\Services\ChatReminderService::sendTicketReminder($ticket, $chatBody);
+                }
             } catch (\Exception $e) {
                 Log::error("Gagal memeriksa SLA untuk Tiket #{$ticket->id}: " . $e->getMessage());
             }

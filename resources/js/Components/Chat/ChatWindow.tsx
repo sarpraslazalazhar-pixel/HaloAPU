@@ -109,6 +109,7 @@ interface ChatWindowProps {
   onBack?: () => void;
   onMessageSent?: (message: ChatMessage) => void;
   onMessageReceived?: (message: ChatMessage) => void;
+  isLoading?: boolean;
 }
 
 const COMMON_EMOJIS = ['😊', '👍', '🙏', '🚀', '✅', '⚠️', '📄', '❤️', '👏', '🔥', '💡', '❓', '💬', '🎉'];
@@ -121,6 +122,7 @@ export function ChatWindow({
   onBack,
   onMessageSent,
   onMessageReceived,
+  isLoading = false,
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
@@ -505,20 +507,26 @@ export function ChatWindow({
 
       {/* 2. Messages Body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth min-h-0 custom-scrollbar">
-        <AnimatePresence initial={false}>
-        {messages.length === 0 ? (
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400"
-          >
-            <MessageSquare className="h-10 w-10 text-zinc-300 mb-2" />
-            <p className="text-xs font-medium text-zinc-600">Belum ada pesan</p>
-            <p className="text-[11px] text-zinc-400 max-w-xs mt-0.5">
-              Kirim pesan pertama untuk memulai percakapan realtime.
-            </p>
-          </motion.div>
+        {isLoading ? (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400 gap-2">
+            <Loader2 className="h-6 w-6 animate-spin text-sky-600" />
+            <p className="text-xs text-zinc-500 font-medium">Memuat percakapan...</p>
+          </div>
         ) : (
+          <AnimatePresence initial={false}>
+          {messages.length === 0 ? (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="h-full flex flex-col items-center justify-center text-center p-6 text-zinc-400"
+            >
+              <MessageSquare className="h-10 w-10 text-zinc-300 mb-2" />
+              <p className="text-xs font-medium text-zinc-600">Belum ada pesan</p>
+              <p className="text-[11px] text-zinc-400 max-w-xs mt-0.5">
+                Kirim pesan pertama untuk memulai percakapan realtime.
+              </p>
+            </motion.div>
+          ) : (
           messages.map((msg) => {
             const isSelf = msg.sender_id === currentUser.id &&
               ((currentUser.type === 'user' && msg.sender_type.includes('User')) ||
@@ -727,6 +735,7 @@ export function ChatWindow({
           })
         )}
         </AnimatePresence>
+        )}
         <div ref={messagesEndRef} />
       </div>
 

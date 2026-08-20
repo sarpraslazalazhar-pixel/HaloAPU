@@ -62,6 +62,10 @@ class CsatReminderCommand extends Command
 
             $user->notify(new CsatReminderNotification($ticket));
             $sent++;
+
+            // Kirim pesan pengingat langsung ke percakapan chat
+            $chatBody = "⭐ [PENGINGAT RATING KEPUASAN]\nTiket #{$ticket->formatted_id} telah selesai diselesaikan. Mohon kesediaannya untuk memberikan rating kepuasan layanan (CSAT) demi peningkatan kualitas layanan kami.";
+            \App\Services\ChatReminderService::sendTicketReminder($ticket, $chatBody);
         }
 
         $this->info("Selesai. {$tickets->count()} tiket tanpa CSAT, {$sent} reminder terkirim.");

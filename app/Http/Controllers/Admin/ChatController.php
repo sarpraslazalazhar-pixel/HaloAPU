@@ -449,6 +449,118 @@ class ChatController extends Controller
         return response()->json(['success' => true]);
     }
 
+    public function show(Conversation $conversation)
+    {
+        $admin = Auth::guard('admin')->user();
+        Gate::forUser($admin)->authorize('view', $conversation);
+
+        // Mark as read
+        $unreadMessages = Message::where('conversation_id', $conversation->id)
+            ->where('sender_type', '!=', Admin::class)
+            ->whereDoesntHave('reads', function ($q) use ($admin) {
+                $q->where('user_type', Admin::class)->where('user_id', $admin->id);
+            })
+            ->get();
+
+        foreach ($unreadMessages as $uMsg) {
+            MessageRead::firstOrCreate([
+                'message_id' => $uMsg->id,
+                'user_type' => Admin::class,
+                'user_id' => $admin->id,
+            ], [
+                'read_at' => now(),
+            ]);
+        }
+
+        if ($unreadMessages->isNotEmpty()) {
+            broadcast(new ChatMessageRead($conversation->id, Admin::class, $admin->id))->toOthers();
+        }
+
+        if ($conversation->type === 'public_global') {
+            $target = null;
+            $title = 'Forum Bantuan Halo APU';
+            $subtitle = 'Grup Publik';
+        } elseif ($conversation->type === 'user_admin_direct') {
+            $target = $conversation->user;
+            $title = $target ? ($target->name ?? $target->username) : 'Pengguna';
+            $subtitle = 'User (Privat)';
+        } else {
+            $target = (int) $conversation->admin_one_id === (int) $admin->id ? $conversation->adminTwo : $conversation->adminOne;
+            $title = $target ? ($target->name ?? $target->username) : 'Admin';
+            $subtitle = 'Admin';
+        }
+
+        $conversationData = [
+            'id' => $conversation->id,
+            'user' => $target ? [
+                'id' => $target->id,
+                'name' => $target->name ?? $target->username,
+                'email' => $target->email ?? '',
+                'avatar' => $target->avatar_path ? '/storage/' . $target->avatar_path : null,
+                'last_seen_at' => $target->last_seen_at ? $target->last_seen_at->toIso8601String() : null,
+            ] : null,
+            'title' => $title,
+            'subtitle' => $subtitle,
+        ];
+
+        $rawMessages = Message::where('conversation_id', $conversation->id)
+            ->with([
+                'sender',
+                'ticket:id,sub_unit_id,user_id,status,priority',
+                'ticket.subUnit:id,nama_layanan',
+                'attachments',
+                'replyTo.sender',
+                'replyTo.attachments',
+                'reads',
+            ])
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        $messages = $rawMessages->map(function ($msg) {
+            return [
+                'id' => $msg->id,
+                'conversation_id' => $msg->conversation_id,
+                'sender_type' => $msg->sender_type,
+                'sender_id' => $msg->sender_id,
+                'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Sistem',
+                'sender_avatar' => $msg->sender && !empty($msg->sender->avatar_path) ? '/storage/' . $msg->sender->avatar_path : null,
+                'ticket' => $msg->ticket ? [
+                    'id' => $msg->ticket->id,
+                    'formatted_id' => $msg->ticket->formatted_id,
+                    'judul' => $msg->ticket->judul,
+                    'status' => $msg->ticket->status,
+                    'priority' => $msg->ticket->priority,
+                ] : null,
+                'reply_to_message_id' => $msg->reply_to_message_id,
+                'reply_to' => $msg->replyTo ? [
+                    'id' => $msg->replyTo->id,
+                    'body' => $msg->replyTo->body,
+                    'sender_name' => $msg->replyTo->sender ? ($msg->replyTo->sender->name ?? $msg->replyTo->sender->username) : 'Pengguna',
+                ] : null,
+                'body' => $msg->body,
+                'is_edited' => $msg->is_edited,
+                'attachments' => $msg->attachments->map(fn($att) => [
+                    'id' => $att->id,
+                    'file_name' => $att->file_name,
+                    'file_path' => '/storage/' . $att->file_path,
+                    'file_type' => $att->file_type,
+                    'file_size' => $att->file_size,
+                ]),
+                'reads' => $msg->reads->map(fn($r) => [
+                    'user_type' => $r->user_type,
+                    'user_id' => $r->user_id,
+                    'read_at' => $r->read_at ? $r->read_at->toIso8601String() : null,
+                ]),
+                'created_at' => $msg->created_at->toIso8601String(),
+            ];
+        });
+
+        return response()->json([
+            'conversation' => $conversationData,
+            'messages' => $messages,
+        ]);
+    }
+
     public function downloadAttachment(ChatAttachment $attachment)
     {
         if (!Storage::disk('public')->exists($attachment->file_path)) {

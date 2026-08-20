@@ -1110,10 +1110,14 @@ class _UserTicketDetailScreenState extends ConsumerState<UserTicketDetailScreen>
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         final att = _attachments[index];
-        final fileName = att['fileName'] ?? att['original_name'] ?? 'Lampiran';
+        String fileName = (att['fileName'] ?? att['original_name'] ?? 'Lampiran').toString();
         final mimeType = att['mimeType'] ?? att['mime_type'] ?? '';
+        if (!fileName.contains('.')) {
+          final ext = mimeType.toString().contains('png') ? 'png' : (mimeType.toString().contains('pdf') ? 'pdf' : 'jpg');
+          fileName = '$fileName.$ext';
+        }
         final isImage = mimeType.toString().startsWith('image') ||
-            ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fileName.toString().split('.').last.toLowerCase());
+            ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].contains(fileName.split('.').last.toLowerCase());
         final url = _getAttachmentUrl(att);
 
         return InkWell(

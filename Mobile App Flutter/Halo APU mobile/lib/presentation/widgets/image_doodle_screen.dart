@@ -282,7 +282,7 @@ class _ImageDoodleScreenState extends State<ImageDoodleScreen> {
 
             // Bottom Toolbar (Tool modes, Colors, Stroke Widths)
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
               decoration: const BoxDecoration(
                 color: Color(0xFF1E293B),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
@@ -290,84 +290,96 @@ class _ImageDoodleScreenState extends State<ImageDoodleScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Row 1: Tool Mode Selector
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _buildModeChip(DoodleMode.pen, Icons.edit_rounded, 'Coret'),
-                      _buildModeChip(DoodleMode.arrow, Icons.arrow_outward_rounded, 'Panah'),
-                      _buildModeChip(DoodleMode.rectangle, Icons.crop_square_rounded, 'Kotak'),
-                      _buildModeChip(DoodleMode.circle, Icons.circle_outlined, 'Lingkaran'),
-                    ],
+                  // Row 1: Tool Mode Selector (Scrollable & Responsive)
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildModeChip(DoodleMode.pen, Icons.edit_rounded, 'Coret'),
+                        const SizedBox(width: 8),
+                        _buildModeChip(DoodleMode.arrow, Icons.arrow_outward_rounded, 'Panah'),
+                        const SizedBox(width: 8),
+                        _buildModeChip(DoodleMode.rectangle, Icons.crop_square_rounded, 'Kotak'),
+                        const SizedBox(width: 8),
+                        _buildModeChip(DoodleMode.circle, Icons.circle_outlined, 'Lingkaran'),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 12),
 
                   // Row 2: Color Palette & Thickness
-                  Row(
-                    children: [
-                      // Colors
-                      Expanded(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Colors
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: _colors.map((c) {
                             final isSelected = _selectedColor == c;
-                            return GestureDetector(
-                              onTap: () => setState(() => _selectedColor = c),
-                              child: Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: c,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isSelected ? Colors.white : Colors.grey.shade600,
-                                    width: isSelected ? 3.0 : 1.0,
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 5),
+                              child: GestureDetector(
+                                onTap: () => setState(() => _selectedColor = c),
+                                child: Container(
+                                  width: 26,
+                                  height: 26,
+                                  decoration: BoxDecoration(
+                                    color: c,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected ? Colors.white : Colors.grey.shade600,
+                                      width: isSelected ? 3.0 : 1.0,
+                                    ),
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: c.withValues(alpha: 0.6),
+                                              blurRadius: 8,
+                                              spreadRadius: 2,
+                                            )
+                                          ]
+                                        : null,
                                   ),
-                                  boxShadow: isSelected
-                                      ? [
-                                          BoxShadow(
-                                            color: c.withValues(alpha: 0.6),
-                                            blurRadius: 8,
-                                            spreadRadius: 2,
-                                          )
-                                        ]
-                                      : null,
                                 ),
                               ),
                             );
                           }).toList(),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      Container(width: 1, height: 24, color: Colors.grey.shade700),
-                      const SizedBox(width: 12),
+                        const SizedBox(width: 10),
+                        Container(width: 1, height: 22, color: Colors.grey.shade700),
+                        const SizedBox(width: 10),
 
-                      // Stroke width selector
-                      Row(
-                        children: _strokeWidths.map((w) {
-                          final isSelected = _selectedStrokeWidth == w;
-                          return GestureDetector(
-                            onTap: () => setState(() => _selectedStrokeWidth = w),
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 4),
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: isSelected ? const Color(0xFF334155) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                        // Stroke width selector
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: _strokeWidths.map((w) {
+                            final isSelected = _selectedStrokeWidth == w;
+                            return GestureDetector(
+                              onTap: () => setState(() => _selectedStrokeWidth = w),
                               child: Container(
-                                width: w * 2.2,
-                                height: w * 2.2,
+                                margin: const EdgeInsets.symmetric(horizontal: 3),
+                                padding: const EdgeInsets.all(5),
                                 decoration: BoxDecoration(
-                                  color: isSelected ? _selectedColor : Colors.grey.shade400,
-                                  shape: BoxShape.circle,
+                                  color: isSelected ? const Color(0xFF334155) : Colors.transparent,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Container(
+                                  width: w * 2.0,
+                                  height: w * 2.0,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? _selectedColor : Colors.grey.shade400,
+                                    shape: BoxShape.circle,
+                                  ),
                                 ),
                               ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
+                            );
+                          }).toList(),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -384,7 +396,7 @@ class _ImageDoodleScreenState extends State<ImageDoodleScreen> {
       onTap: () => setState(() => _selectedMode = mode),
       borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
         decoration: BoxDecoration(
           color: isSelected ? AppTheme.oceanWater : const Color(0xFF334155),
           borderRadius: BorderRadius.circular(12),
@@ -392,14 +404,14 @@ class _ImageDoodleScreenState extends State<ImageDoodleScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 16, color: Colors.white),
-            const SizedBox(width: 6),
+            Icon(icon, size: 15, color: Colors.white),
+            const SizedBox(width: 5),
             Text(
               label,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-                fontSize: 12,
+                fontSize: 11.5,
               ),
             ),
           ],

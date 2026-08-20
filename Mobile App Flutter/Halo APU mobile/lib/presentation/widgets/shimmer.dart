@@ -209,24 +209,21 @@ class TicketListSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (showHeader) ...[
-            const Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                ShimmerBox(width: 120, height: 22, radius: 6),
-                ShimmerBox(width: 80, height: 26, radius: 14),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
-          ...List.generate(count, (_) => const TicketCardSkeleton()),
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 8.0),
+      children: [
+        if (showHeader) ...[
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              ShimmerBox(width: 120, height: 22, radius: 6),
+              ShimmerBox(width: 80, height: 26, radius: 14),
+            ],
+          ),
+          const SizedBox(height: 16),
         ],
-      ),
+        ...List.generate(count, (_) => const TicketCardSkeleton()),
+      ],
     );
   }
 }

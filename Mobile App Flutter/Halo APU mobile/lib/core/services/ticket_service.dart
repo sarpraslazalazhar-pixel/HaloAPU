@@ -32,12 +32,29 @@ class TicketService {
 
   Future<MultipartFile> _createMultipartFile(XFile file) async {
     final bytes = await file.readAsBytes();
-    final mimeType = lookupMimeType(file.name, headerBytes: bytes) ?? 'application/octet-stream';
+    String mimeType = lookupMimeType(file.name, headerBytes: bytes) ?? 'application/octet-stream';
+    
+    // Fallback: detect image type from magic bytes if octet-stream
+    if (mimeType == 'application/octet-stream') {
+      if (bytes.length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8) {
+        mimeType = 'image/jpeg';
+      } else if (bytes.length >= 8 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47) {
+        mimeType = 'image/png';
+      }
+    }
+
     final mediaType = MediaType.parse(mimeType);
+
+    String name = file.name.trim();
+    if (name.isEmpty || name == 'attachment' || name == 'image_picker' || !name.contains('.')) {
+      final ext = mimeType.contains('png') ? 'png' : (mimeType.contains('pdf') ? 'pdf' : 'jpg');
+      final base = (name.isEmpty || name == 'attachment' || name == 'image_picker') ? 'foto_${DateTime.now().millisecondsSinceEpoch}' : name;
+      name = '$base.$ext';
+    }
 
     return MultipartFile.fromBytes(
       bytes,
-      filename: file.name.isNotEmpty ? file.name : 'attachment',
+      filename: name,
       contentType: mediaType,
     );
   }

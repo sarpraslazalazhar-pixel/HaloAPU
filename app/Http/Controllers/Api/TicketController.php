@@ -165,13 +165,18 @@ class TicketController extends Controller
             foreach ($request->file('attachments') as $fieldId => $files) {
                 $filesArr = is_array($files) ? $files : [$files];
                 foreach ($filesArr as $file) {
+                    $originalName = $file->getClientOriginalName() ?: 'attachment';
+                    $ext = $file->getClientOriginalExtension() ?: ($file->guessExtension() ?: 'jpg');
+                    if (!str_contains($originalName, '.')) {
+                        $originalName = ($originalName === 'attachment' ? 'foto_' . time() : $originalName) . '.' . $ext;
+                    }
                     $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
                     TicketAttachment::create([
                         'ticket_id' => $ticket->id,
                         'field_id' => $fieldId,
                         'file_path' => $path,
-                        'original_name' => $file->getClientOriginalName(),
-                        'mime_type' => $file->getClientMimeType(),
+                        'original_name' => $originalName,
+                        'mime_type' => $file->getClientMimeType() ?: 'image/jpeg',
                         'file_size' => $file->getSize(),
                     ]);
                 }
@@ -331,11 +336,20 @@ class TicketController extends Controller
         $responseData['formData'] = $ticket->form_data ?? [];
 
         $responseData['attachments'] = $ticket->attachments->map(function ($att) {
+            $name = $att->original_name ?: 'attachment';
+            if (!str_contains($name, '.')) {
+                $ext = match(strtolower($att->mime_type ?? '')) {
+                    'image/png' => 'png',
+                    'application/pdf' => 'pdf',
+                    default => 'jpg'
+                };
+                $name = $name . '.' . $ext;
+            }
             return [
                 'id' => $att->id,
                 'fieldId' => $att->field_id,
-                'fileName' => $att->original_name,
-                'mimeType' => $att->mime_type,
+                'fileName' => $name,
+                'mimeType' => $att->mime_type ?: 'image/jpeg',
                 'fileSize' => $att->file_size,
                 'path' => 'storage/' . $att->file_path,
                 'url' => url('storage/' . $att->file_path),
@@ -351,9 +365,18 @@ class TicketController extends Controller
                 'createdAt' => $log->timestamp ? $log->timestamp->toIso8601String() : $log->created_at?->toIso8601String(),
                 'isFromAdmin' => $log->admin_id !== null,
                 'attachments' => $log->attachments->map(function ($att) {
+                    $name = $att->original_name ?: 'attachment';
+                    if (!str_contains($name, '.')) {
+                        $ext = match(strtolower($att->mime_type ?? '')) {
+                            'image/png' => 'png',
+                            'application/pdf' => 'pdf',
+                            default => 'jpg'
+                        };
+                        $name = $name . '.' . $ext;
+                    }
                     return [
                         'id' => $att->id,
-                        'fileName' => $att->original_name,
+                        'fileName' => $name,
                         'path' => 'storage/' . $att->file_path,
                         'url' => url('storage/' . $att->file_path),
                     ];

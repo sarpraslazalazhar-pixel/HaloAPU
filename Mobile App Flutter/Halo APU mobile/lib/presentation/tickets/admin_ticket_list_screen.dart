@@ -50,11 +50,8 @@ class _AdminTicketListScreenState extends ConsumerState<AdminTicketListScreen> {
     }
   }
 
-  void _onSearchChanged(String query) {
-    if (_debounce?.isActive ?? false) _debounce!.cancel();
-    _debounce = Timer(const Duration(milliseconds: 500), () {
-      ref.read(adminTicketProvider.notifier).setSearchQuery(query);
-    });
+  void _performSearch(String query) {
+    ref.read(adminTicketProvider.notifier).setSearchQuery(query.trim());
   }
 
   List<TicketModel> _getFilteredTickets(List<TicketModel> tickets) {
@@ -66,6 +63,7 @@ class _AdminTicketListScreenState extends ConsumerState<AdminTicketListScreen> {
     final ticketState = ref.watch(adminTicketProvider);
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         title: const Text('Manajemen Tiket', style: TextStyle(fontWeight: FontWeight.bold)),
         elevation: 0,
@@ -79,20 +77,24 @@ class _AdminTicketListScreenState extends ConsumerState<AdminTicketListScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
               controller: _searchController,
-              onChanged: (val) {
-                setState(() {});
-                _onSearchChanged(val);
+              textInputAction: TextInputAction.search,
+              onSubmitted: (val) => _performSearch(val),
+              onChanged: (_) {
+                setState(() {}); // Hanya update UI untuk ikon clear
               },
               decoration: InputDecoration(
                 hintText: 'Cari ID, Layanan, Kanal, atau Detail...',
-                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                prefixIcon: IconButton(
+                  icon: const Icon(Icons.search, color: Colors.grey),
+                  onPressed: () => _performSearch(_searchController.text),
+                ),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
                         onPressed: () {
                           _searchController.clear();
                           setState(() {});
-                          _onSearchChanged('');
+                          _performSearch('');
                         },
                       )
                     : null,

@@ -222,13 +222,14 @@ class TicketService {
     }
   }
 
-  Future<Map<String, dynamic>> assignOperator(String id, int adminId) async {
+  Future<Map<String, dynamic>> assignOperator(String id, int? adminId) async {
     try {
+      final cleanId = id.replaceAll('-', '');
       final response = await _dio.post(
-        '/tickets/$id/assign',
+        '/tickets/$cleanId/assign',
         data: {'admin_id': adminId},
       );
-      return {'success': true, 'data': response.data['data']};
+      return {'success': true, 'data': response.data['data'], 'message': response.data['message']};
     } on DioException catch (e) {
       return {
         'success': false,

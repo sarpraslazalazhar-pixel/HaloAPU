@@ -68,6 +68,12 @@ sealed class TicketModel with _$TicketModel {
       default:
         map['status'] = 'open';
     }
+    if (map['operators'] is List) {
+      map['operators'] = (map['operators'] as List)
+          .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
+          .whereType<Map<String, dynamic>>()
+          .toList();
+    }
     return TicketModel.fromJson(map);
   }
 }

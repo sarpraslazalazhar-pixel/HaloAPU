@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:halo_apu_mobile/core/theme/app_theme.dart';
 import '../widgets/image_doodle_screen.dart';
@@ -33,7 +34,10 @@ class _AdminTicketDetailScreenState
   bool _isLoadingDetail = true;
   bool _isSuperAdmin = false;
   bool _canAssignOperator = false;
+  bool _isTimelineCollapsed = true;
+  bool _showQuickRepliesBar = true;
   String _currentAdminName = '';
+  final FlutterSecureStorage _storage = const FlutterSecureStorage();
   final ScrollController _chatScrollController = ScrollController();
   final FocusNode _chatFocusNode = FocusNode();
   final TextEditingController _messageController = TextEditingController();
@@ -67,24 +71,31 @@ class _AdminTicketDetailScreenState
   }
 
   Future<void> _loadUserRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    final userDataStr = prefs.getString('user_data');
-    if (userDataStr != null) {
-      final userData = jsonDecode(userDataStr);
-      final position = userData['position']?.toString().toLowerCase() ?? '';
-      final role = userData['role']?.toString().toLowerCase() ?? '';
-      final division = userData['division']?.toString().toLowerCase() ?? '';
-      final isSuper = userData['isSuperAdmin'] == true ||
-          position.contains('super') ||
-          role.contains('super') ||
-          division.contains('super');
-      final canAssign = userData['canAssignOperator'] == true || isSuper;
+    String? userDataStr = await _storage.read(key: 'user_data');
+    if (userDataStr == null || userDataStr.isEmpty) {
+      final prefs = await SharedPreferences.getInstance();
+      userDataStr = prefs.getString('user_data');
+    }
+    if (userDataStr != null && userDataStr.isNotEmpty) {
+      try {
+        final userData = jsonDecode(userDataStr);
+        final position = userData['position']?.toString().toLowerCase() ?? '';
+        final role = userData['role']?.toString().toLowerCase() ?? '';
+        final division = userData['division']?.toString().toLowerCase() ?? '';
+        final isSuper = userData['isSuperAdmin'] == true ||
+            position.contains('super') ||
+            role.contains('super') ||
+            division.contains('super');
+        final canAssign = userData['canAssignOperator'] == true || isSuper;
 
-      setState(() {
-        _isSuperAdmin = isSuper;
-        _canAssignOperator = canAssign;
-        _currentAdminName = userData['name']?.toString() ?? userData['username']?.toString() ?? '';
-      });
+        if (mounted) {
+          setState(() {
+            _isSuperAdmin = isSuper;
+            _canAssignOperator = canAssign;
+            _currentAdminName = userData['name']?.toString() ?? userData['username']?.toString() ?? '';
+          });
+        }
+      } catch (_) {}
     }
   }
 
@@ -145,8 +156,12 @@ class _AdminTicketDetailScreenState
   }
 
   void _applyTicket(TicketModel updated) {
-    setState(() => _ticket = updated);
-    ref.read(adminTicketProvider.notifier).updateTicket(updated);
+    final merged = updated.copyWith(
+      operators: updated.operators ?? _ticket.operators,
+      logs: updated.logs ?? _ticket.logs,
+    );
+    setState(() => _ticket = merged);
+    ref.read(adminTicketProvider.notifier).updateTicket(merged);
   }
 
   bool _isSending = false;
@@ -287,7 +302,7 @@ class _AdminTicketDetailScreenState
                   );
                 }).toList(),
               ),
-              if (_isSuperAdmin && _ticket.operators != null && _ticket.operators!.isNotEmpty) ...[
+              if ((_canAssignOperator || _isSuperAdmin) && _ticket.operators != null && _ticket.operators!.isNotEmpty) ...[
                 const SizedBox(height: 20),
                 const Text(
                   'Ditugaskan ke',
@@ -520,29 +535,40 @@ class _AdminTicketDetailScreenState
     String assignee,
     int? adminId,
   ) {
-    final isSelected = (_ticket.assignedTo ?? 'Belum') == assignee;
+    final isSelected = (_ticket.assignedTo ?? 'Belum') == assignee || (_ticket.assignedTo == null && adminId == null);
     return InkWell(
       borderRadius: BorderRadius.circular(16),
       onTap: () async {
         Navigator.of(sheetContext).pop();
-        if (adminId == null) return;
         
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Menugaskan operator...')),
+          SnackBar(
+            behavior: SnackBarBehavior.floating,
+            content: Text(adminId == null ? 'Melepas penugasan operator...' : 'Menugaskan operator...'),
+          ),
         );
 
         final result = await _ticketService.assignOperator(_ticket.id, adminId);
         if (result['success']) {
           _applyTicket(TicketModel.safeFromJson(result['data']));
+          _loadTicketDetail();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Operator berhasil ditugaskan')),
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: const Color(0xFF10B981),
+                content: Text(adminId == null ? 'Penugasan operator berhasil dilepas' : 'Operator berhasil ditugaskan'),
+              ),
             );
           }
         } else {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(result['message'])),
+              SnackBar(
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: Colors.red.shade600,
+                content: Text(result['message'] ?? 'Gagal memperbarui penugasan operator'),
+              ),
             );
           }
         }
@@ -555,41 +581,45 @@ class _AdminTicketDetailScreenState
               ? AppTheme.oceanWater.withValues(alpha: 0.12)
               : AppTheme.lightBg,
           borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: isSelected ? AppTheme.oceanWater : Colors.transparent,
-              width: 1.5,
-            ),
+          border: Border.all(
+            color: isSelected ? AppTheme.oceanWater : Colors.transparent,
+            width: 1.5,
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                isSelected
-                    ? Icons.check_circle_rounded
-                    : Icons.person_outline_rounded,
-                size: 18,
-                color: isSelected
-                    ? AppTheme.oceanWater
-                    : Colors.grey.shade500,
-              ),
-              const SizedBox(width: 6),
-              Text(
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              isSelected
+                  ? Icons.check_circle_rounded
+                  : Icons.person_outline_rounded,
+              size: 18,
+              color: isSelected
+                  ? AppTheme.oceanWater
+                  : Colors.grey.shade500,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
                 assignee,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
-                  color:
-                      isSelected ? AppTheme.oceanWater : Colors.grey.shade600,
+                  color: isSelected ? AppTheme.oceanWater : Colors.grey.shade600,
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
   }
 
   void _showAssignOperatorSheet() {
     final operators = _ticket.operators ?? [];
+    final hasCurrentAssignee = _ticket.assignedTo != null && _ticket.assignedTo!.isNotEmpty;
+
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: Colors.transparent,
@@ -643,13 +673,98 @@ class _AdminTicketDetailScreenState
               ],
             ),
             const SizedBox(height: 20),
-            if (operators.isEmpty)
+
+            // Opsi Unassign jika sudah ada penugasan saat ini
+            if (hasCurrentAssignee) ...[
+              InkWell(
+                borderRadius: BorderRadius.circular(14),
+                onTap: () async {
+                  Navigator.pop(sheetContext);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      behavior: SnackBarBehavior.floating,
+                      content: Text('Melepas penugasan operator...'),
+                    ),
+                  );
+
+                  final result = await _ticketService.assignOperator(_ticket.id, null);
+                  if (result['success']) {
+                    _applyTicket(TicketModel.safeFromJson(result['data']));
+                    _loadTicketDetail();
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: Color(0xFF10B981),
+                          content: Text('Penugasan operator berhasil dilepas'),
+                        ),
+                      );
+                    }
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          backgroundColor: Colors.red.shade600,
+                          content: Text(result['message'] ?? 'Gagal melepas operator'),
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF2F2),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFFFCA5A5),
+                      width: 1.0,
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Color(0xFFFEE2E2),
+                        child: Icon(Icons.person_off_rounded, color: Color(0xFFDC2626), size: 18),
+                      ),
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Kosongkan / Lepas Penugasan',
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13.5,
+                                color: Color(0xFFDC2626),
+                              ),
+                            ),
+                            SizedBox(height: 2),
+                            Text(
+                              'Hapus operator yang ditugaskan saat ini',
+                              style: TextStyle(fontSize: 11, color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+
+            if (operators.isEmpty && !hasCurrentAssignee)
               Container(
                 padding: const EdgeInsets.symmetric(vertical: 32),
                 alignment: Alignment.center,
                 child: const Text('Tidak ada operator yang terdaftar untuk unit tiket ini', style: TextStyle(color: Colors.grey)),
               )
-            else
+            else if (operators.isNotEmpty)
               ConstrainedBox(
                 constraints: BoxConstraints(
                   maxHeight: MediaQuery.of(context).size.height * 0.45,
@@ -986,27 +1101,56 @@ class _AdminTicketDetailScreenState
     final isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 0;
 
     return Scaffold(
-      backgroundColor: AppTheme.lightBg,
-      extendBodyBehindAppBar: true,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(64),
-        child: AppBar(
-          backgroundColor: AppTheme.lightBg.withValues(alpha: 0.95),
-          elevation: 0,
-          centerTitle: true,
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back, color: AppTheme.oceanWater),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: Text(
-            'Manajemen Tiket #${_ticket.id}',
-            style: const TextStyle(
-              color: AppTheme.oceanWater,
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
+      backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0.5,
+        centerTitle: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF1E293B), size: 19),
+          onPressed: () => Navigator.of(context).pop(),
         ),
+        titleSpacing: 0,
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Tiket #${_ticket.id}',
+              style: const TextStyle(
+                color: Color(0xFF0F172A),
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              '${_ticket.category} • ${_ticket.requesterName}',
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 11.5,
+                fontWeight: FontWeight.w500,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+        actions: [
+          if (_canAssignOperator || _isSuperAdmin)
+            IconButton(
+              tooltip: 'Tugaskan Operator',
+              icon: const Icon(Icons.assignment_ind_outlined, color: Color(0xFF4F46E5), size: 22),
+              onPressed: _showAssignOperatorSheet,
+            ),
+          IconButton(
+            tooltip: 'Ubah Status',
+            icon: const Icon(Icons.sync_alt_rounded, color: Color(0xFF00768C), size: 22),
+            onPressed: _showStatusSheet,
+          ),
+          const SizedBox(width: 4),
+        ],
       ),
       body: _isLoadingDetail
           ? const Center(child: CircularProgressIndicator())
@@ -1014,17 +1158,14 @@ class _AdminTicketDetailScreenState
         headerSliverBuilder: (context, innerBoxIsScrolled) {
           return [
             SliverToBoxAdapter(
-              child: Column(
-                children: [
-                  const SizedBox(height: 80),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    child: TicketStatusTimeline(
-                      ticket: _ticket,
-                      onAssignTap: (_canAssignOperator || _isSuperAdmin) ? _showAssignOperatorSheet : null,
-                    ),
-                  ),
-                ],
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: TicketStatusTimeline(
+                  ticket: _ticket,
+                  isCollapsed: _isTimelineCollapsed,
+                  onToggleExpand: () => setState(() => _isTimelineCollapsed = !_isTimelineCollapsed),
+                  onAssignTap: (_canAssignOperator || _isSuperAdmin) ? _showAssignOperatorSheet : null,
+                ),
               ),
             ),
             SliverPersistentHeader(
@@ -1033,14 +1174,15 @@ class _AdminTicketDetailScreenState
                 TabBar(
                   controller: _tabController,
                   indicatorColor: AppTheme.oceanWater,
+                  indicatorWeight: 2.5,
                   labelColor: AppTheme.oceanWater,
-                  unselectedLabelColor: Colors.grey.shade600,
-                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                  unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500),
+                  unselectedLabelColor: const Color(0xFF64748B),
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                  unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13.5),
                   tabs: [
-                    const Tab(text: 'Chat'),
+                    const Tab(text: 'Chat & Riwayat'),
                     Tab(text: 'Lampiran (${_attachments.length})'),
-                    const Tab(text: 'Detail'),
+                    const Tab(text: 'Detail Tiket'),
                   ],
                 ),
               ),
@@ -1577,60 +1719,136 @@ class _AdminTicketDetailScreenState
     );
   }
 
+  String _formatDateHeader(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final checkDate = DateTime(date.year, date.month, date.day);
+
+    if (checkDate == today) {
+      return 'Hari Ini';
+    } else if (checkDate == yesterday) {
+      return 'Kemarin';
+    } else {
+      return DateFormat('dd MMM yyyy').format(date);
+    }
+  }
+
   Widget _buildChatTab() {
-    return ListView(
-      controller: _chatScrollController,
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      children: [
-        Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.grey.shade200,
-              borderRadius: BorderRadius.circular(16),
+    final logs = _ticket.logs ?? [];
+    if (logs.isEmpty) {
+      return Container(
+        color: const Color(0xFFF8FAFC),
+        padding: const EdgeInsets.all(32.0),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: const BoxDecoration(
+                color: Color(0xFFEEF2FF),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.chat_bubble_outline_rounded,
+                size: 36,
+                color: Color(0xFF4F46E5),
+              ),
             ),
-            child: const Text(
-              'Hari Ini',
-              style: TextStyle(fontSize: 10, color: Colors.black54, fontWeight: FontWeight.w500),
+            const SizedBox(height: 16),
+            const Text(
+              'Belum ada percakapan',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF1E293B),
+              ),
             ),
-          ),
+            const SizedBox(height: 6),
+            const Text(
+              'Tulis balasan atau gunakan balasan cepat di bawah untuk memulai percakapan.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12.5,
+                color: Color(0xFF64748B),
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        if (_ticket.logs != null && _ticket.logs!.isNotEmpty)
-          ..._ticket.logs!.reversed.map((reply) => ChatBubble(
-            reply: reply,
-            isCurrentUserAdmin: true,
-            requesterName: _ticket.requesterName,
-            currentAdminName: _currentAdminName,
-          ))
-        else
-          Container(
-            padding: const EdgeInsets.all(32.0),
-            alignment: Alignment.center,
-            child: const Text(
-              'Belum ada pesan',
-              style: TextStyle(color: Colors.grey),
+      );
+    }
+
+    final reversedLogs = logs.reversed.toList();
+    final List<Widget> items = [];
+    DateTime? lastDate;
+
+    for (int i = 0; i < reversedLogs.length; i++) {
+      final reply = reversedLogs[i];
+      final localDate = reply.createdAt.toLocal();
+      final replyDate = DateTime(localDate.year, localDate.month, localDate.day);
+
+      if (lastDate == null || replyDate != lastDate) {
+        lastDate = replyDate;
+        items.add(
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE2E8F0),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  _formatDateHeader(replyDate),
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: Color(0xFF475569),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
           ),
-      ],
+        );
+      }
+
+      items.add(
+        ChatBubble(
+          reply: reply,
+          isCurrentUserAdmin: true,
+          requesterName: _ticket.requesterName,
+          currentAdminName: _currentAdminName,
+        ),
+      );
+    }
+
+    return Container(
+      color: const Color(0xFFF8FAFC),
+      child: ListView(
+        controller: _chatScrollController,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: items,
+      ),
     );
   }
 
   Widget _buildBottomActionArea(BuildContext context, bool isKeyboardOpen) {
     return Container(
       padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 16,
-        bottom: MediaQuery.of(context).padding.bottom + 16,
+        left: 14,
+        right: 14,
+        top: 10,
+        bottom: MediaQuery.of(context).padding.bottom + 10,
       ),
       decoration: BoxDecoration(
-        color: AppTheme.lightBg.withValues(alpha: 0.95),
-        border: Border(top: BorderSide(color: Colors.grey.shade200)),
+        color: Colors.white,
+        border: const Border(top: BorderSide(color: Color(0xFFE2E8F0), width: 1)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 18,
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 16,
             offset: const Offset(0, -4),
           ),
         ],
@@ -1639,11 +1857,69 @@ class _AdminTicketDetailScreenState
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Quick Replies Horizontal Bar
+            if (_showQuickRepliesBar && _quickReplies.isNotEmpty) ...[
+              SizedBox(
+                height: 32,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _quickReplies.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (ctx, idx) {
+                    final replyText = _quickReplies[idx];
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(16),
+                      onTap: () {
+                        setState(() {
+                          _messageController.text = replyText;
+                          _messageController.selection = TextSelection.fromPosition(
+                            TextPosition(offset: _messageController.text.length),
+                          );
+                        });
+                        _chatFocusNode.requestFocus();
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF1F5F9),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFCBD5E1)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bolt_rounded, size: 13, color: Color(0xFF0284C7)),
+                            const SizedBox(width: 4),
+                            ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 220),
+                              child: Text(
+                                replyText,
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w500,
+                                  color: Color(0xFF334155),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // Attachment Previews
             if (_replyAttachments.isNotEmpty)
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
-                height: 60,
+                height: 52,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   itemCount: _replyAttachments.length,
@@ -1652,18 +1928,31 @@ class _AdminTicketDetailScreenState
                     return Container(
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade300)),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
                       child: Row(
                         children: [
-                          const Icon(Icons.insert_drive_file, size: 20, color: AppTheme.oceanWater),
+                          const Icon(Icons.insert_drive_file_rounded, size: 18, color: AppTheme.oceanWater),
                           const SizedBox(width: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 120),
+                            child: Text(
+                              file.name,
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF1E293B)),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
                           if (file.name.toLowerCase().endsWith('.jpg') ||
                               file.name.toLowerCase().endsWith('.jpeg') ||
                               file.name.toLowerCase().endsWith('.png')) ...[
                             IconButton(
                               icon: const Icon(Icons.draw_rounded, size: 16, color: AppTheme.oceanWater),
                               padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
+                              constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                               tooltip: 'Coret & Tandai Foto',
                               onPressed: () async {
                                 final annotated = await ImageDoodleScreen.annotate(context, file);
@@ -1674,125 +1963,139 @@ class _AdminTicketDetailScreenState
                                 }
                               },
                             ),
-                            const SizedBox(width: 4),
                           ],
                           IconButton(
-                            icon: const Icon(Icons.close, size: 16),
+                            icon: const Icon(Icons.close_rounded, size: 16, color: Colors.grey),
                             padding: EdgeInsets.zero,
-                            constraints: const BoxConstraints(),
+                            constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
                             onPressed: () => setState(() => _replyAttachments.removeAt(i)),
                           )
                         ],
                       ),
                     );
-                  }
-                )
+                  },
+                ),
               ),
-            // Chat Input
+
+            // Chat Input Bar
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: Colors.grey.shade300),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
               ),
               child: Row(
                 children: [
                   IconButton(
-                    icon: Icon(Icons.attach_file, color: Colors.grey.shade600),
+                    icon: Icon(
+                      Icons.attach_file_rounded,
+                      color: Colors.grey.shade600,
+                      size: 20,
+                    ),
                     onPressed: () => _showAttachmentOptions(context),
+                  ),
+                  GestureDetector(
+                    onLongPress: _showQuickReplySheet,
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.bolt_rounded,
+                        color: _showQuickRepliesBar ? const Color(0xFF0284C7) : Colors.grey.shade400,
+                        size: 20,
+                      ),
+                      tooltip: 'Bilah Balasan Cepat (Tahan untuk opsi lainnya)',
+                      onPressed: () => setState(() => _showQuickRepliesBar = !_showQuickRepliesBar),
+                    ),
                   ),
                   Expanded(
                     child: TextField(
                       controller: _messageController,
                       focusNode: _chatFocusNode,
                       onTap: _scrollToBottom,
+                      textCapitalization: TextCapitalization.sentences,
+                      maxLines: 4,
+                      minLines: 1,
+                      style: const TextStyle(fontSize: 13.5, color: Color(0xFF0F172A)),
                       decoration: const InputDecoration(
-                        hintText: 'Ketik pesan...',
+                        hintText: 'Ketik pesan balasan...',
+                        hintStyle: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
                         border: InputBorder.none,
                         isDense: true,
+                        contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
                       ),
                     ),
                   ),
                   Container(
-                    margin: const EdgeInsets.only(right: 4),
+                    margin: const EdgeInsets.only(right: 2),
                     decoration: const BoxDecoration(
                       color: AppTheme.oceanWater,
                       shape: BoxShape.circle,
                     ),
                     child: IconButton(
                       icon: _isSending
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.send, color: Colors.white, size: 20),
-                      onPressed: _isSending ? null : () {
-                        if (_messageController.text.isNotEmpty || _replyAttachments.isNotEmpty) {
-                          _sendMessage(_messageController.text);
-                        } else {
-                          _chatFocusNode.unfocus();
-                        }
-                      },
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : const Icon(Icons.send_rounded, color: Colors.white, size: 18),
+                      onPressed: _isSending
+                          ? null
+                          : () {
+                              if (_messageController.text.isNotEmpty || _replyAttachments.isNotEmpty) {
+                                _sendMessage(_messageController.text);
+                              } else {
+                                _chatFocusNode.unfocus();
+                              }
+                            },
                     ),
                   ),
                 ],
               ),
             ),
 
-            // Action Buttons (Hidden when keyboard is open)
+            // Action Buttons Row (Hidden when keyboard is open)
             if (!isKeyboardOpen) ...[
-              const SizedBox(height: 16),
-              if (_canAssignOperator || _isSuperAdmin) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _showAssignOperatorSheet,
-                    icon: const Icon(Icons.assignment_ind_rounded, size: 18),
-                    label: Text(
-                      _ticket.assignedTo != null && _ticket.assignedTo!.isNotEmpty
-                          ? 'Tugaskan Ulang Operator (${_ticket.assignedTo})'
-                          : 'Pilih & Tugaskan Operator',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 13),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      backgroundColor: const Color(0xFF4F46E5), // Indigo
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
+              const SizedBox(height: 10),
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
                       onPressed: _showStatusSheet,
-                      icon: const Icon(Icons.sync_alt_rounded, size: 18),
-                      label: const Text('Perbarui Status', style: TextStyle(fontWeight: FontWeight.bold)),
+                      icon: const Icon(Icons.sync_alt_rounded, size: 16),
+                      label: const Text(
+                        'Ubah Status',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                      ),
                       style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        side: const BorderSide(color: AppTheme.danger, width: 1.5),
+                        side: const BorderSide(color: AppTheme.danger, width: 1.2),
                         foregroundColor: AppTheme.danger,
+                        backgroundColor: Colors.white,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _showQuickReplySheet,
-                      icon: const Icon(Icons.bolt_rounded, size: 18),
-                      label: const Text('Balasan Cepat', style: TextStyle(fontWeight: FontWeight.bold)),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        backgroundColor: AppTheme.brilliantBlue,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
+                  if (_canAssignOperator || _isSuperAdmin) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _showAssignOperatorSheet,
+                        icon: const Icon(Icons.assignment_ind_rounded, size: 16),
+                        label: Text(
+                          _ticket.assignedTo != null && _ticket.assignedTo!.isNotEmpty
+                              ? 'Ganti Operator'
+                              : 'Tugaskan Operator',
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: const Color(0xFF4F46E5),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ]

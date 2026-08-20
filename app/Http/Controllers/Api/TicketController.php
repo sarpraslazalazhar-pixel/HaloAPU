@@ -654,25 +654,49 @@ class TicketController extends Controller
         }
 
         $validated = $request->validate([
-            'admin_id' => 'required|integer|exists:admins,id',
+            'admin_id' => 'nullable|integer|exists:admins,id',
         ]);
 
-        $admin = \App\Models\Admin::find($validated['admin_id']);
+        $adminId = $validated['admin_id'] ?? null;
 
-        $ticket->update(['assigned_admin_id' => $admin->id]);
+        if ($adminId) {
+            $admin = \App\Models\Admin::find($adminId);
+            $ticket->update(['assigned_admin_id' => $admin->id]);
 
-        TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => $user->id,
-            'aksi' => 'assign_operator',
-            'catatan' => 'Tiket ditugaskan ke operator: ' . ($admin->name ?? $admin->username),
-            'timestamp' => now(),
-        ]);
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => $user->id,
+                'aksi' => 'assign_operator',
+                'catatan' => 'Tiket ditugaskan ke operator: ' . ($admin->name ?? $admin->username),
+                'timestamp' => now(),
+            ]);
 
-        return response()->json([
-            'message' => 'Operator berhasil ditugaskan',
-            'data' => $this->formatTicket($ticket->fresh()),
-        ]);
+            try {
+                $admin->notify(new \App\Notifications\TicketAssignedOperatorNotification($ticket));
+            } catch (\Throwable $e) {
+                \Log::error("Gagal mengirim notifikasi penugasan operator untuk tiket #{$ticket->id}: " . $e->getMessage());
+            }
+
+            return response()->json([
+                'message' => 'Operator berhasil ditugaskan',
+                'data' => $this->formatTicket($ticket->fresh(['subUnit', 'assignedAdmin', 'user'])),
+            ]);
+        } else {
+            $ticket->update(['assigned_admin_id' => null]);
+
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => $user->id,
+                'aksi' => 'unassign_operator',
+                'catatan' => 'Penugasan operator dilepas',
+                'timestamp' => now(),
+            ]);
+
+            return response()->json([
+                'message' => 'Penugasan operator berhasil dilepas',
+                'data' => $this->formatTicket($ticket->fresh(['subUnit', 'assignedAdmin', 'user'])),
+            ]);
+        }
     }
 
     /**

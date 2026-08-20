@@ -84,16 +84,23 @@ class ApiClient {
       },
     ));
 
-    // Logger hanya saat debug mode
+    // Logger hanya saat debug mode (ringan tanpa spam log polling)
     if (kDebugMode) {
       _dio.interceptors.add(PrettyDioLogger(
-        requestHeader: true,
+        requestHeader: false,
         requestBody: true,
         responseBody: true,
         responseHeader: false,
         error: true,
         compact: true,
-        maxWidth: 90,
+        maxWidth: 80,
+        filter: (options, args) {
+          // Abaikan logging endpoint polling unread-count agar console & CPU tetap bersih
+          if (options.path.contains('/notifications/unread-count')) {
+            return false;
+          }
+          return true;
+        },
       ));
     }
   }

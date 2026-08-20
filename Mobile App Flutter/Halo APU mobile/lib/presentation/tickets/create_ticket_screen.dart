@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -43,6 +44,7 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
 
   // Submission state
   bool _isSubmitting = false;
+  Timer? _draftDebounce;
 
   final List<String> _stepTitles = [
     'Pilih Layanan',
@@ -55,6 +57,13 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
   void initState() {
     super.initState();
     _loadDraftAndServices();
+  }
+
+  @override
+  void dispose() {
+    _draftDebounce?.cancel();
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadDraftAndServices() async {
@@ -95,17 +104,23 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
   }
 
   void _saveDraft() {
-    final box = Hive.box('ticket_drafts');
-    box.put('selectedUnitIndex', _selectedUnitIndex);
-    box.put('selectedSubUnitIndex', _selectedSubUnitIndex);
-    box.put('formData', _formData);
-    
-    // Save file paths
-    final Map<String, List<String>> filePaths = {};
-    _attachmentFiles.forEach((key, files) {
-      filePaths[key] = files.map((f) => f.path).toList();
+    _draftDebounce?.cancel();
+    _draftDebounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      try {
+        final box = Hive.box('ticket_drafts');
+        box.put('selectedUnitIndex', _selectedUnitIndex);
+        box.put('selectedSubUnitIndex', _selectedSubUnitIndex);
+        box.put('formData', _formData);
+        
+        // Save file paths
+        final Map<String, List<String>> filePaths = {};
+        _attachmentFiles.forEach((key, files) {
+          filePaths[key] = files.map((f) => f.path).toList();
+        });
+        box.put('attachmentFiles', filePaths);
+      } catch (_) {}
     });
-    box.put('attachmentFiles', filePaths);
   }
 
   Future<void> _loadServices() async {
@@ -316,7 +331,14 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
         }
       } else {
         final message = result['message']?.toString() ?? 'Gagal membuat tiket';
-        if (message.startsWith('Kesalahan: ')) {
+        final isNetworkError = message.contains('Koneksi') ||
+            message.contains('jaringan') ||
+            message.contains('terhubung') ||
+            message.contains('Timeout') ||
+            message.contains('Kesalahan') ||
+            message.startsWith('Kesalahan: ');
+
+        if (isNetworkError) {
           // Koneksi putus saat pengiriman -> antri & kirim otomatis nanti
           await _queueTicket(payload);
           if (mounted) _finishToQueue();
@@ -328,7 +350,8 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
   }
 
   Map<String, dynamic> _buildTicketPayload() {
-    final subUnit = _units[_selectedUnitIndex!]['sub_units'][_selectedSubUnitIndex!];
+    final unit = _units[_selectedUnitIndex!];
+    final subUnit = unit['sub_units'][_selectedSubUnitIndex!];
 
     final Map<String, dynamic> formDataPayload = {};
     for (var field in _formFields) {
@@ -356,10 +379,16 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
     });
 
     return {
+      'sub_unit_id': subUnit['id'],
       'subUnitId': subUnit['id'],
       'formData': formDataPayload,
+      'form_data': formDataPayload,
       'priority': priority,
+      'attachment_files': attachmentFiles,
       'attachmentFiles': attachmentFiles,
+      'unit_name': unit['nama'] ?? unit['name'] ?? '',
+      'sub_unit_name': subUnit['nama_layanan'] ?? subUnit['name'] ?? '',
+      'created_at': DateTime.now().toIso8601String(),
     };
   }
 

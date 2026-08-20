@@ -137,12 +137,15 @@ class PushNotificationService {
     }
   }
 
+  static int _lastUnreadCount = 0;
+
   /// Memulai Real-time Poller untuk memeriksa notifikasi baru secara instan
   static void startRealtimePoller() {
     _pollingTimer?.cancel();
     _checkNewNotifications(isInitial: true);
 
-    _pollingTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+    // Polling setiap 15 detik (sangat ringan, hemat baterai, tanpa lag)
+    _pollingTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       _checkNewNotifications();
     });
   }
@@ -153,7 +156,7 @@ class PushNotificationService {
     _pollingTimer = null;
   }
 
-  /// Memeriksa notifikasi baru dan membunyikan alert lokal jika ada pembaruan status
+  /// Memeriksa notifikasi baru secara efisien dan membunyikan alert lokal jika ada pembaruan status
   static Future<void> _checkNewNotifications({bool isInitial = false}) async {
     try {
       const storage = FlutterSecureStorage();
@@ -161,35 +164,49 @@ class PushNotificationService {
       if (token == null || token.isEmpty) return;
 
       final apiClient = ApiClient();
-      final notifListResponse = await apiClient.dio.get(
-        '/notifications',
-        queryParameters: {'page': 1, 'per_page': 1},
-      );
+      // 1. Cek jumlah unread secara ringan terlebih dahulu
+      final countRes = await apiClient.dio.get('/notifications/unread-count');
+      if (countRes.statusCode != 200) return;
 
-      if (notifListResponse.statusCode == 200) {
-        final List<dynamic> list = notifListResponse.data['data'] ?? [];
-        if (list.isNotEmpty) {
-          final latest = list.first as Map<String, dynamic>;
-          final id = latest['id']?.toString();
+      final int currentUnread = countRes.data['data']?['count'] ?? 0;
 
-          if (isInitial) {
-            _lastKnownNotifId = id;
-            return;
-          }
+      if (isInitial) {
+        _lastUnreadCount = currentUnread;
+        return;
+      }
 
-          if (id != null && id != _lastKnownNotifId) {
-            _lastKnownNotifId = id;
-            await showNotificationAlert(
-              title: latest['title'] ?? 'Pembaruan Tiket',
-              body: latest['body'] ?? 'Ada perubahan status pada tiket Anda',
-              data: {
-                'ticket_id': latest['ticketId'] ?? latest['ticket_id'],
-                'id': id,
-              },
-            );
-            onNotificationReceived?.call();
+      // Jika ada notifikasi baru masuk
+      if (currentUnread > _lastUnreadCount) {
+        _lastUnreadCount = currentUnread;
+        onNotificationReceived?.call();
+
+        // 2. Ambil notifikasi teratas untuk menampilkan banner & suara
+        final notifListResponse = await apiClient.dio.get(
+          '/notifications',
+          queryParameters: {'page': 1, 'per_page': 1},
+        );
+
+        if (notifListResponse.statusCode == 200) {
+          final List<dynamic> list = notifListResponse.data['data'] ?? [];
+          if (list.isNotEmpty) {
+            final latest = list.first as Map<String, dynamic>;
+            final id = latest['id']?.toString();
+
+            if (id != null && id != _lastKnownNotifId) {
+              _lastKnownNotifId = id;
+              await showNotificationAlert(
+                title: latest['title'] ?? 'Pembaruan Tiket',
+                body: latest['body'] ?? 'Ada perubahan status pada tiket Anda',
+                data: {
+                  'ticket_id': latest['ticketId'] ?? latest['ticket_id'],
+                  'id': id,
+                },
+              );
+            }
           }
         }
+      } else {
+        _lastUnreadCount = currentUnread;
       }
     } catch (_) {
       // Abaikan error jaringan sementara

@@ -13,6 +13,7 @@ import 'package:halo_apu_mobile/core/providers/connectivity_provider.dart';
 import 'package:halo_apu_mobile/core/theme/app_theme.dart';
 import 'package:halo_apu_mobile/presentation/widgets/shimmer.dart';
 import 'package:halo_apu_mobile/presentation/widgets/offline_banner.dart';
+import 'package:halo_apu_mobile/presentation/widgets/image_doodle_screen.dart';
 import 'providers/user_ticket_provider.dart';
 import 'package:halo_apu_mobile/domain/models/ticket_model.dart';
 
@@ -483,8 +484,51 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
 
       if (source != null) {
         final picker = ImagePicker();
-        final XFile? image = await picker.pickImage(source: source, maxWidth: 1920, imageQuality: 80);
+        final XFile? image = await picker.pickImage(source: source, maxWidth: 1920, imageQuality: 85);
         if (image != null) {
+          if (mounted) {
+            final shouldDoodle = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                title: const Row(
+                  children: [
+                    Icon(Icons.draw_rounded, color: AppTheme.oceanWater),
+                    SizedBox(width: 8),
+                    Text('Tandai / Coret Foto?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ],
+                ),
+                content: const Text(
+                  'Apakah Anda ingin mencoret atau menandai bagian masalah pada foto sebelum dilampirkan?',
+                  style: TextStyle(fontSize: 13),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Langsung Lampirkan', style: TextStyle(color: Colors.grey)),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    icon: const Icon(Icons.draw_rounded, size: 16),
+                    label: const Text('Coret & Tandai'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.oceanWater,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            if (shouldDoodle == true && mounted) {
+              final annotated = await ImageDoodleScreen.annotate(context, image);
+              if (annotated != null) {
+                await processFile(annotated);
+                return;
+              }
+            }
+          }
           await processFile(image);
         }
       }
@@ -1118,6 +1162,33 @@ class _CreateTicketScreenState extends ConsumerState<CreateTicketScreen> {
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
+                              if (fileName.toLowerCase().endsWith('.jpg') ||
+                                  fileName.toLowerCase().endsWith('.jpeg') ||
+                                  fileName.toLowerCase().endsWith('.png') ||
+                                  type == 'upload_gambar') ...[
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final annotated = await ImageDoodleScreen.annotate(context, file);
+                                    if (annotated != null && mounted) {
+                                      setState(() {
+                                        _attachmentFiles[id]![entry.key] = annotated;
+                                        _saveDraft();
+                                      });
+                                    }
+                                  },
+                                  icon: const Icon(Icons.draw_rounded, size: 15, color: AppTheme.oceanWater),
+                                  label: const Text(
+                                    'Coret',
+                                    style: TextStyle(fontSize: 11.5, color: AppTheme.oceanWater, fontWeight: FontWeight.bold),
+                                  ),
+                                  style: TextButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
                               IconButton(
                                 icon: const Icon(Icons.delete, color: Colors.red, size: 18),
                                 padding: EdgeInsets.zero,

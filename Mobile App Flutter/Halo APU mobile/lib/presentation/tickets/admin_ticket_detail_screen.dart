@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:halo_apu_mobile/core/theme/app_theme.dart';
+import '../widgets/image_doodle_screen.dart';
 import '../../../../core/config/api_config.dart';
 import '../../../../domain/models/ticket_model.dart';
 import '../../../../core/services/ticket_service.dart';
@@ -846,8 +847,53 @@ class _AdminTicketDetailScreenState
     if (type == 'kamera' || type == 'galeri') {
       final picker = ImagePicker();
       final source = type == 'kamera' ? ImageSource.camera : ImageSource.gallery;
-      final image = await picker.pickImage(source: source, maxWidth: 1920, imageQuality: 80);
-      if (image != null) await process(image);
+      final image = await picker.pickImage(source: source, maxWidth: 1920, imageQuality: 85);
+      if (image != null) {
+        if (mounted) {
+          final shouldDoodle = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+              title: const Row(
+                children: [
+                  Icon(Icons.draw_rounded, color: AppTheme.oceanWater),
+                  SizedBox(width: 8),
+                  Text('Tandai / Coret Foto?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                ],
+              ),
+              content: const Text(
+                'Apakah Anda ingin mencoret atau menandai foto sebelum dikirim ke balasan tiket?',
+                style: TextStyle(fontSize: 13),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Langsung Lampirkan', style: TextStyle(color: Colors.grey)),
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  icon: const Icon(Icons.draw_rounded, size: 16),
+                  label: const Text('Coret & Tandai'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.oceanWater,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ],
+            ),
+          );
+
+          if (shouldDoodle == true && mounted) {
+            final annotated = await ImageDoodleScreen.annotate(context, image);
+            if (annotated != null) {
+              await process(annotated);
+              return;
+            }
+          }
+        }
+        await process(image);
+      }
     } else {
       final result = await FilePicker.pickFiles(
         type: FileType.custom,
@@ -1607,7 +1653,25 @@ class _AdminTicketDetailScreenState
                         children: [
                           const Icon(Icons.insert_drive_file, size: 20, color: AppTheme.oceanWater),
                           const SizedBox(width: 4),
-                          SizedBox(width: 60, child: Text(file.name, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12))),
+                          if (file.name.toLowerCase().endsWith('.jpg') ||
+                              file.name.toLowerCase().endsWith('.jpeg') ||
+                              file.name.toLowerCase().endsWith('.png')) ...[
+                            IconButton(
+                              icon: const Icon(Icons.draw_rounded, size: 16, color: AppTheme.oceanWater),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              tooltip: 'Coret & Tandai Foto',
+                              onPressed: () async {
+                                final annotated = await ImageDoodleScreen.annotate(context, file);
+                                if (annotated != null && mounted) {
+                                  setState(() {
+                                    _replyAttachments[i] = annotated;
+                                  });
+                                }
+                              },
+                            ),
+                            const SizedBox(width: 4),
+                          ],
                           IconButton(
                             icon: const Icon(Icons.close, size: 16),
                             padding: EdgeInsets.zero,

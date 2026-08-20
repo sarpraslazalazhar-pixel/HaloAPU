@@ -81,10 +81,23 @@ class _UserTicketListScreenState extends ConsumerState<UserTicketListScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
             child: TextField(
               controller: _searchController,
-              onChanged: _onSearchChanged,
+              onChanged: (val) {
+                setState(() {});
+                _onSearchChanged(val);
+              },
               decoration: InputDecoration(
-                hintText: 'Cari ID, Judul, atau Deskripsi',
+                hintText: 'Cari ID, Layanan, Kanal, atau Detail...',
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                suffixIcon: _searchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18, color: Colors.grey),
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() {});
+                          _onSearchChanged('');
+                        },
+                      )
+                    : null,
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(

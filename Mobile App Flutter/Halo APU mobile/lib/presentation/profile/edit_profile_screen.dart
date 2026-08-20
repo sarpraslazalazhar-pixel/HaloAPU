@@ -6,6 +6,7 @@ import '../../core/theme/app_theme.dart';
 import '../../domain/models/user_profile_model.dart';
 import '../widgets/app_avatar.dart';
 import 'providers/user_profile_provider.dart';
+import 'widgets/circular_crop_screen.dart';
 
 class EditProfileScreen extends ConsumerStatefulWidget {
   final StateNotifierProvider<UserProfileNotifier, UserProfile>?
@@ -51,6 +52,29 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
     super.dispose();
   }
 
+  Future<void> _handleSelectedImage(XFile image) async {
+    final rawBytes = await image.readAsBytes();
+    if (!mounted) return;
+
+    final croppedBytes = await Navigator.push<Uint8List>(
+      context,
+      MaterialPageRoute(
+        builder: (ctx) => CircularCropScreen(imageBytes: rawBytes),
+      ),
+    );
+
+    if (croppedBytes != null && mounted) {
+      setState(() {
+        _pickedImageBytes = croppedBytes;
+        _pickedImage = XFile.fromData(
+          croppedBytes,
+          name: 'avatar_${DateTime.now().millisecondsSinceEpoch}.png',
+          mimeType: 'image/png',
+        );
+      });
+    }
+  }
+
   Future<void> _pickAvatar() async {
     final ImagePicker picker = ImagePicker();
     
@@ -85,16 +109,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 Navigator.pop(sheetContext);
                 final XFile? image = await picker.pickImage(
                   source: ImageSource.gallery,
-                  maxWidth: 1024,
-                  maxHeight: 1024,
-                  imageQuality: 85,
+                  maxWidth: 1600,
+                  maxHeight: 1600,
+                  imageQuality: 95,
                 );
                 if (image != null) {
-                  final bytes = await image.readAsBytes();
-                  setState(() {
-                    _pickedImage = image;
-                    _pickedImageBytes = bytes;
-                  });
+                  await _handleSelectedImage(image);
                 }
               },
             ),
@@ -113,16 +133,12 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 Navigator.pop(sheetContext);
                 final XFile? image = await picker.pickImage(
                   source: ImageSource.camera,
-                  maxWidth: 1024,
-                  maxHeight: 1024,
-                  imageQuality: 85,
+                  maxWidth: 1600,
+                  maxHeight: 1600,
+                  imageQuality: 95,
                 );
                 if (image != null) {
-                  final bytes = await image.readAsBytes();
-                  setState(() {
-                    _pickedImage = image;
-                    _pickedImageBytes = bytes;
-                  });
+                  await _handleSelectedImage(image);
                 }
               },
             ),

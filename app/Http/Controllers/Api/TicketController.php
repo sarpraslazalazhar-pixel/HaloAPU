@@ -47,12 +47,36 @@ class TicketController extends Controller
         }
 
         // Filter by search keyword
-        if ($request->has('search') && $request->search) {
-            $keyword = $request->search;
-            $query->where(function ($q) use ($keyword) {
-                $q->where('id', 'like', "%{$keyword}%")
-                  ->orWhere('title', 'like', "%{$keyword}%")
-                  ->orWhere('description', 'like', "%{$keyword}%");
+        if ($request->has('search') && !empty($request->search)) {
+            $keyword = trim($request->search);
+            $cleanId = str_replace(['#', '-', ' '], '', $keyword);
+
+            $query->where(function ($q) use ($keyword, $cleanId) {
+                if (!empty($cleanId)) {
+                    $q->where('id', 'like', "%{$cleanId}%");
+                }
+                $q->orWhere('form_data', 'like', "%{$keyword}%")
+                  // Jenis Layanan (SubUnit)
+                  ->orWhereHas('subUnit', function ($subQuery) use ($keyword) {
+                      $subQuery->where('nama_layanan', 'like', "%{$keyword}%")
+                               ->orWhere('deskripsi', 'like', "%{$keyword}%")
+                               ->orWhere('monitor_kategori', 'like', "%{$keyword}%");
+                  })
+                  // Kanal Layanan (Unit)
+                  ->orWhereHas('unit', function ($unitQuery) use ($keyword) {
+                      $unitQuery->where('nama_unit', 'like', "%{$keyword}%")
+                                ->orWhere('deskripsi', 'like', "%{$keyword}%");
+                  })
+                  // Pemohon Tiket
+                  ->orWhereHas('user', function ($userQuery) use ($keyword) {
+                      $userQuery->where('name', 'like', "%{$keyword}%")
+                                ->orWhere('username', 'like', "%{$keyword}%");
+                  })
+                  // Operator / Admin Ditugaskan
+                  ->orWhereHas('assignedAdmin', function ($adminQuery) use ($keyword) {
+                      $adminQuery->where('name', 'like', "%{$keyword}%")
+                                 ->orWhere('username', 'like', "%{$keyword}%");
+                  });
             });
         }
 

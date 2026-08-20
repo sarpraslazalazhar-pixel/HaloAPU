@@ -128,6 +128,13 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: '/tickets/detail',
+      pageBuilder: (context, state) {
+        final ticket = state.extra as TicketModel;
+        return _fadeSlidePage(state, UserTicketDetailScreen(ticket: ticket));
+      },
+    ),
+    GoRoute(
       path: '/tickets/admin/detail',
       pageBuilder: (context, state) {
         final ticket = state.extra as TicketModel;

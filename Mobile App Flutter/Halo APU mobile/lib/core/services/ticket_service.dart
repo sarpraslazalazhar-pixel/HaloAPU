@@ -88,7 +88,7 @@ class TicketService {
       };
 
       if (statuses != null && statuses.isNotEmpty) {
-        queryParameters['status'] = statuses;
+        queryParameters['status'] = statuses.join(',');
       }
 
       final response = await _dio.get('/tickets', queryParameters: queryParameters);

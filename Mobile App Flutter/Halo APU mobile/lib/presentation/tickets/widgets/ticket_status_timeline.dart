@@ -5,8 +5,13 @@ import 'package:intl/intl.dart';
 
 class TicketStatusTimeline extends StatelessWidget {
   final TicketModel ticket;
+  final VoidCallback? onAssignTap;
 
-  const TicketStatusTimeline({super.key, required this.ticket});
+  const TicketStatusTimeline({
+    super.key, 
+    required this.ticket,
+    this.onAssignTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -101,6 +106,30 @@ class TicketStatusTimeline extends StatelessWidget {
                           : (ticket.assignedTo != null ? 'Ditangani oleh ${ticket.assignedTo}' : 'Sedang dalam penanganan teknisi/admin.'),
                       isCompleted: status == TicketStatus.solved || status == TicketStatus.rejected || status == TicketStatus.cancelled,
                       isActive: status == TicketStatus.processing || status == TicketStatus.needRevision,
+                      actionWidget: onAssignTap != null ? InkWell(
+                        onTap: onAssignTap,
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          margin: const EdgeInsets.only(top: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEEF2FF),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFFC7D2FE)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.assignment_ind_rounded, size: 12, color: Color(0xFF4F46E5)),
+                              const SizedBox(width: 4),
+                              Text(
+                                ticket.assignedTo != null ? 'Ganti Operator' : 'Pilih Operator',
+                                style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Color(0xFF4F46E5)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ) : null,
                     ),
                     
                   // Step 3: Selesai / Ditolak / Dibatalkan
@@ -163,6 +192,7 @@ class TicketStatusTimeline extends StatelessWidget {
     bool isActive = false,
     bool isLast = false,
     Color? color,
+    Widget? actionWidget,
   }) {
     final statusColor = color ?? (isCompleted ? AppTheme.success : (isActive ? const Color(0xFF00768C) : const Color(0xFFCBD5E1)));
     
@@ -205,7 +235,8 @@ class TicketStatusTimeline extends StatelessWidget {
                       )
                     : null),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
+          
           // Content
           Expanded(
             child: Column(
@@ -214,9 +245,9 @@ class TicketStatusTimeline extends StatelessWidget {
                 Text(
                   title,
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
                     fontSize: 13.5,
-                    color: isActive || isCompleted ? const Color(0xFF0F172A) : const Color(0xFF64748B),
+                    fontWeight: isCompleted || isActive ? FontWeight.bold : FontWeight.w500,
+                    color: isCompleted || isActive ? const Color(0xFF1E293B) : const Color(0xFF94A3B8),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -225,9 +256,10 @@ class TicketStatusTimeline extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 11.5,
                     color: Color(0xFF64748B),
-                    height: 1.3,
+                    height: 1.35,
                   ),
                 ),
+                if (actionWidget != null) actionWidget,
               ],
             ),
           ),

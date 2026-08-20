@@ -31,6 +31,8 @@ class _AdminTicketDetailScreenState
   late TicketModel _ticket;
   bool _isLoadingDetail = true;
   bool _isSuperAdmin = false;
+  bool _canAssignOperator = false;
+  String _currentAdminName = '';
   final ScrollController _chatScrollController = ScrollController();
   final FocusNode _chatFocusNode = FocusNode();
   final TextEditingController _messageController = TextEditingController();
@@ -69,8 +71,18 @@ class _AdminTicketDetailScreenState
     if (userDataStr != null) {
       final userData = jsonDecode(userDataStr);
       final position = userData['position']?.toString().toLowerCase() ?? '';
+      final role = userData['role']?.toString().toLowerCase() ?? '';
+      final division = userData['division']?.toString().toLowerCase() ?? '';
+      final isSuper = userData['isSuperAdmin'] == true ||
+          position.contains('super') ||
+          role.contains('super') ||
+          division.contains('super');
+      final canAssign = userData['canAssignOperator'] == true || isSuper;
+
       setState(() {
-        _isSuperAdmin = position.contains('super admin') || position.contains('superadmin');
+        _isSuperAdmin = isSuper;
+        _canAssignOperator = canAssign;
+        _currentAdminName = userData['name']?.toString() ?? userData['username']?.toString() ?? '';
       });
     }
   }
@@ -575,6 +587,184 @@ class _AdminTicketDetailScreenState
       );
   }
 
+  void _showAssignOperatorSheet() {
+    final operators = _ticket.operators ?? [];
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.assignment_ind_rounded, color: Color(0xFF4F46E5), size: 22),
+                ),
+                const SizedBox(width: 12),
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pilih & Tugaskan Operator',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Tugaskan tiket ini ke operator / teknisi terkait',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            if (operators.isEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(vertical: 32),
+                alignment: Alignment.center,
+                child: const Text('Tidak ada operator yang terdaftar untuk unit tiket ini', style: TextStyle(color: Colors.grey)),
+              )
+            else
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.45,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: operators.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 8),
+                  itemBuilder: (ctx, idx) {
+                    final op = operators[idx];
+                    final int opId = op['id'];
+                    final String opName = op['name'] ?? 'Operator';
+                    final bool isAssigned = (_ticket.assignedTo ?? '').toLowerCase() == opName.toLowerCase();
+
+                    return InkWell(
+                      borderRadius: BorderRadius.circular(14),
+                      onTap: () async {
+                        Navigator.pop(sheetContext);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            behavior: SnackBarBehavior.floating,
+                            content: Text('Menugaskan tiket ke $opName...'),
+                          ),
+                        );
+
+                        final result = await _ticketService.assignOperator(_ticket.id, opId);
+                        if (result['success']) {
+                          _applyTicket(TicketModel.safeFromJson(result['data']));
+                          _loadTicketDetail();
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: const Color(0xFF10B981),
+                                content: Text('Tiket berhasil ditugaskan ke $opName'),
+                              ),
+                            );
+                          }
+                        } else {
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: Colors.red.shade600,
+                                content: Text(result['message'] ?? 'Gagal menugaskan operator'),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        decoration: BoxDecoration(
+                          color: isAssigned ? const Color(0xFFEEF2FF) : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isAssigned ? const Color(0xFF6366F1) : const Color(0xFFE2E8F0),
+                            width: isAssigned ? 1.8 : 1.0,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 18,
+                              backgroundColor: isAssigned ? const Color(0xFF4F46E5) : Colors.grey.shade200,
+                              child: Text(
+                                opName.isNotEmpty ? opName[0].toUpperCase() : 'O',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: isAssigned ? Colors.white : Colors.grey.shade700,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    opName,
+                                    style: TextStyle(
+                                      fontWeight: isAssigned ? FontWeight.bold : FontWeight.w600,
+                                      fontSize: 14,
+                                      color: isAssigned ? const Color(0xFF312E81) : const Color(0xFF1E293B),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    isAssigned ? 'Operator Saat Ini' : 'Petugas Operator',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: isAssigned ? const Color(0xFF4F46E5) : Colors.grey.shade500,
+                                      fontWeight: isAssigned ? FontWeight.w600 : FontWeight.normal,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isAssigned)
+                              const Icon(Icons.check_circle_rounded, color: Color(0xFF4F46E5), size: 22)
+                            else
+                              Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade400, size: 14),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _showQuickReplySheet() {
     showModalBottomSheet<void>(
       context: context,
@@ -783,7 +973,10 @@ class _AdminTicketDetailScreenState
                   const SizedBox(height: 80),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                    child: TicketStatusTimeline(ticket: _ticket),
+                    child: TicketStatusTimeline(
+                      ticket: _ticket,
+                      onAssignTap: (_canAssignOperator || _isSuperAdmin) ? _showAssignOperatorSheet : null,
+                    ),
                   ),
                 ],
               ),
@@ -1358,6 +1551,7 @@ class _AdminTicketDetailScreenState
             reply: reply,
             isCurrentUserAdmin: true,
             requesterName: _ticket.requesterName,
+            currentAdminName: _currentAdminName,
           ))
         else
           Container(
@@ -1478,6 +1672,29 @@ class _AdminTicketDetailScreenState
             // Action Buttons (Hidden when keyboard is open)
             if (!isKeyboardOpen) ...[
               const SizedBox(height: 16),
+              if (_canAssignOperator || _isSuperAdmin) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _showAssignOperatorSheet,
+                    icon: const Icon(Icons.assignment_ind_rounded, size: 18),
+                    label: Text(
+                      _ticket.assignedTo != null && _ticket.assignedTo!.isNotEmpty
+                          ? 'Tugaskan Ulang Operator (${_ticket.assignedTo})'
+                          : 'Pilih & Tugaskan Operator',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      backgroundColor: const Color(0xFF4F46E5), // Indigo
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
               Row(
                 children: [
                   Expanded(

@@ -57,11 +57,15 @@ class TicketController extends Controller
         }
 
         // Filter by status
-        if ($request->has('status') && $request->status) {
-            if (is_array($request->status)) {
-                $query->whereIn('status', $request->status);
+        if ($request->has('status') && !empty($request->status)) {
+            $status = $request->status;
+            if (is_string($status)) {
+                $status = str_contains($status, ',') ? explode(',', $status) : [$status];
+            }
+            if (is_array($status)) {
+                $query->whereIn('status', $status);
             } else {
-                $query->where('status', $request->status);
+                $query->where('status', $status);
             }
         }
 

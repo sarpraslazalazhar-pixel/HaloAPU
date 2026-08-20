@@ -559,7 +559,7 @@ class _UserDashboardScreenState extends ConsumerState<UserDashboardScreen> {
       color: Colors.transparent,
       child: InkWell(
         onTap: () {
-          context.push('/tickets/detail', extra: ticket);
+          context.push('/tickets/user/detail', extra: ticket);
         },
         borderRadius: BorderRadius.circular(20),
         child: Container(

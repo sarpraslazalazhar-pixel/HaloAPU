@@ -19,15 +19,31 @@ class AdminTicketNotifier extends StateNotifier<AsyncValue<List<TicketModel>>> {
   bool get isLoadingMore => _isLoadingMore;
 
   void setFilter(String filter) {
-    if (filter == 'Semua') {
-      _currentStatuses = null;
-    } else {
-      switch (filter) {
-        case 'Terbuka': _currentStatuses = ['open']; break;
-        case 'Diproses': _currentStatuses = ['on_proses']; break;
-        case 'Selesai': _currentStatuses = ['solve']; break;
-        case 'Ditolak': _currentStatuses = ['reject']; break;
-      }
+    switch (filter) {
+      case 'Semua':
+        _currentStatuses = null;
+        break;
+      case 'Aktif':
+        _currentStatuses = ['open', 'on_proses', 'pending', 'need_revision'];
+        break;
+      case 'Terbuka':
+      case 'Menunggu':
+        _currentStatuses = ['open'];
+        break;
+      case 'Diproses':
+        _currentStatuses = ['on_proses'];
+        break;
+      case 'Tertunda':
+        _currentStatuses = ['pending'];
+        break;
+      case 'Selesai':
+        _currentStatuses = ['solve'];
+        break;
+      case 'Ditolak':
+        _currentStatuses = ['reject', 'dibatalkan'];
+        break;
+      default:
+        _currentStatuses = null;
     }
     _loadInitial();
   }

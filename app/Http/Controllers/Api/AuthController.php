@@ -330,6 +330,18 @@ class AuthController extends Controller
         $roleName = $admin->getRoleNames()->first() ?? 'Admin';
         $formattedRole = ucwords(str_replace('_', ' ', $roleName));
 
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'super_admin', 'Super Admin']) ||
+            str_contains(strtolower($formattedRole), 'super admin');
+        
+        $canAssignOperator = $isSuperAdmin;
+        if (!$canAssignOperator && method_exists($admin, 'hasPermissionTo')) {
+            try {
+                $canAssignOperator = $admin->hasPermissionTo('akses-assign-operator');
+            } catch (\Throwable $e) {
+                $canAssignOperator = false;
+            }
+        }
+
         return [
             'id' => $admin->id,
             'username' => $admin->username ?? '',
@@ -339,6 +351,9 @@ class AuthController extends Controller
             'department' => 'Sistem Administrator',
             'division' => 'Role: ' . $formattedRole,
             'position' => $formattedRole,
+            'role' => $roleName,
+            'isSuperAdmin' => (bool) $isSuperAdmin,
+            'canAssignOperator' => (bool) $canAssignOperator,
             'avatarUrl' => $avatarUrl ?? '',
         ];
     }

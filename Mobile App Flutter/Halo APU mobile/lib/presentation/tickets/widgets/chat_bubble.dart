@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-
 import '../../../../core/config/api_config.dart';
 import '../../../../domain/models/ticket_model.dart';
 import 'package:intl/intl.dart';
@@ -9,17 +8,38 @@ class ChatBubble extends StatelessWidget {
   final TicketReply reply;
   final bool isCurrentUserAdmin;
   final String requesterName;
+  final String? currentAdminName;
 
   const ChatBubble({
     super.key, 
     required this.reply,
     required this.isCurrentUserAdmin,
     required this.requesterName,
+    this.currentAdminName,
   });
 
   @override
   Widget build(BuildContext context) {
-    bool isMe = reply.isFromAdmin == isCurrentUserAdmin;
+    bool isMe = false;
+    if (isCurrentUserAdmin) {
+      if (reply.isFromAdmin) {
+        if (currentAdminName != null && currentAdminName!.isNotEmpty) {
+          final myName = currentAdminName!.toLowerCase().trim();
+          final senderName = (reply.adminName ?? '').toLowerCase().trim();
+          isMe = senderName.isNotEmpty && (
+            senderName == myName || 
+            myName.contains(senderName) || 
+            senderName.contains(myName)
+          );
+        } else {
+          isMe = false;
+        }
+      } else {
+        isMe = false;
+      }
+    } else {
+      isMe = !reply.isFromAdmin;
+    }
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
@@ -197,20 +217,33 @@ class ChatBubble extends StatelessWidget {
   }
 
   Widget _buildOtherBubble(BuildContext context) {
+    final bool isAdminSender = reply.isFromAdmin;
+    final String senderLabel = isAdminSender
+        ? (reply.adminName != null && reply.adminName!.isNotEmpty
+            ? '${reply.adminName} (Operator)'
+            : 'Admin (IT Support)')
+        : '$requesterName (Pengguna)';
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Avatar
         Container(
-          width: 32,
-          height: 32,
+          width: 34,
+          height: 34,
           decoration: BoxDecoration(
-            color: Colors.grey.shade100,
+            color: isAdminSender ? const Color(0xFFEFF6FF) : Colors.grey.shade100,
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.grey.shade300),
+            border: Border.all(
+              color: isAdminSender ? const Color(0xFF93C5FD) : Colors.grey.shade300,
+            ),
           ),
-          child: const Center(
-            child: Icon(Icons.support_agent, size: 18, color: Colors.grey),
+          child: Center(
+            child: Icon(
+              isAdminSender ? Icons.support_agent_rounded : Icons.person_outline_rounded,
+              size: 18,
+              color: isAdminSender ? const Color(0xFF2563EB) : Colors.grey.shade600,
+            ),
           ),
         ),
         const SizedBox(width: 8),
@@ -221,10 +254,12 @@ class ChatBubble extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(left: 4, bottom: 4),
                 child: Text(
-                  reply.isFromAdmin 
-                      ? '${reply.adminName ?? 'Admin'} (IT Support)'
-                      : '$requesterName (Pengguna)',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  senderLabel,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: isAdminSender ? const Color(0xFF1E40AF) : Colors.grey.shade700,
+                  ),
                 ),
               ),
               Container(
@@ -247,7 +282,7 @@ class ChatBubble extends StatelessWidget {
                   ],
                 ),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (reply.attachments != null && reply.attachments!.isNotEmpty)
                       _buildAttachments(context, reply.attachments!, false),
@@ -256,9 +291,12 @@ class ChatBubble extends StatelessWidget {
                       style: const TextStyle(fontSize: 14, color: Colors.black87),
                     ),
                     const SizedBox(height: 4),
-                    Text(
-                      _formatDateTime(reply.createdAt.toLocal()),
-                      style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                    Align(
+                      alignment: Alignment.bottomRight,
+                      child: Text(
+                        _formatDateTime(reply.createdAt.toLocal()),
+                        style: TextStyle(fontSize: 10, color: Colors.grey.shade500),
+                      ),
                     ),
                   ],
                 ),
@@ -285,7 +323,11 @@ class ChatBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 4, bottom: 4),
                 child: Text(
                   'Anda',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.grey.shade600,
+                  ),
                 ),
               ),
               Container(

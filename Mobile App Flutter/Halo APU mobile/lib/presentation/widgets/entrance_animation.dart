@@ -17,20 +17,21 @@ class EntranceAnimation extends StatefulWidget {
 }
 
 class _EntranceAnimationState extends State<EntranceAnimation>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller = AnimationController(
-    vsync: this,
-    duration: const Duration(milliseconds: 480),
-  );
-
-  late final Animation<double> _animation =
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+    with TickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic);
+
     if (widget.delay == Duration.zero) {
-      _controller.forward();
+      if (mounted) _controller.forward();
     } else {
       Future.delayed(widget.delay, () {
         if (mounted) _controller.forward();

@@ -20,7 +20,7 @@ class UserTicketListScreen extends ConsumerStatefulWidget {
 class _UserTicketListScreenState extends ConsumerState<UserTicketListScreen> {
   final ScrollController _scrollController = ScrollController();
   String _selectedFilter = 'Semua';
-  final List<String> _filters = ['Semua', 'Aktif', 'Diproses', 'Selesai', 'Ditolak'];
+  final List<String> _filters = ['Semua', 'Aktif', 'Menunggu', 'Diproses', 'Tertunda', 'Selesai', 'Ditolak'];
   bool _isLoadingMore = false;
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounce;

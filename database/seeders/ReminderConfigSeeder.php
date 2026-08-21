@@ -23,6 +23,12 @@ class ReminderConfigSeeder extends Seeder
                 'aktif' => true,
             ],
             [
+                'jenis_reminder' => 'sla_half',
+                'lead_time_value' => 50,
+                'channel_aktif' => ['in_app', 'email'],
+                'aktif' => true,
+            ],
+            [
                 'jenis_reminder' => 'pending_lama',
                 'lead_time_value' => 3,
                 'channel_aktif' => ['in_app', 'email'],

@@ -81,6 +81,7 @@ class ChatController extends Controller
 
                 $latestMsg = $conv->latestMessage;
 
+                $target = null;
                 if ($conv->type === 'public_global') {
                     $title = 'Forum Bantuan Halo APU';
                     $subtitle = 'Grup Publik';
@@ -94,16 +95,32 @@ class ChatController extends Controller
                     $avatar = $target && $target->avatar_path ? '/storage/' . $target->avatar_path : null;
                 }
 
+                $isLastMessageRead = false;
+                if ($latestMsg) {
+                    $isLastMessageRead = $latestMsg->reads()
+                        ->where(function ($rq) use ($latestMsg) {
+                            $rq->where('user_id', '!=', $latestMsg->sender_id)
+                               ->orWhere('user_type', '!=', $latestMsg->sender_type);
+                        })
+                        ->exists();
+                }
+
                 return [
                     'id' => $conv->id,
                     'title' => $title,
                     'subtitle' => $subtitle,
                     'is_assigned' => $isAssigned,
                     'user' => [
+                        'id' => $target?->id,
+                        'name' => $target ? ($target->name ?? $target->username) : null,
                         'avatar' => $avatar,
+                        'last_seen_at' => $target?->last_seen_at ? $target->last_seen_at->toIso8601String() : null,
                     ],
                     'last_message' => $latestMsg ? ($latestMsg->body ?? ($latestMsg->attachments->first() ? '[Lampiran]' : '[Tiket]')) : 'Belum ada pesan',
                     'last_message_at' => $conv->last_message_at ? $conv->last_message_at->toIso8601String() : $conv->updated_at->toIso8601String(),
+                    'last_message_sender_id' => $latestMsg?->sender_id,
+                    'last_message_sender_type' => $latestMsg?->sender_type,
+                    'is_last_message_read' => $isLastMessageRead,
                     'unread_count' => $unreadCount,
                 ];
             });

@@ -32,6 +32,14 @@ class ChatController extends Controller
 
         $admin->update(['last_seen_at' => now()]);
 
+        // Auto-create Bot Pengingat conversation for this admin
+        Conversation::firstOrCreate([
+            'type' => 'admin_bot_reminder',
+            'admin_one_id' => $admin->id,
+        ], [
+            'last_message_at' => now(),
+        ]);
+
         // Auto-create direct conversations with all other admins
         $otherAdmins = Admin::where('id', '!=', $admin->id)->get();
         foreach ($otherAdmins as $otherAdmin) {
@@ -56,6 +64,10 @@ class ChatController extends Controller
             'latestMessage.attachments',
         ])->where(function ($base) use ($admin) {
             $base->where('type', 'public_global')
+                 ->orWhere(function ($q) use ($admin) {
+                     $q->where('type', 'admin_bot_reminder')
+                       ->where('admin_one_id', $admin->id);
+                 })
                  ->orWhere(function ($q) use ($admin) {
                      $q->where('type', 'admin_direct')
                        ->where(function ($q2) use ($admin) {
@@ -108,8 +120,14 @@ class ChatController extends Controller
                     ->count();
 
                 $latestMsg = $conv->latestMessage;
+                $isBot = false;
 
-                if ($conv->type === 'public_global') {
+                if ($conv->type === 'admin_bot_reminder') {
+                    $target = null;
+                    $title = 'Bot Pengingat Halo APU';
+                    $subtitle = 'Asisten Pengingat Otomatis';
+                    $isBot = true;
+                } elseif ($conv->type === 'public_global') {
                     $target = null;
                     $title = 'Forum Bantuan Halo APU';
                     $subtitle = 'Grup Publik';
@@ -123,8 +141,20 @@ class ChatController extends Controller
                     $subtitle = 'Admin';
                 }
 
+                $isLastMessageRead = false;
+                if ($latestMsg) {
+                    $isLastMessageRead = $latestMsg->reads()
+                        ->where(function ($rq) use ($latestMsg) {
+                            $rq->where('user_id', '!=', $latestMsg->sender_id)
+                               ->orWhere('user_type', '!=', $latestMsg->sender_type);
+                        })
+                        ->exists();
+                }
+
                 return [
                     'id' => $conv->id,
+                    'is_bot' => $isBot,
+                    'type' => $conv->type,
                     'user' => $target ? [
                         'id' => $target->id,
                         'name' => $target->name ?? $target->username,
@@ -136,6 +166,9 @@ class ChatController extends Controller
                     'subtitle' => $subtitle,
                     'last_message' => $latestMsg ? ($latestMsg->body ?? ($latestMsg->attachments->first() ? '[Lampiran]' : '[Tiket]')) : 'Belum ada pesan',
                     'last_message_at' => $conv->last_message_at ? $conv->last_message_at->toIso8601String() : $conv->updated_at->toIso8601String(),
+                    'last_message_sender_id' => $latestMsg?->sender_id,
+                    'last_message_sender_type' => $latestMsg?->sender_type,
+                    'is_last_message_read' => $isLastMessageRead,
                     'unread_count' => $unreadCount,
                 ];
             });
@@ -156,7 +189,13 @@ class ChatController extends Controller
                 ->first();
 
             if ($activeConv) {
-                if ($activeConv->type === 'public_global') {
+                $isBot = false;
+                if ($activeConv->type === 'admin_bot_reminder') {
+                    $target = null;
+                    $title = 'Bot Pengingat Halo APU';
+                    $subtitle = 'Asisten Pengingat Otomatis';
+                    $isBot = true;
+                } elseif ($activeConv->type === 'public_global') {
                     $target = null;
                     $title = 'Forum Bantuan Halo APU';
                     $subtitle = 'Grup Publik';
@@ -172,6 +211,8 @@ class ChatController extends Controller
 
                 $activeConversationData = [
                     'id' => $activeConv->id,
+                    'is_bot' => $isBot,
+                    'type' => $activeConv->type,
                     'user' => $target ? [
                         'id' => $target->id,
                         'name' => $target->name ?? $target->username,
@@ -185,7 +226,10 @@ class ChatController extends Controller
 
                 // Mark unread messages as read
                 $unreadMessages = Message::where('conversation_id', $activeConv->id)
-                    ->where('sender_type', '!=', Admin::class)
+                    ->where(function ($sq) use ($admin) {
+                        $sq->where('sender_type', '!=', Admin::class)
+                           ->orWhere('sender_id', '!=', $admin->id);
+                    })
                     ->whereDoesntHave('reads', function ($q) use ($admin) {
                         $q->where('user_type', Admin::class)->where('user_id', $admin->id);
                     })
@@ -224,7 +268,7 @@ class ChatController extends Controller
                         'conversation_id' => $msg->conversation_id,
                         'sender_type' => $msg->sender_type,
                         'sender_id' => $msg->sender_id,
-                        'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Sistem',
+                        'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Bot Pengingat Halo APU',
                         'sender_avatar' => $msg->sender && !empty($msg->sender->avatar_path) ? '/storage/' . $msg->sender->avatar_path : null,
                         'ticket' => $msg->ticket ? [
                             'id' => $msg->ticket->id,
@@ -409,7 +453,10 @@ class ChatController extends Controller
         Gate::forUser($admin)->authorize('view', $conversation);
 
         $unreadMessages = Message::where('conversation_id', $conversation->id)
-            ->where('sender_type', '!=', Admin::class)
+            ->where(function ($sq) use ($admin) {
+                $sq->where('sender_type', '!=', Admin::class)
+                   ->orWhere('sender_id', '!=', $admin->id);
+            })
             ->whereDoesntHave('reads', function ($q) use ($admin) {
                 $q->where('user_type', Admin::class)->where('user_id', $admin->id);
             })
@@ -456,7 +503,10 @@ class ChatController extends Controller
 
         // Mark as read
         $unreadMessages = Message::where('conversation_id', $conversation->id)
-            ->where('sender_type', '!=', Admin::class)
+            ->where(function ($sq) use ($admin) {
+                $sq->where('sender_type', '!=', Admin::class)
+                   ->orWhere('sender_id', '!=', $admin->id);
+            })
             ->whereDoesntHave('reads', function ($q) use ($admin) {
                 $q->where('user_type', Admin::class)->where('user_id', $admin->id);
             })
@@ -476,7 +526,13 @@ class ChatController extends Controller
             broadcast(new ChatMessageRead($conversation->id, Admin::class, $admin->id))->toOthers();
         }
 
-        if ($conversation->type === 'public_global') {
+        $isBot = false;
+        if ($conversation->type === 'admin_bot_reminder') {
+            $target = null;
+            $title = 'Bot Pengingat Halo APU';
+            $subtitle = 'Asisten Pengingat Otomatis';
+            $isBot = true;
+        } elseif ($conversation->type === 'public_global') {
             $target = null;
             $title = 'Forum Bantuan Halo APU';
             $subtitle = 'Grup Publik';
@@ -492,6 +548,8 @@ class ChatController extends Controller
 
         $conversationData = [
             'id' => $conversation->id,
+            'is_bot' => $isBot,
+            'type' => $conversation->type,
             'user' => $target ? [
                 'id' => $target->id,
                 'name' => $target->name ?? $target->username,
@@ -522,7 +580,7 @@ class ChatController extends Controller
                 'conversation_id' => $msg->conversation_id,
                 'sender_type' => $msg->sender_type,
                 'sender_id' => $msg->sender_id,
-                'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Sistem',
+                'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Bot Pengingat Halo APU',
                 'sender_avatar' => $msg->sender && !empty($msg->sender->avatar_path) ? '/storage/' . $msg->sender->avatar_path : null,
                 'ticket' => $msg->ticket ? [
                     'id' => $msg->ticket->id,

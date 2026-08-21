@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Filter, MessageSquare, User as UserIcon, Shield, CheckCircle2 } from 'lucide-react';
+import { Search, Filter, MessageSquare, User as UserIcon, Shield, CheckCircle2, Bot, Check, CheckCheck } from 'lucide-react';
 import { Input } from '@/Components/ui/input';
 import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
@@ -8,6 +8,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 export interface ConversationItem {
   id: number;
+  is_bot?: boolean;
+  type?: string;
   user?: {
     id?: number;
     name?: string;
@@ -20,6 +22,9 @@ export interface ConversationItem {
   is_assigned?: boolean;
   last_message: string;
   last_message_at: string;
+  last_message_sender_id?: number | null;
+  last_message_sender_type?: string | null;
+  is_last_message_read?: boolean;
   unread_count: number;
 }
 
@@ -28,6 +33,10 @@ interface ConversationListProps {
   activeId: number | null;
   onSelect: (id: number) => void;
   isAdmin?: boolean;
+  onlineUsers?: Array<{ id: number; name: string; type: string }>;
+  typingMap?: Record<number, string>;
+  currentUserId?: number;
+  currentUserType?: 'user' | 'admin';
 }
 
 export function ConversationList({
@@ -35,6 +44,10 @@ export function ConversationList({
   activeId,
   onSelect,
   isAdmin = false,
+  onlineUsers = [],
+  typingMap = {},
+  currentUserId,
+  currentUserType,
 }: ConversationListProps) {
   const [search, setSearch] = useState('');
   const [filterUnread, setFilterUnread] = useState(false);
@@ -65,8 +78,11 @@ export function ConversationList({
     }
   };
 
-  // ponytail: determine avatar icon based on subtitle keywords
+  // ponytail: determine avatar icon based on subtitle keywords or bot status
   const getAvatarIcon = (item: ConversationItem) => {
+    if (item.is_bot || item.type === 'admin_bot_reminder' || item.title.includes('Bot Pengingat')) {
+      return <Bot className="h-5 w-5 text-indigo-600" />;
+    }
     if (item.user?.avatar) return null; // use img
     if (item.subtitle === 'Grup Publik') return <MessageSquare className="h-5 w-5 text-sky-600" />;
     if (item.subtitle?.includes('Admin')) return <Shield className="h-5 w-5 text-sky-600" />;
@@ -122,11 +138,34 @@ export function ConversationList({
           ) : (
           filtered.map((item, index) => {
             const isActive = activeId === item.id;
-            const avatarUrl =
+            const isBotItem = item.is_bot || item.type === 'admin_bot_reminder' || item.title.includes('Bot Pengingat');
+            const isPublicGroup = item.type === 'public_global' || item.subtitle === 'Grup Publik';
+
+            // Determine if conversation counterpart is currently online
+            const isOnline = isBotItem || isPublicGroup || (
+              item.user?.id ? onlineUsers.some((u) => {
+                const sameId = u.id === item.user?.id;
+                const isTargetAdmin = item.subtitle?.includes('Admin') || item.type === 'admin_direct';
+                const sameType = isTargetAdmin ? u.type === 'admin' : u.type === 'user';
+                return sameId && sameType;
+              }) : false
+            );
+
+            // Determine if someone is currently typing in this conversation
+            const isTypingNow = typingMap && typingMap[item.id];
+
+            // Determine if last message was sent by self
+            const isLastSentBySelf = currentUserId && item.last_message_sender_id === currentUserId && (
+              (currentUserType === 'user' && item.last_message_sender_type?.includes('User')) ||
+              (currentUserType === 'admin' && item.last_message_sender_type?.includes('Admin'))
+            );
+
+            const avatarUrl = isBotItem ? null : (
               item.user?.avatar ||
               (item.subtitle !== 'Grup Publik' && item.title !== 'Forum Bantuan Halo APU'
                 ? `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title)}&background=0284c7&color=fff`
-                : null);
+                : null)
+            );
             const icon = getAvatarIcon(item);
 
             return (
@@ -159,21 +198,37 @@ export function ConversationList({
                       className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-sky-500 rounded-r-full" 
                     />
                   )}
-                {/* Avatar */}
+                {/* Avatar with Presence Indicator */}
                 <div className="relative shrink-0 mt-0.5">
-                  <div className="h-10 w-10 rounded-full bg-white border border-zinc-200/60 overflow-hidden flex items-center justify-center text-sky-700 font-semibold text-sm shadow-xs">
+                  <div className={`h-10 w-10 rounded-full border overflow-hidden flex items-center justify-center text-sm shadow-xs ${
+                    isBotItem ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-zinc-200/60 text-sky-700 font-semibold'
+                  }`}>
                     {avatarUrl ? (
                       <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
                     ) : icon}
                   </div>
+                  {/* Presence Status Dot */}
+                  <span
+                    className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white transition-colors duration-300 ${
+                      isOnline ? 'bg-emerald-500 ring-1 ring-emerald-400' : 'bg-zinc-300'
+                    }`}
+                    title={isOnline ? 'Online' : 'Offline'}
+                  />
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0 py-0.5">
                   <div className="flex items-center justify-between gap-1 mb-0.5">
-                    <span className={`text-xs truncate ${item.unread_count > 0 ? 'font-bold text-zinc-900' : 'font-semibold text-zinc-800'}`}>
-                      {item.title}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className={`text-xs truncate ${item.unread_count > 0 ? 'font-bold text-zinc-900' : 'font-semibold text-zinc-800'}`}>
+                        {item.title}
+                      </span>
+                      {isBotItem && (
+                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200 text-[9px] font-bold px-1.5 py-0 h-4 shrink-0">
+                          BOT
+                        </Badge>
+                      )}
+                    </div>
                     <span className="text-[10px] text-zinc-400 shrink-0 font-medium">
                       {formatTime(item.last_message_at)}
                     </span>
@@ -181,7 +236,7 @@ export function ConversationList({
 
                   {item.subtitle && (
                     <div className="flex items-center gap-1.5 mb-1">
-                      <p className="text-[11px] text-sky-700 font-medium truncate">
+                      <p className={`text-[11px] font-medium truncate ${isBotItem ? 'text-indigo-600 font-semibold' : 'text-sky-700'}`}>
                         {item.subtitle}
                       </p>
                       {item.is_assigned && (
@@ -194,9 +249,34 @@ export function ConversationList({
                   )}
 
                   <div className="flex items-center justify-between gap-2">
-                    <p className={`text-xs truncate ${item.unread_count > 0 ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
-                      {item.last_message}
-                    </p>
+                    {isTypingNow ? (
+                      <div className="flex items-center gap-1 text-sky-600 font-semibold text-xs italic animate-pulse min-w-0">
+                        <span className="truncate">{isTypingNow} sedang mengetik</span>
+                        <span className="flex gap-0.5 items-center shrink-0">
+                          <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                          <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                          <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce" />
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1 min-w-0">
+                        {isLastSentBySelf && (
+                          <span
+                            className="shrink-0 inline-flex items-center"
+                            title={item.is_last_message_read ? 'Sudah dibaca oleh penerima' : 'Pesan terkirim'}
+                          >
+                            {item.is_last_message_read ? (
+                              <CheckCheck className="h-3.5 w-3.5 text-sky-500 font-bold" />
+                            ) : (
+                              <Check className="h-3.5 w-3.5 text-zinc-400" />
+                            )}
+                          </span>
+                        )}
+                        <p className={`text-xs truncate ${item.unread_count > 0 ? 'font-semibold text-zinc-900' : 'text-zinc-500'}`}>
+                          {item.last_message}
+                        </p>
+                      </div>
+                    )}
 
                     {item.unread_count > 0 && (
                       <Badge className="h-4 min-w-[16px] px-1 bg-sky-600 hover:bg-sky-600 text-[10px] font-bold text-white rounded-full flex items-center justify-center shrink-0">

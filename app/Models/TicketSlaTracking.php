@@ -20,6 +20,8 @@ class TicketSlaTracking extends Model
         'current_tier',
         'is_response_breached',
         'is_resolution_breached',
+        'is_response_half_warned',
+        'is_resolution_half_warned',
     ];
 
     protected $casts = [
@@ -32,6 +34,8 @@ class TicketSlaTracking extends Model
         'current_tier' => 'integer',
         'is_response_breached' => 'boolean',
         'is_resolution_breached' => 'boolean',
+        'is_response_half_warned' => 'boolean',
+        'is_resolution_half_warned' => 'boolean',
     ];
 
     public function ticket(): BelongsTo

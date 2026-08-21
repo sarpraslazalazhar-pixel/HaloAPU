@@ -50,6 +50,7 @@ import type { BottomNavItem } from '@/Components/BottomNav';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
+import { useChatUnread } from '@/hooks/useChatUnread';
 
 interface AdminLayoutProps {
  children: React.ReactNode;
@@ -133,7 +134,7 @@ const adminNavItems: NavItem[] = [
  { type: 'link', label: 'Manajemen Pengguna', icon: Users, route: '/admin/manajemen-user', permissionGroup: 'akses-manajemen-akun' },
 ];
 
-function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean; isCollapsed: boolean }) {
+function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: boolean; isCollapsed: boolean; badge?: number }) {
   const Icon = item.icon;
 
   return (
@@ -151,6 +152,15 @@ function NavLink({ item, active, isCollapsed }: { item: NavItem; active: boolean
       >
         <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
         {!isCollapsed && <span className="truncate">{item.label}</span>}
+        {badge && badge > 0 ? (
+          isCollapsed ? (
+            <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+          ) : (
+            <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+              {badge > 99 ? '99+' : badge}
+            </span>
+          )
+        ) : null}
       </Link>
     </motion.div>
   );
@@ -402,132 +412,149 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     }
   }, [flash, admin]);
 
- const url = usePage().url;
- const isActive = (routePath: string) => isRouteActive(url, routePath);
+  const url = usePage().url;
+  const isActive = (routePath: string) => isRouteActive(url, routePath);
 
- const systemName = appConfig?.nama_sistem || 'HALO APU';
- const faviconUrl = appConfig?.favicon_path ?`/storage/${appConfig.favicon_path}`: '/favicon.ico';
- const logoUrl = appConfig?.logo_path ?`/storage/${appConfig.logo_path}`: null;
+  const systemName = appConfig?.nama_sistem || 'HALO APU';
+  const faviconUrl = appConfig?.favicon_path ? `/storage/${appConfig.favicon_path}` : '/favicon.ico';
+  const logoUrl = appConfig?.logo_path ? `/storage/${appConfig.logo_path}` : null;
 
- const renderSidebar = (collapsed: boolean) => (
- <div className="flex h-full min-h-0 flex-col justify-between">
- {/* Header / Brand Logo */}
- <div className={`flex h-14 shrink-0 items-center border-b px-4 lg:h-[60px] transition-all duration-300 ${collapsed ? 'justify-center' : 'justify-between'
- }`}>
- <Link href="/admin/dashboard" className="flex items-center gap-2.5 min-w-0">
- {collapsed ? (
- <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 p-1.5 transition-all hover:scale-105 border border-sky-200/50 shadow-sm">
- <img
- src={faviconUrl}
- alt="Favicon"
- className="h-full w-full object-contain"
- onError={(e) => {
- // Fallback to Icon if image breaks
- (e.target as HTMLElement).style.display = 'none';
- }}
- />
- </div>
- ) : (
- logoUrl ? (
- <img id="displayBannerImg" src={logoUrl} alt="Banner Logo" className="h-10 max-w-[180px] object-contain transition-all" />
- ) : (
- <div className="flex items-center gap-2">
- <Sparkles className="h-5 w-5 text-sky-500" />
- <span className="text-base font-bold tracking-tight text-foreground">{systemName}</span>
- </div>
- )
- )}
- </Link>
- </div>
+  const { unreadCount } = useChatUnread({
+    user: admin,
+    isAdmin: true,
+    pageTitle: title,
+    systemName,
+    faviconUrl,
+  });
 
- {/* Navigation Items */}
- <div className="flex-1 min-h-0 overflow-y-auto py-4 px-2.5 sidebar-scroll">
- <nav className="flex flex-col gap-1 pb-6">
- {adminNavItems.map((item, index) => {
- // Check permissions
- if (item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
- return null;
- }
+  const renderSidebar = (collapsed: boolean) => (
+    <div className="flex h-full min-h-0 flex-col justify-between">
+      {/* Header / Brand Logo */}
+      <div className={`flex h-14 shrink-0 items-center border-b px-4 lg:h-[60px] transition-all duration-300 ${collapsed ? 'justify-center' : 'justify-between'
+      }`}>
+        <Link href="/admin/dashboard" className="flex items-center gap-2.5 min-w-0">
+          {collapsed ? (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 p-1.5 transition-all hover:scale-105 border border-sky-200/50 shadow-sm">
+              <img
+                src={faviconUrl}
+                alt="Favicon"
+                className="h-full w-full object-contain"
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
+            </div>
+          ) : (
+            logoUrl ? (
+              <img id="displayBannerImg" src={logoUrl} alt="Banner Logo" className="h-10 max-w-[180px] object-contain transition-all" />
+            ) : (
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-sky-500" />
+                <span className="text-base font-bold tracking-tight text-foreground">{systemName}</span>
+              </div>
+            )
+          )}
+        </Link>
+      </div>
 
- if (item.type === 'header') {
- if (collapsed) {
- return (
- <div key={index} className="my-2 border-t border-border/60 mx-2" />
- );
- }
- return (
- <div key={index} className="px-3 pt-4 pb-1">
- <p className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-widest">
- {item.label}
- </p>
- </div>
- );
- }
+      {/* Navigation Items */}
+      <div className="flex-1 min-h-0 overflow-y-auto py-4 px-2.5 sidebar-scroll">
+        <nav className="flex flex-col gap-1 pb-6">
+          {adminNavItems.map((item, index) => {
+            // Check permissions
+            if (item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
+              return null;
+            }
 
- if (item.type === 'dropdown') {
- return (
- <NavDropdown
- key={index}
- item={item}
- isCollapsed={collapsed}
- url={url}
- permissions={auth.permissions}
- />
- );
- }
+            if (item.type === 'header') {
+              if (collapsed) {
+                return (
+                  <div key={index} className="my-2 border-t border-border/60 mx-2" />
+                );
+              }
+              return (
+                <div key={index} className="px-3 pt-4 pb-1">
+                  <p className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-widest">
+                    {item.label}
+                  </p>
+                </div>
+              );
+            }
 
- const active = item.route ? isActive(item.route) : false;
- return <NavLink key={index} item={item} active={active} isCollapsed={collapsed} />;
- })}
- </nav>
- </div>
+            if (item.type === 'dropdown') {
+              return (
+                <NavDropdown
+                  key={index}
+                  item={item}
+                  isCollapsed={collapsed}
+                  url={url}
+                  permissions={auth.permissions}
+                />
+              );
+            }
 
- {/* Footer User Info */}
- <div className="shrink-0 border-t p-2.5 bg-background">
- {collapsed ? (
- <Tooltip>
- <TooltipTrigger className="mx-auto">
- <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/70 hover:bg-muted cursor-pointer border shadow-sm transition-all">
- {admin?.avatar_path ? (
- <img src={`/storage/${admin.avatar_path}`} alt="Avatar" className="h-full w-full rounded-xl object-cover" />
- ) : (
- <User className="h-4 w-4 text-sky-600 " />
- )}
- </div>
- </TooltipTrigger>
- <TooltipContent side="right" className="flex flex-col gap-0.5 text-xs bg-zinc-900 text-white ">
- <span className="font-semibold">{admin?.name || admin?.username || 'Admin'}</span>
- <span className="text-[10px] text-zinc-400 ">{admin?.email || ''}</span>
- </TooltipContent>
- </Tooltip>
- ) : (
- <div className="rounded-xl bg-muted/50 border border-border/50 p-2.5">
- <div className="flex items-center gap-2.5">
- <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 overflow-hidden">
- {admin?.avatar_path ? (
- <img src={`/storage/${admin.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
- ) : (
- <User className="h-4 w-4 text-sky-600 " />
- )}
- </div>
- <div className="min-w-0">
- <p className="text-xs font-semibold text-foreground truncate">{admin?.name || admin?.username || 'Admin'}</p>
- <p className="text-[10px] text-muted-foreground truncate">{admin?.email || ''}</p>
- </div>
- </div>
- </div>
- )}
- </div>
- </div>
- );
+            const active = item.route ? isActive(item.route) : false;
+            const badge = item.label === 'Pesan' ? unreadCount : undefined;
+            return <NavLink key={index} item={item} active={active} isCollapsed={collapsed} badge={badge} />;
+          })}
+        </nav>
+      </div>
 
- const bottomNavItems: BottomNavItem[] = [
- { label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
- { label: 'Tiket', icon: Ticket, route: '/admin/tiket' },
- { label: 'Monitor', icon: Grid3X3, route: '/admin/monitor' },
- { label: 'Pesan', icon: MessageSquare, route: '/admin/chat' },
- { label: 'Lainnya', icon: MoreHorizontal, onClick: () => setSidebarOpen(true) },
- ];
+      {/* Footer User Info */}
+      <div className="shrink-0 border-t p-2.5 bg-background">
+        {collapsed ? (
+          <Tooltip>
+            <TooltipTrigger className="mx-auto">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-muted/70 hover:bg-muted cursor-pointer border shadow-sm transition-all">
+                {admin?.avatar_path ? (
+                  <img src={`/storage/${admin.avatar_path}`} alt="Avatar" className="h-full w-full rounded-xl object-cover" />
+                ) : (
+                  <User className="h-4 w-4 text-sky-600 " />
+                )}
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="right" className="flex flex-col gap-0.5 text-xs bg-zinc-900 text-white ">
+              <span className="font-semibold">{admin?.name || admin?.username || 'Admin'}</span>
+              <span className="text-[10px] text-zinc-400 ">{admin?.email || ''}</span>
+            </TooltipContent>
+          </Tooltip>
+        ) : (
+          <div className="rounded-xl bg-muted/50 border border-border/50 p-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10 overflow-hidden">
+                {admin?.avatar_path ? (
+                  <img src={`/storage/${admin.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+                ) : (
+                  <User className="h-4 w-4 text-sky-600 " />
+                )}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground truncate">{admin?.name || admin?.username || 'Admin'}</p>
+                <p className="text-[10px] text-muted-foreground truncate">{admin?.email || ''}</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  const bottomNavItems: BottomNavItem[] = [
+    { label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
+    { label: 'Tiket', icon: Ticket, route: '/admin/tiket' },
+    { label: 'Monitor', icon: Grid3X3, route: '/admin/monitor' },
+    {
+      label: 'Pesan',
+      icon: MessageSquare,
+      route: '/admin/chat',
+      badge: unreadCount > 0 ? (
+        <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      ) : undefined,
+    },
+    { label: 'Lainnya', icon: MoreHorizontal, onClick: () => setSidebarOpen(true) },
+  ];
 
  return (
  <div className={`grid h-screen w-full overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'md:grid-cols-[72px_1fr]' : 'md:grid-cols-[250px_1fr]'

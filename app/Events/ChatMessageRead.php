@@ -27,9 +27,27 @@ class ChatMessageRead implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [
+        $channels = [
             new PrivateChannel('chat.conversation.' . $this->conversationId),
         ];
+
+        $conversation = \App\Models\Conversation::find($this->conversationId);
+        if ($conversation) {
+            if ($conversation->type === 'public_global') {
+                $channels[] = new PrivateChannel('chat.public_global');
+            }
+            if ($conversation->user_id) {
+                $channels[] = new PrivateChannel('App.Models.User.' . $conversation->user_id);
+            }
+            if ($conversation->admin_one_id) {
+                $channels[] = new PrivateChannel('App.Models.Admin.' . $conversation->admin_one_id);
+            }
+            if ($conversation->admin_two_id) {
+                $channels[] = new PrivateChannel('App.Models.Admin.' . $conversation->admin_two_id);
+            }
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string

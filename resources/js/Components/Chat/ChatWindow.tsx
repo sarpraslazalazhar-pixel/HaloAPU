@@ -26,6 +26,7 @@ import {
   Copy,
   MoreVertical,
   ChevronLeft,
+  Bot,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
@@ -110,6 +111,7 @@ interface ChatWindowProps {
   onMessageSent?: (message: ChatMessage) => void;
   onMessageReceived?: (message: ChatMessage) => void;
   isLoading?: boolean;
+  onlineUsers?: Array<{ id: number; name: string; type: string }>;
 }
 
 const COMMON_EMOJIS = ['😊', '👍', '🙏', '🚀', '✅', '⚠️', '📄', '❤️', '👏', '🔥', '💡', '❓', '💬', '🎉'];
@@ -123,6 +125,7 @@ export function ChatWindow({
   onMessageSent,
   onMessageReceived,
   isLoading = false,
+  onlineUsers = [],
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
@@ -459,37 +462,89 @@ export function ChatWindow({
               <ChevronLeft className="h-5 w-5" />
             </button>
           )}
-          <div className="relative">
-            <div className="h-9 w-9 rounded-full bg-sky-100 border border-sky-200 overflow-hidden flex items-center justify-center text-sky-700 font-bold text-sm shrink-0">
-              {conversation.user?.avatar ? (
-                <img src={conversation.user.avatar} alt="Avatar" className="h-full w-full object-cover" />
-              ) : conversation.subtitle === 'Grup Publik' || conversation.title === 'Forum Bantuan Halo APU' ? (
-                <MessageSquare className="h-5 w-5 text-sky-600" />
-              ) : (
-                <img
-                  src={`https://ui-avatars.com/api/?name=${encodeURIComponent(conversation.title || 'Chat')}&background=0284c7&color=fff`}
-                  alt="Avatar"
-                  className="h-full w-full object-cover"
-                />
-              )}
-            </div>
-            <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 border-2 border-white" />
-          </div>
+          {/* Avatar with dynamic presence */}
+          {(() => {
+            const isBot = conversation.is_bot || conversation.type === 'admin_bot_reminder' || conversation.title?.includes('Bot Pengingat');
+            const isPublic = conversation.type === 'public_global' || conversation.subtitle === 'Grup Publik';
+            const isOnline = isBot || isPublic || (
+              conversation.user?.id ? (onlineUsers || []).some((u) => {
+                const sameId = u.id === conversation.user?.id;
+                const isTargetAdmin = conversation.subtitle?.includes('Admin') || conversation.type === 'admin_direct';
+                const sameType = isTargetAdmin ? u.type === 'admin' : u.type === 'user';
+                return sameId && sameType;
+              }) : false
+            );
 
-          <div className="min-w-0">
-            <h3 className="text-xs font-bold text-zinc-900 truncate">
-              {conversation.title}
-            </h3>
-            {typingUser ? (
-              <p className="text-[11px] text-sky-600 font-semibold animate-pulse">
-                {typingUser} sedang mengetik...
-              </p>
-            ) : (
-              <p className="text-[11px] text-zinc-500 truncate">
-                {conversation.subtitle || (conversation.user?.last_seen_at ? 'Aktif baru saja' : 'Online')}
-              </p>
-            )}
-          </div>
+            return (
+              <>
+                <div className="relative shrink-0">
+                  <div className={`h-8 w-8 rounded-full border overflow-hidden flex items-center justify-center text-xs font-semibold ${
+                    isBot ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-zinc-200 text-sky-700'
+                  }`}>
+                    {isBot ? (
+                      <Bot className="h-5 w-5 text-indigo-600" />
+                    ) : conversation.user?.avatar ? (
+                      <img src={conversation.user.avatar} alt="Avatar" className="h-full w-full object-cover" />
+                    ) : isPublic ? (
+                      <MessageSquare className="h-5 w-5 text-sky-600" />
+                    ) : (
+                      <img
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(conversation.title || 'Chat')}&background=0284c7&color=fff`}
+                        alt="Avatar"
+                        className="h-full w-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <span
+                    className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white transition-colors duration-300 ${
+                      isOnline ? 'bg-emerald-500 ring-1 ring-emerald-400' : 'bg-zinc-300'
+                    }`}
+                    title={isOnline ? 'Online' : 'Offline'}
+                  />
+                </div>
+
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h3 className="text-xs font-bold text-zinc-900 truncate">
+                      {conversation.title}
+                    </h3>
+                    {isBot && (
+                      <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200 text-[9px] font-bold px-1.5 py-0 h-4 shrink-0">
+                        BOT RESMI
+                      </Badge>
+                    )}
+                  </div>
+                  {typingUser ? (
+                    <div className="flex items-center gap-1 text-[11px] text-sky-600 font-semibold animate-pulse">
+                      <span className="truncate">{typingUser} sedang mengetik</span>
+                      <span className="flex gap-0.5 items-center shrink-0">
+                        <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                        <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                        <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce" />
+                      </span>
+                    </div>
+                  ) : isBot ? (
+                    <p className="text-[11px] text-indigo-600 font-semibold truncate">
+                      Asisten Pengingat Otomatis
+                    </p>
+                  ) : isPublic ? (
+                    <p className="text-[11px] text-zinc-500 truncate">
+                      Grup Publik
+                    </p>
+                  ) : isOnline ? (
+                    <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1.5 truncate">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse inline-block shrink-0" />
+                      Online
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-zinc-400 truncate">
+                      Offline {conversation.user?.last_seen_at ? `• Terakhir dilihat ${formatMessageTime(conversation.user.last_seen_at)}` : ''}
+                    </p>
+                  )}
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {conversation.ticket && (
@@ -532,6 +587,8 @@ export function ChatWindow({
               ((currentUser.type === 'user' && msg.sender_type.includes('User')) ||
                (currentUser.type === 'admin' && msg.sender_type.includes('Admin')));
 
+            const isBotMsg = conversation.is_bot || conversation.type === 'admin_bot_reminder' || msg.sender_name?.includes('Bot Pengingat') || msg.sender_name === 'Sistem';
+
             const isReadByOthers = msg.reads && msg.reads.some((r) => {
               const isSender =
                 r.user_id === msg.sender_id &&
@@ -550,8 +607,12 @@ export function ChatWindow({
                 className={`flex items-end gap-2.5 group ${isSelf ? 'justify-end' : 'justify-start'}`}
               >
                 {!isSelf && (
-                  <div className="h-7 w-7 rounded-full bg-sky-100 border border-sky-200 overflow-hidden flex items-center justify-center shrink-0 text-sky-700 text-xs font-semibold">
-                    {msg.sender_avatar || (msg.sender as any)?.avatar_path ? (
+                  <div className={`h-7 w-7 rounded-full border overflow-hidden flex items-center justify-center shrink-0 text-xs font-semibold ${
+                    isBotMsg ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-sky-100 border-sky-200 text-sky-700'
+                  }`}>
+                    {isBotMsg ? (
+                      <Bot className="h-4 w-4 text-indigo-600" />
+                    ) : msg.sender_avatar || (msg.sender as any)?.avatar_path ? (
                       <img
                         src={msg.sender_avatar || ('/storage/' + (msg.sender as any).avatar_path)}
                         alt={msg.sender_name}
@@ -579,14 +640,23 @@ export function ChatWindow({
                   className={`relative max-w-[85%] md:max-w-[75%] rounded-[1.25rem] px-4 py-2.5 shadow-sm flex flex-col group/msg transition-all ${
                     isSelf
                       ? 'bg-sky-600 text-white rounded-br-sm'
-                      : 'bg-white text-zinc-800 border border-zinc-100/80 rounded-bl-sm'
+                      : isBotMsg
+                        ? 'bg-indigo-50/70 text-zinc-900 border border-indigo-100/90 rounded-bl-sm'
+                        : 'bg-white text-zinc-800 border border-zinc-100/80 rounded-bl-sm'
                   }`}
                 >
                   {/* Sender Name */}
                   {!isSelf && (
-                    <p className="text-[11px] font-bold text-sky-700 mb-1">
-                      {msg.sender_name}
-                    </p>
+                    <div className="flex items-center gap-1 mb-1">
+                      <p className={`text-[11px] font-bold ${isBotMsg ? 'text-indigo-700' : 'text-sky-700'}`}>
+                        {isBotMsg ? 'Bot Pengingat Halo APU' : msg.sender_name}
+                      </p>
+                      {isBotMsg && (
+                        <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200 text-[8px] font-bold px-1 py-0 h-3.5 shrink-0">
+                          BOT
+                        </Badge>
+                      )}
+                    </div>
                   )}
 
                   {/* Quoted Reply */}
@@ -735,6 +805,22 @@ export function ChatWindow({
           })
         )}
         </AnimatePresence>
+        )}
+        {typingUser && (
+          <motion.div
+            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+            className="flex items-center gap-2 py-1.5 px-3.5 bg-white border border-zinc-200/80 rounded-2xl w-fit shadow-xs text-xs text-zinc-600 mb-1"
+          >
+            <span className="font-semibold text-zinc-800">{typingUser}</span>
+            <span className="text-zinc-500 text-[11px]">sedang mengetik</span>
+            <span className="flex gap-1 items-center ml-0.5">
+              <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.3s]" />
+              <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce [animation-delay:-0.15s]" />
+              <span className="w-1.5 h-1.5 bg-sky-500 rounded-full animate-bounce" />
+            </span>
+          </motion.div>
         )}
         <div ref={messagesEndRef} />
       </div>

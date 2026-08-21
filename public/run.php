@@ -38,7 +38,7 @@ if (empty($command)) {
     echo "</div>";
     
     echo "<div class='section'><h2>⚙️ Artisan Commands</h2>";
-    $cmds = ['optimize:clear', 'config:clear', 'cache:clear', 'route:clear', 'view:clear', 'config:cache', 'route:cache', 'view:cache', 'storage:link', 'migrate --force', 'key:generate --force', 'ziggy:generate', 'schedule:run', 'sla:check', 'reminder:booking', 'reminder:pending', 'reminder:csat', 'simulate:sla-and-reminders'];
+    $cmds = ['optimize:clear', 'config:clear', 'cache:clear', 'route:clear', 'view:clear', 'config:cache', 'route:cache', 'view:cache', 'storage:link', 'migrate --force', 'key:generate --force', 'ziggy:generate', 'schedule:run', 'sla:check', 'reminder:booking', 'reminder:open', 'reminder:pending', 'reminder:csat', 'simulate:sla-and-reminders'];
     foreach ($cmds as $c) {
         $label = $c;
         echo "<a href='{$baseUrl}?key={$key}&cmd=" . urlencode($c) . "'>▶ {$label}</a>";
@@ -46,10 +46,10 @@ if (empty($command)) {
     echo "</div>";
 
     echo "<div class='section'><h2>🔔 Pengingat & Reminder Chat</h2>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=sla%3Acheck' style='border-left-color: #ff5252;'>⏱️ sla:check — Jalankan pengecekan SLA (Pengingat 50% & Peringatan Breach)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=reminder%3Abooking' style='border-left-color: #00e676;'>🔔 reminder:booking — Jalankan pengingat jadwal booking (ke chat & notif)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=reminder%3Apending' style='border-left-color: #ffab40;'>⚠️ reminder:pending — Jalankan pengingat tiket pending lama (ke chat & notif)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=reminder%3Acsat' style='border-left-color: #7c4dff;'>⭐ reminder:csat — Jalankan pengingat rating kepuasan CSAT (ke chat & notif)</a>";
-    echo "<a href='{$baseUrl}?key={$key}&cmd=sla%3Acheck' style='border-left-color: #ff5252;'>🚨 sla:check — Jalankan pengecekan SLA & eskalasi breach (ke chat & notif)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=simulate%3Asla-and-reminders' style='border-left-color: #40c4ff;'>🧪 simulate:sla-and-reminders — Simulasi E2E semua reminder & SLA</a>";
     echo "</div>";
     
@@ -977,6 +977,11 @@ $allowed = [
     'deploy-cpanel',
     'schedule:run',
     'sla:check',
+    'reminder:booking',
+    'reminder:open',
+    'reminder:pending',
+    'reminder:csat',
+    'reminder:snooze-check',
     'simulate:sla-and-reminders',
     'sla-view',
     'sla-update',

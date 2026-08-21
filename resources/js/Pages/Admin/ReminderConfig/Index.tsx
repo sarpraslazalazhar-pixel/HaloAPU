@@ -13,17 +13,19 @@ interface Props {
 }
 
 const JENIS_LABELS: Record<string, string> = {
- booking: 'Reminder Booking',
- sla: 'Reminder SLA',
- pending_lama: 'Tiket Pending Lama',
- csat: 'CSAT Belum Diisi',
+  booking: 'Reminder Booking',
+  sla_half: 'Pengingat 50% Waktu SLA',
+  sla: 'Peringatan SLA Breach (100%)',
+  pending_lama: 'Tiket Pending Lama',
+  csat: 'CSAT Belum Diisi',
 };
 
 const LEAD_TIME_UNITS: Record<string, string> = {
- booking: 'hari sebelum',
- sla: 'otomatis',
- pending_lama: 'hari pending',
- csat: 'hari setelah solve',
+  booking: 'hari sebelum',
+  sla_half: 'otomatis (50% SLA)',
+  sla: 'otomatis (100% SLA)',
+  pending_lama: 'hari pending',
+  csat: 'hari setelah solve',
 };
 
 export default function ReminderConfigIndex({ configs }: Props) {
@@ -105,31 +107,33 @@ export default function ReminderConfigIndex({ configs }: Props) {
  <TableCell className="font-medium">
  {JENIS_LABELS[config.jenis_reminder] || config.jenis_reminder}
  </TableCell>
- <TableCell>
- {config.jenis_reminder === 'sla' ? (
- <span className="text-sm text-muted-foreground italic">Otomatis dari SLA</span>
- ) : (
- <div className="flex items-center gap-2">
- <Input
- type="number"
- min={0}
- value={config.lead_time_value}
- onChange={(e) => updateLeadTime(index, parseInt(e.target.value) || 0)}
- className="w-20"
- />
- <span className="text-sm text-muted-foreground whitespace-nowrap">
- {LEAD_TIME_UNITS[config.jenis_reminder]}
- </span>
- </div>
- )}
- </TableCell>
- <TableCell className="text-center">
- <Checkbox
- checked={config.channel_aktif.includes('in_app')}
- onCheckedChange={() => toggleChannel(index, 'in_app')}
- disabled={config.jenis_reminder === 'booking' || config.jenis_reminder === 'sla' || config.jenis_reminder === 'pending_lama' || config.jenis_reminder === 'csat'} // In app selalu aktif
- />
- </TableCell>
+  <TableCell>
+  {config.jenis_reminder === 'sla' || config.jenis_reminder === 'sla_half' ? (
+  <span className="text-sm text-muted-foreground italic">
+  {config.jenis_reminder === 'sla_half' ? 'Otomatis (50% dari SLA)' : 'Otomatis (100% SLA Breach)'}
+  </span>
+  ) : (
+  <div className="flex items-center gap-2">
+  <Input
+  type="number"
+  min={0}
+  value={config.lead_time_value}
+  onChange={(e) => updateLeadTime(index, parseInt(e.target.value) || 0)}
+  className="w-20"
+  />
+  <span className="text-sm text-muted-foreground whitespace-nowrap">
+  {LEAD_TIME_UNITS[config.jenis_reminder]}
+  </span>
+  </div>
+  )}
+  </TableCell>
+  <TableCell className="text-center">
+  <Checkbox
+  checked={config.channel_aktif.includes('in_app')}
+  onCheckedChange={() => toggleChannel(index, 'in_app')}
+  disabled={true} // In app selalu aktif
+  />
+  </TableCell>
  <TableCell className="text-center">
  <Checkbox
  checked={config.channel_aktif.includes('email')}

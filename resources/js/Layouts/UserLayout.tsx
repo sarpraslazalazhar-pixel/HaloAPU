@@ -29,6 +29,7 @@ import { navItemHover } from '@/lib/animationConfig';
 import PageTransition from '@/Components/PageTransition';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
+import { useChatUnread } from '@/hooks/useChatUnread';
 
 interface UserLayoutProps {
   children: React.ReactNode;
@@ -50,7 +51,7 @@ const userNavItems: NavItem[] = [
  { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
 ];
 
-function NavLink({ item, active }: { item: NavItem; active: boolean }) {
+function NavLink({ item, active, badge }: { item: NavItem; active: boolean; badge?: number }) {
  const Icon = item.icon;
  return (
   <motion.div variants={navItemHover} initial="rest" whileHover="hover">
@@ -64,6 +65,11 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
     >
       <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
       <span>{item.label}</span>
+      {badge && badge > 0 ? (
+        <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
     </Link>
   </motion.div>
  );
@@ -76,6 +82,17 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  const { subscribe } = useWebPush(user);
 
  useIdleTimer('/logout');
+
+ const systemName = appConfig?.nama_sistem || 'HALO APU';
+ const faviconUrl = appConfig?.favicon_path ? `/storage/${appConfig.favicon_path}` : '/favicon.ico';
+
+ const { unreadCount } = useChatUnread({
+   user,
+   isAdmin: false,
+   pageTitle: title,
+   systemName,
+   faviconUrl,
+ });
 
  useEffect(() => {
  if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
@@ -140,7 +157,6 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
   }, [flash, user]);
  
  const url = usePage().url;
- const systemName = appConfig?.nama_sistem || 'HALO APU';
 
  const SidebarContent = () => (
  <div className="flex h-full flex-col">
@@ -158,6 +174,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  key={item.route}
  item={item}
  active={url.startsWith(item.route) && item.route !== '#'}
+ badge={item.label === 'Pesan' ? unreadCount : undefined}
  />
  ))}
  </nav>
@@ -185,10 +202,19 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
 
  const bottomNavItems: BottomNavItem[] = [
   { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
-  { label: 'Pesan', icon: MessageSquare, route: '/chat' },
- { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
- { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
- { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
+  {
+    label: 'Pesan',
+    icon: MessageSquare,
+    route: '/chat',
+    badge: unreadCount > 0 ? (
+      <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    ) : undefined,
+  },
+  { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
+  { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
+  { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
  ];
 
  return (

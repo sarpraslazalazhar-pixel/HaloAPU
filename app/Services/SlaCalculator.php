@@ -206,6 +206,13 @@ class SlaCalculator
 
         if (!$sla->responded_at) {
             $respThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'respon');
+            $halfRespThreshold = (int) ceil($respThreshold / 2);
+
+            if (!$sla->is_response_half_warned && $elapsedMinutes >= $halfRespThreshold) {
+                $sla->update([
+                    'is_response_half_warned' => true,
+                ]);
+            }
 
             if ($elapsedMinutes >= $respThreshold) {
                 $sla->update([
@@ -216,6 +223,13 @@ class SlaCalculator
 
         if (!$sla->resolved_at) {
             $resThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'penyelesaian');
+            $halfResThreshold = (int) ceil($resThreshold / 2);
+
+            if (!$sla->is_resolution_half_warned && $elapsedMinutes >= $halfResThreshold) {
+                $sla->update([
+                    'is_resolution_half_warned' => true,
+                ]);
+            }
 
             if ($elapsedMinutes >= $resThreshold) {
                 $sla->update([

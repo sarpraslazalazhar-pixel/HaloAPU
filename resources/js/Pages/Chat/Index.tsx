@@ -24,8 +24,21 @@ export default function UserChatIndex({
   const user = auth.user;
 
   const [convList, setConvList] = useState<ConversationItem[]>(conversations);
-  const [activeId, setActiveId] = useState<number | null>(activeConversationId);
-  const [currentConv, setCurrentConv] = useState<any>(activeConversation);
+  const [activeId, setActiveId] = useState<number | null>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const activeParam = params.get('active');
+      if (activeParam) return parseInt(activeParam, 10);
+      if (window.innerWidth < 768) return null;
+    }
+    return activeConversationId;
+  });
+  const [currentConv, setCurrentConv] = useState<any>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768 && !new URLSearchParams(window.location.search).has('active')) {
+      return null;
+    }
+    return activeConversation;
+  });
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
 
   const { playSound } = useChatSound();
@@ -36,10 +49,49 @@ export default function UserChatIndex({
   }, [conversations]);
 
   useEffect(() => {
-    setActiveId(activeConversationId);
-    setCurrentConv(activeConversation);
-    setMessages(activeMessages);
+    const isMobileInitial = typeof window !== 'undefined' && window.innerWidth < 768;
+    const hasActiveParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('active');
+    
+    if (isMobileInitial && !hasActiveParam) {
+      setActiveId(null);
+      setCurrentConv(null);
+    } else {
+      setActiveId(activeConversationId);
+      setCurrentConv(activeConversation);
+      setMessages(activeMessages);
+    }
   }, [activeConversationId, activeConversation, activeMessages]);
+
+  const [onlineUsers, setOnlineUsers] = useState<Array<{ id: number; name: string; type: string }>>([]);
+  const [typingMap, setTypingMap] = useState<Record<number, string>>({});
+
+  // Presence channel to track real-time online / offline users
+  useEffect(() => {
+    if (!(window as any).Echo) return;
+
+    try {
+      const presence = (window as any).Echo.join('chat.presence')
+        .here((users: any[]) => {
+          setOnlineUsers(users || []);
+        })
+        .joining((user: any) => {
+          if (user) {
+            setOnlineUsers((prev) => [...prev.filter((u) => !(u.id === user.id && u.type === user.type)), user]);
+          }
+        })
+        .leaving((user: any) => {
+          if (user) {
+            setOnlineUsers((prev) => prev.filter((u) => !(u.id === user.id && u.type === user.type)));
+          }
+        });
+
+      return () => {
+        (window as any).Echo.leave('chat.presence');
+      };
+    } catch {
+      // ignore
+    }
+  }, []);
 
   const updateConversationOnMessage = useCallback((msg: ChatMessage, isFromActiveChat: boolean) => {
     setConvList((prevList) => {
@@ -53,6 +105,9 @@ export default function UserChatIndex({
         const updated = { ...prevList[index] };
         updated.last_message = snippet;
         updated.last_message_at = timestamp;
+        updated.last_message_sender_id = msg.sender_id;
+        updated.last_message_sender_type = msg.sender_type;
+        updated.is_last_message_read = isFromActiveChat;
 
         if (!isFromActiveChat && !isSelf) {
           updated.unread_count = (updated.unread_count || 0) + 1;
@@ -67,6 +122,9 @@ export default function UserChatIndex({
           subtitle: msg.sender_type.includes('Admin') ? 'Admin' : 'Pengguna',
           last_message: snippet,
           last_message_at: timestamp,
+          last_message_sender_id: msg.sender_id,
+          last_message_sender_type: msg.sender_type,
+          is_last_message_read: isFromActiveChat,
           unread_count: isFromActiveChat || isSelf ? 0 : 1,
         };
         return [newConvItem, ...prevList];
@@ -100,8 +158,34 @@ export default function UserChatIndex({
       }
     };
 
+    const handleMessageRead = (e: any) => {
+      if (e.conversationId) {
+        setConvList((prev) =>
+          prev.map((c) => (c.id === e.conversationId ? { ...c, is_last_message_read: true } : c))
+        );
+      }
+    };
+
+    const handleTypingStatus = (e: any) => {
+      if (e.userId !== user.id && e.conversationId) {
+        setTypingMap((prev) => {
+          const updated = { ...prev };
+          if (e.isTyping) {
+            updated[e.conversationId] = e.userName;
+          } else {
+            delete updated[e.conversationId];
+          }
+          return updated;
+        });
+      }
+    };
+
     userChannel.listen('.ChatMessageSent', handleIncomingMessage);
     publicChannel.listen('.ChatMessageSent', handleIncomingMessage);
+    userChannel.listen('.ChatMessageRead', handleMessageRead);
+    publicChannel.listen('.ChatMessageRead', handleMessageRead);
+    userChannel.listen('.UserTypingStatus', handleTypingStatus);
+    publicChannel.listen('.UserTypingStatus', handleTypingStatus);
 
     return () => {
       (window as any).Echo.leave(userChannelName);
@@ -184,6 +268,10 @@ export default function UserChatIndex({
             activeId={activeId}
             onSelect={handleSelectConversation}
             isAdmin={false}
+            onlineUsers={onlineUsers}
+            typingMap={typingMap}
+            currentUserId={user.id}
+            currentUserType="user"
           />
         </div>
 
@@ -202,6 +290,7 @@ export default function UserChatIndex({
                 currentUser={currentUser}
                 isAdmin={false}
                 isLoading={isLoadingMessages}
+                onlineUsers={onlineUsers}
                 onBack={isMobile ? handleBackToList : undefined}
                 onMessageSent={(msg) => updateConversationOnMessage(msg, true)}
                 onMessageReceived={(msg) => updateConversationOnMessage(msg, true)}

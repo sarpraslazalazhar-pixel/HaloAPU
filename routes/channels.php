@@ -35,4 +35,17 @@ Broadcast::channel('chat.conversation.{conversationId}', function ($user, $conve
     return false;
 }, ['guards' => ['web', 'admin']]);
 
+Broadcast::channel('chat.presence', function ($user) {
+    if (!$user) {
+        return false;
+    }
+
+    return [
+        'id' => (int) $user->id,
+        'name' => $user->name ?? $user->username,
+        'type' => $user instanceof \App\Models\Admin ? 'admin' : 'user',
+        'avatar' => !empty($user->avatar_path) ? '/storage/' . $user->avatar_path : null,
+    ];
+}, ['guards' => ['web', 'admin']]);
+
 

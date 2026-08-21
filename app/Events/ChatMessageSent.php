@@ -47,7 +47,7 @@ class ChatMessageSent implements ShouldBroadcastNow
             'conversation_id' => $message->conversation_id,
             'sender_type' => $message->sender_type,
             'sender_id' => $message->sender_id,
-            'sender_name' => $message->sender ? ($message->sender->name ?? $message->sender->username) : 'Sistem',
+            'sender_name' => $message->sender ? ($message->sender->name ?? $message->sender->username) : 'Bot Pengingat Halo APU',
             'sender_avatar' => $message->sender && !empty($message->sender->avatar_path) ? '/storage/' . $message->sender->avatar_path : null,
             'ticket' => $message->ticket ? [
                 'id' => $message->ticket->id,

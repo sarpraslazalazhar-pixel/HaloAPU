@@ -117,6 +117,38 @@ class SimulateSlaAndRemindersCommand extends Command
 
             $this->info("Case 1 Setup: Created SLA ticket #{$slaTicket->id} close to breach (response/resolution).");
 
+            // 4b. Case 1b: 50% SLA Warning
+            // Create a ticket that is 16 minutes old (50% of 30 minutes response threshold is 15 minutes)
+            $halfSlaTicket = Ticket::create([
+                'user_id' => $user->id,
+                'unit_id' => $unit->id,
+                'sub_unit_id' => $subUnit->id,
+                'priority' => 'Sedang',
+                'status' => 'open',
+                'form_data' => [],
+            ]);
+            $halfCreatedAt = Carbon::now()->subMinutes(16);
+            $halfSlaTicket->created_at = $halfCreatedAt;
+            $halfSlaTicket->updated_at = $halfCreatedAt;
+            $halfSlaTicket->save();
+
+            $halfSlaTracking = TicketSlaTracking::create([
+                'ticket_id' => $halfSlaTicket->id,
+                'sla_response_deadline' => $halfCreatedAt->copy()->addMinutes(30),
+                'sla_resolution_deadline' => $halfCreatedAt->copy()->addMinutes(120),
+                'responded_at' => null,
+                'resolved_at' => null,
+                'paused_at' => null,
+                'total_paused_minutes' => 0,
+                'current_tier' => 0,
+                'is_response_breached' => false,
+                'is_resolution_breached' => false,
+                'is_response_half_warned' => false,
+                'is_resolution_half_warned' => false,
+            ]);
+
+            $this->info("Case 1b Setup: Created SLA ticket #{$halfSlaTicket->id} at 50% SLA response mark.");
+
             // 5. Case 2: Booking Reminder
             ReminderConfig::updateOrCreate(
                 ['jenis_reminder' => 'booking'],
@@ -161,7 +193,21 @@ class SimulateSlaAndRemindersCommand extends Command
 
             $this->info("Case 3 Setup: Created ticket #{$pendingTicket->id} pending since 5 days ago.");
 
-            // 7. Case 4: CSAT Reminder
+            // 7. Case 4: Open Ticket Reminder (Tiket open lama belum diproses)
+            $openTicket = Ticket::create([
+                'user_id' => $user->id,
+                'unit_id' => $unit->id,
+                'sub_unit_id' => $subUnit->id,
+                'status' => 'open',
+                'form_data' => [],
+            ]);
+            $openTicket->created_at = Carbon::now()->subDays(3);
+            $openTicket->updated_at = Carbon::now()->subDays(3);
+            $openTicket->save();
+
+            $this->info("Case 4 Setup: Created ticket #{$openTicket->id} open since 3 days ago.");
+
+            // 8. Case 5: CSAT Reminder
             ReminderConfig::updateOrCreate(
                 ['jenis_reminder' => 'csat'],
                 ['lead_time_value' => 3, 'aktif' => true, 'channel_aktif' => ['database']]
@@ -178,9 +224,9 @@ class SimulateSlaAndRemindersCommand extends Command
             $csatTicket->updated_at = Carbon::now()->subDays(5); // Solved since 5 days ago (threshold is 3)
             $csatTicket->save();
 
-            $this->info("Case 4 Setup: Created solved ticket #{$csatTicket->id} without CSAT solved since 5 days ago.");
+            $this->info("Case 5 Setup: Created solved ticket #{$csatTicket->id} without CSAT solved since 5 days ago.");
 
-            // 8. Case 5: Snoozed Notification Re-fire
+            // 9. Case 6: Snoozed Notification Re-fire
             $snoozedNotificationId = Str::uuid()->toString();
             DB::table('notifications')->insert([
                 'id' => $snoozedNotificationId,
@@ -201,7 +247,7 @@ class SimulateSlaAndRemindersCommand extends Command
                 'updated_at' => now()->subHour(),
             ]);
 
-            $this->info("Case 5 Setup: Created snoozed notification ID: {$snoozedNotificationId} (expired snooze_until).");
+            $this->info("Case 6 Setup: Created snoozed notification ID: {$snoozedNotificationId} (expired snooze_until).");
 
             $this->info("\n=== Executing Artisan Commands ===\n");
 
@@ -213,6 +259,11 @@ class SimulateSlaAndRemindersCommand extends Command
             // Execute Booking Reminder Command
             $this->comment("Running command: reminder:booking");
             Artisan::call('reminder:booking');
+            $this->line(Artisan::output());
+
+            // Execute Open Ticket Reminder Command
+            $this->comment("Running command: reminder:open");
+            Artisan::call('reminder:open');
             $this->line(Artisan::output());
 
             // Execute Pending Ticket Reminder Command
@@ -254,6 +305,28 @@ class SimulateSlaAndRemindersCommand extends Command
                 $this->error("SLA breach notification missing!");
             }
 
+            // Verify Case 1b: 50% SLA Warning generated
+            $halfSlaTracking->refresh();
+            $halfWarnedOk = (bool) $halfSlaTracking->is_response_half_warned;
+
+            $halfNotificationCount = DB::table('notifications')
+                ->where('type', \App\Notifications\SlaHalfWarningNotification::class)
+                ->where('notifiable_id', $admin->id)
+                ->where('data->ticket_id', $halfSlaTicket->id)
+                ->count();
+
+            if ($halfWarnedOk) {
+                $this->info("Ticket #{$halfSlaTicket->id} 50% SLA warning flag: OK");
+            } else {
+                $this->error("Ticket #{$halfSlaTicket->id} 50% SLA warning flag failed to update!");
+            }
+
+            if ($halfNotificationCount > 0) {
+                $this->info("50% SLA warning notification created: OK");
+            } else {
+                $this->error("50% SLA warning notification missing!");
+            }
+
             // Verify Case 2: Booking Reminder notification generated
             $bookingNotificationCount = DB::table('notifications')
                 ->where('type', \App\Notifications\BookingReminderNotification::class)
@@ -280,7 +353,20 @@ class SimulateSlaAndRemindersCommand extends Command
                 $this->error("Pending ticket reminder notification missing!");
             }
 
-            // Verify Case 4: CSAT Reminder notification generated
+            // Verify Case 4: Open Ticket Reminder notification generated
+            $openNotificationCount = DB::table('notifications')
+                ->where('type', \App\Notifications\OpenTicketReminderNotification::class)
+                ->where('notifiable_id', $admin->id)
+                ->where('data->ticket_id', $openTicket->id)
+                ->count();
+
+            if ($openNotificationCount > 0) {
+                $this->info("Open ticket reminder created: OK");
+            } else {
+                $this->error("Open ticket reminder notification missing!");
+            }
+
+            // Verify Case 5: CSAT Reminder notification generated
             $csatNotificationCount = DB::table('notifications')
                 ->where('type', \App\Notifications\CsatReminderNotification::class)
                 ->where('notifiable_id', $user->id)

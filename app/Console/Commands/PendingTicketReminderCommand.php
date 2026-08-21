@@ -78,8 +78,12 @@ class PendingTicketReminderCommand extends Command
                 });
 
                 foreach ($notificationsToDispatch as $item) {
-                    $item['admin']->notify(new PendingTicketReminderNotification($item['ticket']));
-                    $sent++;
+                    try {
+                        $item['admin']->notify(new PendingTicketReminderNotification($item['ticket']));
+                        $sent++;
+                    } catch (\Exception $ne) {
+                        Log::warning("Gagal mengirim email/WA PendingTicketReminderNotification untuk admin #{$item['admin']->id}: " . $ne->getMessage());
+                    }
                 }
 
                 // Kirim pesan pengingat langsung ke percakapan chat

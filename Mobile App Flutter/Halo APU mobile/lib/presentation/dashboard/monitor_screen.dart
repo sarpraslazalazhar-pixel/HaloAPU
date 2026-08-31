@@ -192,6 +192,10 @@ class _AssetCard extends StatelessWidget {
         statusColor = const Color(0xFFEF4444); // Red
         statusBgColor = const Color(0xFFFEF2F2);
         break;
+      case 'Selesai Digunakan':
+        statusColor = const Color(0xFF64748B); // Slate
+        statusBgColor = const Color(0xFFF1F5F9);
+        break;
       case 'Dipesan':
       case 'Menunggu Persetujuan':
       default:

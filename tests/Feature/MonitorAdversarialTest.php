@@ -64,7 +64,7 @@ class MonitorAdversarialTest extends TestCase
             'nama_aset' => 'Ruang VIP',
             'tanggal_mulai' => $now->copy()->addDay()->setHour(9),
             'tanggal_selesai' => $now->copy()->addDay()->setHour(11),
-            'status' => 'Disetujui',
+            'status' => 'on_proses',
         ]);
 
         $response = $this->actingAs($this->user)->get('/monitor');
@@ -81,7 +81,7 @@ class MonitorAdversarialTest extends TestCase
     }
 
     /**
-     * 2. Multiple overlapping bookings on the same asset (verify priority: 'Sedang Dipakai' takes precedence over 'Dipesan').
+     * 2. Priority: 'Sedang Dipakai' takes precedence over 'Selesai Digunakan' and 'Dipesan'.
      */
     public function test_sedang_dipakai_takes_precedence_over_dipesan_for_same_asset(): void
     {
@@ -95,17 +95,17 @@ class MonitorAdversarialTest extends TestCase
             'nama_aset' => 'Ruang VIP',
             'tanggal_mulai' => $now->copy()->subHour(), // 11:00
             'tanggal_selesai' => $now->copy()->addHour(), // 13:00
-            'status' => 'Disetujui',
+            'status' => 'on_proses',
         ]);
 
-        // Booking 2: Dipesan (starts later today)
+        // Booking 2: Dipesan (starts in 30 mins)
         RoomVehicleBooking::create([
             'ticket_id' => $this->ticket->id,
             'tipe' => 'ruang',
             'nama_aset' => 'Ruang VIP',
-            'tanggal_mulai' => $now->copy()->addHours(2), // 14:00
-            'tanggal_selesai' => $now->copy()->addHours(4), // 16:00
-            'status' => 'Disetujui',
+            'tanggal_mulai' => $now->copy()->addMinutes(30),
+            'tanggal_selesai' => $now->copy()->addHours(2),
+            'status' => 'on_proses',
         ]);
 
         $response = $this->actingAs($this->user)->get('/monitor');
@@ -115,14 +115,53 @@ class MonitorAdversarialTest extends TestCase
         $vipRoom = collect($assets)->firstWhere('nama_aset', 'Ruang VIP');
 
         $this->assertNotNull($vipRoom);
-        // Should be 'Sedang Dipakai', not 'Dipesan'
+        // Should be 'Sedang Dipakai'
         $this->assertEquals('Sedang Dipakai', $vipRoom['status']);
 
         Carbon::setTestNow();
     }
 
     /**
-     * 3. Cancelled or rejected bookings should remain 'Tersedia' unless there is an approved one.
+     * 3. Priority: New upcoming booking within 1h ('Dipesan') takes precedence over recently finished booking ('Selesai Digunakan').
+     */
+    public function test_upcoming_booking_takes_precedence_over_recently_finished_buffer(): void
+    {
+        $now = Carbon::create(2026, 7, 13, 12, 0, 0);
+        Carbon::setTestNow($now);
+
+        // Booking 1: Finished 5 minutes ago (11:55)
+        RoomVehicleBooking::create([
+            'ticket_id' => $this->ticket->id,
+            'tipe' => 'ruang',
+            'nama_aset' => 'Ruang VIP',
+            'tanggal_mulai' => $now->copy()->subHours(2),
+            'tanggal_selesai' => $now->copy()->subMinutes(5),
+            'status' => 'on_proses',
+        ]);
+
+        // Booking 2: Starts in 20 minutes (12:20)
+        RoomVehicleBooking::create([
+            'ticket_id' => $this->ticket->id,
+            'tipe' => 'ruang',
+            'nama_aset' => 'Ruang VIP',
+            'tanggal_mulai' => $now->copy()->addMinutes(20),
+            'tanggal_selesai' => $now->copy()->addHours(2),
+            'status' => 'on_proses',
+        ]);
+
+        $response = $this->actingAs($this->user)->get('/monitor');
+        $assets = $response->original->getData()['page']['props']['assets'];
+        $vipRoom = collect($assets)->firstWhere('nama_aset', 'Ruang VIP');
+
+        $this->assertNotNull($vipRoom);
+        // Should show 'Dipesan' for the upcoming booking
+        $this->assertEquals('Dipesan', $vipRoom['status']);
+
+        Carbon::setTestNow();
+    }
+
+    /**
+     * 4. Cancelled or rejected bookings should remain 'Tersedia'.
      */
     public function test_cancelled_or_rejected_bookings_remain_tersedia(): void
     {
@@ -136,7 +175,7 @@ class MonitorAdversarialTest extends TestCase
             'nama_aset' => 'Ruang Ditolak',
             'tanggal_mulai' => $now->copy()->subHour(),
             'tanggal_selesai' => $now->copy()->addHour(),
-            'status' => 'Ditolak',
+            'status' => 'reject',
         ]);
 
         // Cancelled booking (active now)
@@ -146,7 +185,7 @@ class MonitorAdversarialTest extends TestCase
             'nama_aset' => 'Ruang Dibatalkan',
             'tanggal_mulai' => $now->copy()->subHour(),
             'tanggal_selesai' => $now->copy()->addHour(),
-            'status' => 'Dibatalkan',
+            'status' => 'dibatalkan',
         ]);
 
         $response = $this->actingAs($this->user)->get('/monitor');
@@ -167,7 +206,7 @@ class MonitorAdversarialTest extends TestCase
     }
 
     /**
-     * 4. Time boundaries: exactly on start time.
+     * 5. Time boundaries: exactly on start time.
      */
     public function test_time_boundary_exactly_on_start_time(): void
     {
@@ -181,7 +220,7 @@ class MonitorAdversarialTest extends TestCase
             'nama_aset' => 'Ruang VIP',
             'tanggal_mulai' => $now, // 12:00
             'tanggal_selesai' => $now->copy()->addHour(), // 13:00
-            'status' => 'Disetujui',
+            'status' => 'on_proses',
         ]);
 
         $response = $this->actingAs($this->user)->get('/monitor');
@@ -197,21 +236,21 @@ class MonitorAdversarialTest extends TestCase
     }
 
     /**
-     * 5. Time boundaries: exactly on end time.
+     * 6. Time boundaries: exactly on end time and beyond 1 hour buffer.
      */
     public function test_time_boundary_exactly_on_end_time(): void
     {
         $now = Carbon::create(2026, 7, 13, 12, 0, 0);
         Carbon::setTestNow($now);
 
-        // Booking ends exactly at 12:00:00
+        // Booking ends exactly at 12:00:00 (now) -> should be 'Selesai Digunakan' (within 1 hour post buffer)
         RoomVehicleBooking::create([
             'ticket_id' => $this->ticket->id,
             'tipe' => 'ruang',
             'nama_aset' => 'Ruang VIP',
             'tanggal_mulai' => $now->copy()->subHour(), // 11:00
             'tanggal_selesai' => $now, // 12:00
-            'status' => 'Disetujui',
+            'status' => 'on_proses',
         ]);
 
         $response = $this->actingAs($this->user)->get('/monitor');
@@ -221,10 +260,7 @@ class MonitorAdversarialTest extends TestCase
         $vipRoom = collect($assets)->firstWhere('nama_aset', 'Ruang VIP');
 
         $this->assertNotNull($vipRoom);
-        // Note: The logic in controller is:
-        // Carbon::parse($b->tanggal_mulai)->lte($now) && Carbon::parse($b->tanggal_selesai)->gt($now)
-        // Since 12:00:00 is not gt 12:00:00, this will return 'Tersedia'.
-        $this->assertEquals('Tersedia', $vipRoom['status']);
+        $this->assertEquals('Selesai Digunakan', $vipRoom['status']);
 
         Carbon::setTestNow();
     }

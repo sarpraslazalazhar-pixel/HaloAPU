@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(python update_docx.py)",
+      "PowerShell(python add_placeholders.py)",
+      "PowerShell(Start-Process \"Doc/Dokumen Halo APU.docx\")",
+      "PowerShell(python hrd_cleanup.py)",
+      "Bash(pandoc -t markdown \"Doc/Dokumen Halo APU.docx\")",
+      "Bash(python -c \"import zipfile; z = zipfile.ZipFile\\('Doc/Dokumen Halo APU.docx'\\); print\\('\\\\n'.join\\(z.namelist\\(\\)[:10]\\)\\)\")",
+      "Bash(python -c \"import zipfile, xml.etree.ElementTree as ET; z = zipfile.ZipFile\\('Doc/Dokumen Halo APU.docx'\\); tree = ET.fromstring\\(z.read\\('word/document.xml'\\)\\); print\\(''.join\\(tree.itertext\\(\\)\\)[:2000]\\)\")",
+      "Bash(python -c \"import zipfile, xml.etree.ElementTree as ET; z = zipfile.ZipFile\\('Doc/Dokumen Halo APU.docx'\\); tree = ET.fromstring\\(z.read\\('word/document.xml'\\)\\); texts = list\\(tree.itertext\\(\\)\\); print\\('\\\\n'.join\\([t for t in texts if 'chat' in t.lower\\(\\) or '2.' in t or '3.' in t]\\)\\)\")",
+      "Bash(python -c 'import zipfile, xml.etree.ElementTree as ET *)",
+      "Bash(python -c ' *)",
+      "Bash(flutter pub *)",
+      "Bash(flutter analyze *)",
+      "Bash(dart fix *)",
+      "Bash(git checkout *)"
+    ]
+  }
+}

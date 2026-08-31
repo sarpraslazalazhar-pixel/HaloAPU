@@ -9,7 +9,7 @@ import MonitorCalendar from '@/Components/MonitorCalendar';
 interface AssetData {
   nama_aset: string;
   tipe: string;
-  status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai' | 'Menunggu Persetujuan';
+  status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai' | 'Menunggu Persetujuan' | 'Selesai Digunakan';
   user: string | null;
   waktu_mulai?: string | null;
   waktu_selesai?: string | null;
@@ -53,6 +53,7 @@ const STATUS_COLORS: Record<string, string> = {
   'Dipesan': 'bg-yellow-500/10 border-yellow-500/30 ',
   'Sedang Dipakai': 'bg-red-500/10 border-red-500/30 ',
   'Menunggu Persetujuan': 'bg-blue-500/10 border-blue-500/30 ',
+  'Selesai Digunakan': 'bg-slate-500/10 border-slate-500/30 ',
 };
 
 const STATUS_BADGE_COLORS: Record<string, string> = {
@@ -60,6 +61,7 @@ const STATUS_BADGE_COLORS: Record<string, string> = {
   'Dipesan': 'bg-yellow-500 text-black hover:bg-yellow-600',
   'Sedang Dipakai': 'bg-red-500 text-white hover:bg-red-600',
   'Menunggu Persetujuan': 'bg-blue-500 text-white hover:bg-blue-600',
+  'Selesai Digunakan': 'bg-slate-600 text-white hover:bg-slate-700',
 };
 
 export default function MonitorGrid({ assets = [], calendarData = [], lastUpdated }: MonitorGridProps) {

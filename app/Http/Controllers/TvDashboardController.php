@@ -30,9 +30,10 @@ class TvDashboardController extends Controller
             ->take(15)
             ->get();
 
-        // Jadwal Booking Mendatang (dari hari ini ke depan)
+        // Jadwal Booking Mendatang / Aktif (selesai dalam 1 jam terakhir atau di masa depan)
+        $oneHourAgo = Carbon::now()->subHour();
         $upcomingBookings = RoomVehicleBooking::with(['ticket:id,user_id', 'ticket.user:id,name'])
-            ->whereDate('tanggal_mulai', '>=', $today)
+            ->where('tanggal_selesai', '>=', $oneHourAgo)
             ->whereIn('status', ['open', 'on_proses'])
             ->orderBy('tanggal_mulai', 'asc')
             ->take(10)

@@ -1,16 +1,31 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
-import React, { FormEventHandler, useState } from 'react';
+import React, { FormEventHandler, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import toast, { Toaster } from 'react-hot-toast';
 
 export default function AdminLogin() {
-  const { appConfig } = usePage<any>().props;
+  const { appConfig, flash } = usePage<any>().props;
   const { data, setData, post, processing, errors } = useForm({
     username: '',
     password: '',
-    remember: false,
+    remember: true,
   });
 
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    const sessionAlert = sessionStorage.getItem('session_expired_alert');
+    if (sessionAlert) {
+      toast.error(sessionAlert, { id: 'session-expired-toast', duration: 5000 });
+      sessionStorage.removeItem('session_expired_alert');
+    }
+    if (flash?.error) {
+      toast.error(flash.error, { id: 'flash-error' });
+    }
+    if (flash?.success) {
+      toast.success(flash.success, { id: 'flash-success' });
+    }
+  }, [flash]);
 
   const submit: FormEventHandler = (e) => {
     e.preventDefault();
@@ -45,6 +60,7 @@ export default function AdminLogin() {
       </style>
       
       <main className="login-wrapper p-4 md:p-8 font-sans text-gray-800">
+        <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
         <div className="pattern-overlay hidden md:block"></div>
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-center gap-8 lg:gap-24 relative z-10">
           

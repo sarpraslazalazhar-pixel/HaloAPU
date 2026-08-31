@@ -7,6 +7,7 @@ import 'package:halo_apu_mobile/core/theme/app_theme.dart';
 import 'package:halo_apu_mobile/core/services/push_notification_service.dart';
 import 'package:halo_apu_mobile/core/services/pending_ticket_service.dart';
 import 'package:halo_apu_mobile/core/config/api_config.dart';
+import 'package:halo_apu_mobile/core/services/cache_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,10 @@ void main() async {
   await Hive.initFlutter();
   await Hive.openBox('ticket_drafts');
   await PendingTicketService.init();
+
+  // Initialize API response cache & cleanup expired entries
+  await CacheService.init();
+  await CacheService.cleanup();
 
   // Custom user-friendly Error Widget (Mencegah Layar Merah / Crash Screen)
   ErrorWidget.builder = (FlutterErrorDetails details) {

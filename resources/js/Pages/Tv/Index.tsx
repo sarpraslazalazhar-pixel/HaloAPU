@@ -304,41 +304,52 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  </div>
  ) : (
  upcomingBookings.map(booking => {
- const now = currentTime.getTime();
- const startTime = new Date(booking.tanggal_mulai).getTime();
- const endTime = new Date(booking.tanggal_selesai).getTime();
- const isToday = new Date(booking.tanggal_mulai).toDateString() === currentTime.toDateString();
- const isOngoing = now >= startTime && now <= endTime;
- const isFuture = now < startTime;
- const isPendingApproval = booking.status === 'open';
- 
- let badgeText = '';
- let badgeStyle = '';
- let cardStyle = '';
+              const now = currentTime.getTime();
+              const startTime = new Date(booking.tanggal_mulai).getTime();
+              const endTime = new Date(booking.tanggal_selesai).getTime();
+              const isToday = new Date(booking.tanggal_mulai).toDateString() === currentTime.toDateString();
+              const isOngoing = now >= startTime && now <= endTime;
+              const isFuture = now < startTime;
+              const isRecentlyFinished = now > endTime && now <= endTime + 3600000;
+              const isPendingApproval = booking.status === 'open';
+              
+              let badgeText = '';
+              let badgeStyle = '';
+              let cardStyle = '';
 
- if (isOngoing) {
- badgeText = 'Sedang Dipakai';
- badgeStyle = 'bg-rose-500 text-white shadow-md shadow-rose-200 animate-pulse border-rose-500 text-sm px-4 py-1.5 font-bold tracking-wider uppercase';
- cardStyle = 'bg-gradient-to-br from-rose-50 to-white border-rose-300 shadow-md shadow-rose-100/50 ring-1 ring-rose-200';
- } else if (isFuture && isPendingApproval) {
- badgeText = 'Menunggu Persetujuan';
- badgeStyle = 'bg-sky-500 text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-sky-200 border-sky-500';
- cardStyle = 'bg-gradient-to-br from-sky-50 to-white border-sky-200 shadow-md shadow-sky-100/50';
- } else if (isFuture) {
- if (isToday) {
- badgeText = 'Terjadwal Hari Ini';
- badgeStyle = 'bg-[#00a2e8] text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-blue-200 border-[#00a2e8]';
- cardStyle = 'bg-gradient-to-br from-blue-50 to-white border-blue-200 shadow-md shadow-blue-100/50';
- } else {
- badgeText =`Dipesan: ${format(new Date(booking.tanggal_mulai), 'dd MMM', { locale: localeID })}`;
- badgeStyle = 'bg-amber-500 text-white border-amber-500 text-sm px-4 py-1.5 font-bold shadow-md shadow-amber-200';
- cardStyle = 'bg-gradient-to-br from-amber-50 to-white border-amber-200 shadow-sm';
- }
- } else {
- badgeText = 'Selesai';
- badgeStyle = 'text-slate-400 border-slate-200 border text-sm px-4 py-1.5 font-bold bg-slate-50';
- cardStyle = 'bg-slate-50 border-slate-200 opacity-60';
- }
+              if (isOngoing) {
+                if (isPendingApproval) {
+                  badgeText = 'Menunggu Persetujuan';
+                  badgeStyle = 'bg-sky-500 text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-sky-200 border-sky-500 animate-pulse';
+                  cardStyle = 'bg-gradient-to-br from-sky-50 to-white border-sky-300 shadow-md shadow-sky-100/50 ring-1 ring-sky-200';
+                } else {
+                  badgeText = 'Sedang Dipakai';
+                  badgeStyle = 'bg-rose-500 text-white shadow-md shadow-rose-200 animate-pulse border-rose-500 text-sm px-4 py-1.5 font-bold tracking-wider uppercase';
+                  cardStyle = 'bg-gradient-to-br from-rose-50 to-white border-rose-300 shadow-md shadow-rose-100/50 ring-1 ring-rose-200';
+                }
+              } else if (isFuture && isPendingApproval) {
+                badgeText = 'Menunggu Persetujuan';
+                badgeStyle = 'bg-sky-500 text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-sky-200 border-sky-500';
+                cardStyle = 'bg-gradient-to-br from-sky-50 to-white border-sky-200 shadow-md shadow-sky-100/50';
+              } else if (isFuture) {
+                if (isToday) {
+                  badgeText = 'Terjadwal Hari Ini';
+                  badgeStyle = 'bg-[#00a2e8] text-white text-sm px-4 py-1.5 font-bold tracking-wider uppercase shadow-md shadow-blue-200 border-[#00a2e8]';
+                  cardStyle = 'bg-gradient-to-br from-blue-50 to-white border-blue-200 shadow-md shadow-blue-100/50';
+                } else {
+                  badgeText = `Dipesan: ${format(new Date(booking.tanggal_mulai), 'dd MMM', { locale: localeID })}`;
+                  badgeStyle = 'bg-amber-500 text-white border-amber-500 text-sm px-4 py-1.5 font-bold shadow-md shadow-amber-200';
+                  cardStyle = 'bg-gradient-to-br from-amber-50 to-white border-amber-200 shadow-sm';
+                }
+              } else if (isRecentlyFinished) {
+                badgeText = 'Selesai Digunakan';
+                badgeStyle = 'bg-slate-600 text-white border-slate-600 text-sm px-4 py-1.5 font-bold shadow-sm';
+                cardStyle = 'bg-slate-50 border-slate-300 shadow-sm';
+              } else {
+                badgeText = 'Selesai';
+                badgeStyle = 'text-slate-400 border-slate-200 border text-sm px-4 py-1.5 font-bold bg-slate-50';
+                cardStyle = 'bg-slate-50 border-slate-200 opacity-60';
+              }
 
  return (
  <div

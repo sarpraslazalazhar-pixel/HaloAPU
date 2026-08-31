@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api/api_client.dart';
 import '../../domain/models/ticket_model.dart';
+import '../../core/services/cache_service.dart';
 
 final ticketRepositoryProvider = Provider<TicketRepository>((ref) {
   final apiClient = ref.watch(apiClientProvider);
@@ -16,6 +17,7 @@ class TicketRepository {
 
   /// Fetch user's tickets with optional status filter and pagination.
   Future<List<TicketModel>> getTickets({String? status, int page = 1, int perPage = 15}) async {
+    final cacheKey = CacheService.ticketListKey(status: status, page: page);
     try {
       final params = <String, dynamic>{
         'page': page,
@@ -28,67 +30,101 @@ class TicketRepository {
       final response = await _apiClient.dio.get('/tickets', queryParameters: params);
       if (response.statusCode == 200) {
         final List<dynamic> data = response.data['data'] ?? response.data;
+        await CacheService.put(cacheKey, data, ttlSeconds: 300);
         return data.map((json) => TicketModel.safeFromJson(json)).toList();
       } else {
         throw Exception('Gagal memuat tiket');
       }
     } catch (e) {
+      final cached = CacheService.getStale(cacheKey);
+      if (cached != null) {
+        final List<dynamic> data = cached is List ? cached : [];
+        return data.map((json) => TicketModel.safeFromJson(json)).toList();
+      }
       throw Exception('Gagal memuat tiket: $e');
     }
   }
 
   /// Fetch a single ticket by ID with full details.
   Future<Map<String, dynamic>> getTicketDetail(String id) async {
+    final cacheKey = CacheService.ticketDetailKey(id);
     try {
       final response = await _apiClient.dio.get('/tickets/$id');
       if (response.statusCode == 200) {
-        return response.data['data'];
+        final data = response.data['data'];
+        await CacheService.put(cacheKey, data, ttlSeconds: 120);
+        return data;
       } else {
         throw Exception('Gagal memuat detail tiket');
       }
     } catch (e) {
+      final cached = CacheService.getStale(cacheKey);
+      if (cached != null) {
+        return Map<String, dynamic>.from(cached);
+      }
       throw Exception('Gagal memuat detail tiket: $e');
     }
   }
 
   /// Fetch ticket by ID as TicketModel (simplified).
   Future<TicketModel> getTicketById(String id) async {
+    final cacheKey = CacheService.ticketDetailKey(id);
     try {
       final response = await _apiClient.dio.get('/tickets/$id');
       if (response.statusCode == 200) {
-        return TicketModel.safeFromJson(response.data['data'] ?? response.data);
+        final data = response.data['data'] ?? response.data;
+        await CacheService.put(cacheKey, data, ttlSeconds: 120);
+        return TicketModel.safeFromJson(data);
       } else {
         throw Exception('Gagal memuat tiket');
       }
     } catch (e) {
+      final cached = CacheService.getStale(cacheKey);
+      if (cached != null) {
+        return TicketModel.safeFromJson(cached);
+      }
       throw Exception('Gagal memuat tiket: $e');
     }
   }
 
   /// Fetch services (units + sub-units).
   Future<List<dynamic>> getServices() async {
+    final cacheKey = CacheService.servicesKey();
     try {
       final response = await _apiClient.dio.get('/services');
       if (response.statusCode == 200) {
-        return response.data['data'] ?? response.data;
+        final data = response.data['data'] ?? response.data;
+        await CacheService.put(cacheKey, data, ttlSeconds: 86400);
+        return data;
       } else {
         throw Exception('Gagal memuat layanan');
       }
     } catch (e) {
+      final cached = CacheService.getStale(cacheKey);
+      if (cached != null) {
+        return cached is List ? cached : [cached];
+      }
       throw Exception('Gagal memuat layanan: $e');
     }
   }
 
   /// Fetch form fields for a specific sub-unit.
   Future<List<dynamic>> getFormFields(int subUnitId) async {
+    final cacheKey = CacheService.formFieldsKey(subUnitId);
     try {
       final response = await _apiClient.dio.get('/services/$subUnitId/fields');
       if (response.statusCode == 200) {
-        return response.data['data'] ?? response.data;
+        final data = response.data['data'] ?? response.data;
+        await CacheService.put(cacheKey, data, ttlSeconds: 86400);
+        return data;
       } else {
         throw Exception('Gagal memuat form fields');
       }
     } catch (e) {
+      final cached = CacheService.getStale(cacheKey);
+      if (cached != null) {
+        return cached is List ? cached : [cached];
+      }
       throw Exception('Gagal memuat form fields: $e');
     }
   }
@@ -128,6 +164,7 @@ class TicketRepository {
           data: formData,
         );
         if (response.statusCode == 201 || response.statusCode == 200) {
+          await CacheService.removeByPrefix('ticket_list_');
           return TicketModel.safeFromJson(response.data['data'] ?? response.data);
         } else {
           throw Exception('Gagal membuat tiket');
@@ -139,6 +176,7 @@ class TicketRepository {
           data: ticketData,
         );
         if (response.statusCode == 201 || response.statusCode == 200) {
+          await CacheService.removeByPrefix('ticket_list_');
           return TicketModel.safeFromJson(response.data['data'] ?? response.data);
         } else {
           throw Exception('Gagal membuat tiket');
@@ -175,6 +213,7 @@ class TicketRepository {
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
+        await CacheService.remove(CacheService.ticketDetailKey(ticketId));
         return response.data['data'];
       } else {
         throw Exception('Gagal mengirim balasan');
@@ -194,6 +233,7 @@ class TicketRepository {
       if (response.statusCode != 200) {
         throw Exception(response.data['message'] ?? 'Gagal membatalkan tiket');
       }
+      await CacheService.removeByPrefix('ticket_');
     } on DioException catch (e) {
       if (e.response?.statusCode == 422) {
         throw Exception(e.response!.data['message'] ?? 'Gagal membatalkan tiket');
@@ -209,6 +249,7 @@ class TicketRepository {
       if (response.statusCode != 200) {
         throw Exception(response.data['message'] ?? 'Gagal menerima hasil');
       }
+      await CacheService.removeByPrefix('ticket_');
     } on DioException catch (e) {
       if (e.response?.statusCode == 422) {
         throw Exception(e.response!.data['message'] ?? 'Gagal menerima hasil');

@@ -4,13 +4,13 @@ import AdminLayout from '@/Layouts/AdminLayout';
 import MonitorGrid from '@/Components/MonitorGrid';
 
 interface AssetData {
- nama_aset: string;
- tipe: 'ruang' | 'kendaraan';
- status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai';
- user: string | null;
- waktu_mulai: string | null;
- waktu_selesai: string | null;
- booking_id: number | null;
+  nama_aset: string;
+  tipe: 'ruang' | 'kendaraan';
+  status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai' | 'Menunggu Persetujuan' | 'Selesai Digunakan';
+  user: string | null;
+  waktu_mulai: string | null;
+  waktu_selesai: string | null;
+  booking_id: number | null;
 }
 
 interface CalendarDay {

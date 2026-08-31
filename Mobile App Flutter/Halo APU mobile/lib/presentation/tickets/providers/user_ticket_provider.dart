@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../domain/models/ticket_model.dart';
 import '../../../../core/services/ticket_service.dart';
+import '../../../../core/services/cache_service.dart';
 
 class UserTicketNotifier extends StateNotifier<AsyncValue<List<TicketModel>>> {
   final TicketService _ticketService = TicketService();
@@ -54,10 +55,24 @@ class UserTicketNotifier extends StateNotifier<AsyncValue<List<TicketModel>>> {
   }
 
   Future<void> _loadInitial() async {
-    state = const AsyncValue.loading();
     _currentPage = 1;
     _allTickets.clear();
 
+    // Stale-while-revalidate: tampilkan cache dulu jika tersedia
+    final cacheKey = CacheService.ticketListKey(
+      status: _currentStatuses?.join(','),
+      search: _searchQuery,
+      page: _currentPage,
+    );
+    final cached = CacheService.get(cacheKey);
+    if (cached != null && cached is List) {
+      _allTickets = cached.map((json) => TicketModel.safeFromJson(json)).toList();
+      state = AsyncValue.data(_allTickets);
+    } else {
+      state = const AsyncValue.loading();
+    }
+
+    // Fetch data terbaru dari server di background
     final result = await _ticketService.getTickets(
       page: _currentPage, 
       statuses: _currentStatuses,
@@ -71,8 +86,20 @@ class UserTicketNotifier extends StateNotifier<AsyncValue<List<TicketModel>>> {
       _hasMore = _currentPage < (meta['last_page'] ?? 1);
       
       state = AsyncValue.data(_allTickets);
+
+      // Simpan ke cache (TTL 5 menit)
+      await CacheService.put(cacheKey, data, ttlSeconds: 300);
     } else {
-      state = AsyncValue.error(result['message'], StackTrace.current);
+      // Jika gagal dan belum ada data, coba stale cache
+      if (_allTickets.isEmpty) {
+        final stale = CacheService.getStale(cacheKey);
+        if (stale != null && stale is List) {
+          _allTickets = stale.map((json) => TicketModel.safeFromJson(json)).toList();
+          state = AsyncValue.data(_allTickets);
+        } else {
+          state = AsyncValue.error(result['message'], StackTrace.current);
+        }
+      }
     }
   }
 
@@ -95,6 +122,17 @@ class UserTicketNotifier extends StateNotifier<AsyncValue<List<TicketModel>>> {
       _hasMore = _currentPage < (meta['last_page'] ?? 1);
       
       state = AsyncValue.data(_allTickets);
+
+      // Simpan ke cache (TTL 5 menit)
+      await CacheService.put(
+        CacheService.ticketListKey(
+          status: _currentStatuses?.join(','),
+          search: _searchQuery,
+          page: _currentPage,
+        ),
+        data,
+        ttlSeconds: 300,
+      );
     }
     
     _isLoadingMore = false;

@@ -3,7 +3,7 @@ import { Head, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Star } from 'lucide-react';
-import ReactECharts from 'echarts-for-react';
+import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 
 export default function CsatIndex({ csats, stats, csatPerUnit, filters, units, subUnits }: any) {
@@ -66,7 +66,8 @@ export default function CsatIndex({ csats, stats, csatPerUnit, filters, units, s
  <CardTitle className="text-base">Rata-rata CSAT per Unit</CardTitle>
  </CardHeader>
  <CardContent>
- <ReactECharts option={{
+ <LazyECharts
+ option={{
  tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
  grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
  xAxis: { type: 'value', min: 0, max: 5 },
@@ -77,7 +78,9 @@ export default function CsatIndex({ csats, stats, csatPerUnit, filters, units, s
  itemStyle: { color: '#eab308', borderRadius: [0, 4, 4, 0] },
  data: [...csatPerUnit].reverse().map((d: any) => d.rata_rata)
  }]
- }} style={{ height: csatPerUnit.length * 60 + 40, width: '100%' }} />
+ }}
+ height={csatPerUnit.length * 60 + 40}
+ />
  </CardContent>
  </Card>
  )}

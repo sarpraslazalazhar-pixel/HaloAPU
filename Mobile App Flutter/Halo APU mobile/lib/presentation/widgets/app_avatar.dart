@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/config/api_config.dart';
@@ -115,16 +116,15 @@ class AppAvatar extends StatelessWidget {
         (resolvedUrl.startsWith('http://') ||
          resolvedUrl.startsWith('https://') ||
          resolvedUrl.startsWith('blob:'))) {
-      avatarChild = Image.network(
-        resolvedUrl,
+      avatarChild = CachedNetworkImage(
+        imageUrl: resolvedUrl,
         width: size,
         height: size,
         fit: BoxFit.cover,
-        loadingBuilder: (context, child, loadingProgress) {
-          if (loadingProgress == null) return child;
-          return _buildInitialsPlaceholder(initials, calculatedFontSize);
-        },
-        errorBuilder: (_, __, ___) => _buildInitialsPlaceholder(initials, calculatedFontSize),
+        placeholder: (context, url) => _buildInitialsPlaceholder(initials, calculatedFontSize),
+        errorWidget: (context, url, error) => _buildInitialsPlaceholder(initials, calculatedFontSize),
+        fadeInDuration: const Duration(milliseconds: 200),
+        fadeOutDuration: const Duration(milliseconds: 200),
       );
     } else {
       avatarChild = _buildInitialsPlaceholder(initials, calculatedFontSize);

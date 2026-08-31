@@ -63,12 +63,12 @@ export default function DashboardIndex({ totalTickets, statusCounts, topUsers, f
 
  return (
  <AdminLayout title="Dashboard Admin">
- <Head title="Dashboard Admin" />
+ <Head title="Dasbor Admin" />
 
  <div className="flex flex-col gap-1 mb-6">
  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
  <div>
- <h1 className="text-2xl font-semibold tracking-tight">Dashboard Admin</h1>
+ <h1 className="text-2xl font-semibold tracking-tight">Dasbor Admin</h1>
  <p className="text-sm text-muted-foreground mt-0.5">Ringkasan dan statistik sistem layanan.</p>
  </div>
  <div className="flex items-center gap-2">

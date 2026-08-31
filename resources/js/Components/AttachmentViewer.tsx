@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import mammoth from 'mammoth';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
 import { ZoomIn, ZoomOut, Maximize, FileText, Download, ExternalLink } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
@@ -30,9 +29,11 @@ export function AttachmentViewer({ attachment, viewRoute, downloadRoute, childre
  useEffect(() => {
  if (isDocx) {
  setDocxLoading(true);
- fetch(viewUrl)
- .then(res => res.arrayBuffer())
- .then(buffer => mammoth.convertToHtml({ arrayBuffer: buffer }))
+ Promise.all([
+ fetch(viewUrl).then(res => res.arrayBuffer()),
+ import('mammoth'),
+ ])
+ .then(([buffer, { default: mammoth }]) => mammoth.convertToHtml({ arrayBuffer: buffer }))
  .then(result => {
  setDocxHtml(result.value);
  setDocxLoading(false);

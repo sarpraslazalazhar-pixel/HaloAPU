@@ -6,7 +6,7 @@ import MonitorGrid from '@/Components/MonitorGrid';
 interface AssetData {
  nama_aset: string;
  tipe: 'ruang' | 'kendaraan';
- status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai';
+ status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai' | 'Menunggu Persetujuan' | 'Selesai Digunakan';
  user: string | null;
  waktu_mulai: string | null;
  waktu_selesai: string | null;

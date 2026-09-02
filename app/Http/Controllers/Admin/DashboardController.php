@@ -286,49 +286,90 @@ class DashboardController extends Controller
                 ->toArray();
         });
 
-        // ── 12. Data Kepatuhan SLA ──
-        // Sinkronisasi: otomatis mengikuti filter bulan/tahun dashboard jika dipilih
-        $defaultSlaPeriod = ($year && $month) ? sprintf('%04d-%02d', $year, $month) : now()->format('Y-m');
-        $slaPeriod = (string) $request->input('sla_period', $defaultSlaPeriod);
+        // ── 12. Data Kepatuhan SLA & Status SLA Aktif ──
+        // A. Status SLA Aktif (Real-time untuk tiket yang saat ini aktif: open, on_proses, pending)
+        $activeBreachQuery = DB::table('ticket_sla_tracking')
+            ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
+            ->whereIn('tickets.status', ['open', 'on_proses', 'pending'])
+            ->selectRaw('
+                SUM(CASE WHEN 
+                    ticket_sla_tracking.is_response_breached = 1 
+                    OR (ticket_sla_tracking.responded_at IS NOT NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.responded_at > ticket_sla_tracking.sla_response_deadline)
+                    OR (ticket_sla_tracking.responded_at IS NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.sla_response_deadline < NOW())
+                    OR ticket_sla_tracking.is_resolution_breached = 1 
+                    OR (ticket_sla_tracking.resolved_at IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.resolved_at > ticket_sla_tracking.sla_resolution_deadline)
+                    OR (ticket_sla_tracking.resolved_at IS NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline < NOW())
+                THEN 1 ELSE 0 END) as active_breach,
+                SUM(CASE WHEN 
+                    ticket_sla_tracking.resolved_at IS NULL 
+                    AND ticket_sla_tracking.is_resolution_breached = 0
+                    AND (ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline >= NOW())
+                    AND ticket_sla_tracking.sla_resolution_deadline <= ?
+                THEN 1 ELSE 0 END) as active_warning
+            ', [now()->addDay()])->first();
+
+        $activeSlaBreach = (int) ($activeBreachQuery->active_breach ?? 0);
+        $activeSlaWarning = (int) ($activeBreachQuery->active_warning ?? 0);
+
+        // B. Metrik Kepatuhan SLA & Distribusi (Mengikuti filter Bulan & Tahun Dashboard)
         $slaUnitIdInput = $request->input('sla_unit_id');
         $slaUnitId = ($slaUnitIdInput !== null && $slaUnitIdInput !== '') ? (int) $slaUnitIdInput : null;
 
         $slaQuery = TicketSlaTracking::query()
             ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
             ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
-            ->join('units', 'sub_units.unit_id', '=', 'units.id');
+            ->join('units', 'sub_units.unit_id', '=', 'units.id')
+            ->whereNotIn('tickets.status', ['reject', 'dibatalkan']);
 
-        // Gunakan $slaPeriod pada $slaQuery secara konsisten
-        if (strlen($slaPeriod) === 7) {
-            $slaYear = (int) substr($slaPeriod, 0, 4);
-            $slaMonth = (int) substr($slaPeriod, 5, 2);
-            $slaQuery->whereYear('tickets.created_at', $slaYear)
-                     ->whereMonth('tickets.created_at', $slaMonth);
+        if ($year) {
+            $slaQuery->whereYear('tickets.created_at', $year);
         }
-
+        if ($month) {
+            $slaQuery->whereMonth('tickets.created_at', $month);
+        }
         if ($slaUnitId) {
             $slaQuery->where('units.id', $slaUnitId);
         }
 
-        $slaAggregates = (clone $slaQuery)->selectRaw('
+        // Ekspresi SQL Real-Time Evaluasi SLA Breach & On-Time
+        $respBreachSql = '(ticket_sla_tracking.is_response_breached = 1 
+            OR (ticket_sla_tracking.responded_at IS NOT NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.responded_at > ticket_sla_tracking.sla_response_deadline) 
+            OR (ticket_sla_tracking.responded_at IS NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.sla_response_deadline < NOW()))';
+
+        $respEvalSql = '(ticket_sla_tracking.responded_at IS NOT NULL 
+            OR ticket_sla_tracking.is_response_breached = 1 
+            OR (ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.sla_response_deadline < NOW()))';
+
+        $respOnTimeSql = '(ticket_sla_tracking.responded_at IS NOT NULL 
+            AND (ticket_sla_tracking.sla_response_deadline IS NULL OR ticket_sla_tracking.responded_at <= ticket_sla_tracking.sla_response_deadline) 
+            AND ticket_sla_tracking.is_response_breached = 0)';
+
+        $resBreachSql = '(ticket_sla_tracking.is_resolution_breached = 1 
+            OR (ticket_sla_tracking.resolved_at IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.resolved_at > ticket_sla_tracking.sla_resolution_deadline) 
+            OR (ticket_sla_tracking.resolved_at IS NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline < NOW()))';
+
+        $resEvalSql = '(ticket_sla_tracking.resolved_at IS NOT NULL 
+            OR ticket_sla_tracking.is_resolution_breached = 1 
+            OR (ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline < NOW()))';
+
+        $resOnTimeSql = '(ticket_sla_tracking.resolved_at IS NOT NULL 
+            AND (ticket_sla_tracking.sla_resolution_deadline IS NULL OR ticket_sla_tracking.resolved_at <= ticket_sla_tracking.sla_resolution_deadline) 
+            AND ticket_sla_tracking.is_resolution_breached = 0)';
+
+        $slaAggregates = (clone $slaQuery)->selectRaw("
             COUNT(*) as total_all,
-            SUM(CASE WHEN ticket_sla_tracking.responded_at IS NOT NULL AND ticket_sla_tracking.is_response_breached = 0 THEN 1 ELSE 0 END) as responded_on_time,
-            SUM(CASE WHEN ticket_sla_tracking.responded_at IS NOT NULL OR ticket_sla_tracking.is_response_breached = 1 THEN 1 ELSE 0 END) as response_evaluated,
-            SUM(CASE WHEN ticket_sla_tracking.resolved_at IS NOT NULL AND ticket_sla_tracking.is_resolution_breached = 0 THEN 1 ELSE 0 END) as resolved_on_time,
-            SUM(CASE WHEN ticket_sla_tracking.resolved_at IS NOT NULL OR ticket_sla_tracking.is_resolution_breached = 1 THEN 1 ELSE 0 END) as resolution_evaluated,
-            SUM(CASE WHEN ticket_sla_tracking.is_response_breached = 1 THEN 1 ELSE 0 END) as response_breach,
-            SUM(CASE WHEN ticket_sla_tracking.is_resolution_breached = 1 THEN 1 ELSE 0 END) as resolution_breach,
-            SUM(CASE WHEN ticket_sla_tracking.is_response_breached = 1 OR ticket_sla_tracking.is_resolution_breached = 1 THEN 1 ELSE 0 END) as total_unique_breach,
-            SUM(CASE WHEN ticket_sla_tracking.is_response_breached = 0 AND ticket_sla_tracking.is_resolution_breached = 0 THEN 1 ELSE 0 END) as within_sla,
-            SUM(CASE WHEN ticket_sla_tracking.is_response_breached = 1 AND ticket_sla_tracking.is_resolution_breached = 0 THEN 1 ELSE 0 END) as response_breach_only,
-            SUM(CASE WHEN ticket_sla_tracking.is_response_breached = 0 AND ticket_sla_tracking.is_resolution_breached = 1 THEN 1 ELSE 0 END) as resolution_breach_only,
-            SUM(CASE WHEN ticket_sla_tracking.is_response_breached = 1 AND ticket_sla_tracking.is_resolution_breached = 1 THEN 1 ELSE 0 END) as both_breach,
-            SUM(CASE WHEN ticket_sla_tracking.resolved_at IS NULL 
-                          AND ticket_sla_tracking.is_resolution_breached = 0 
-                          AND ticket_sla_tracking.sla_resolution_deadline > ? 
-                          AND ticket_sla_tracking.sla_resolution_deadline <= ? 
-                     THEN 1 ELSE 0 END) as total_warning
-        ', [now(), now()->addDay()])->first();
+            SUM(CASE WHEN {$respOnTimeSql} THEN 1 ELSE 0 END) as responded_on_time,
+            SUM(CASE WHEN {$respEvalSql} THEN 1 ELSE 0 END) as response_evaluated,
+            SUM(CASE WHEN {$resOnTimeSql} THEN 1 ELSE 0 END) as resolved_on_time,
+            SUM(CASE WHEN {$resEvalSql} THEN 1 ELSE 0 END) as resolution_evaluated,
+            SUM(CASE WHEN {$respBreachSql} THEN 1 ELSE 0 END) as response_breach,
+            SUM(CASE WHEN {$resBreachSql} THEN 1 ELSE 0 END) as resolution_breach,
+            SUM(CASE WHEN ({$respBreachSql}) OR ({$resBreachSql}) THEN 1 ELSE 0 END) as total_unique_breach,
+            SUM(CASE WHEN NOT ({$respBreachSql}) AND NOT ({$resBreachSql}) THEN 1 ELSE 0 END) as within_sla,
+            SUM(CASE WHEN ({$respBreachSql}) AND NOT ({$resBreachSql}) THEN 1 ELSE 0 END) as response_breach_only,
+            SUM(CASE WHEN NOT ({$respBreachSql}) AND ({$resBreachSql}) THEN 1 ELSE 0 END) as resolution_breach_only,
+            SUM(CASE WHEN ({$respBreachSql}) AND ({$resBreachSql}) THEN 1 ELSE 0 END) as both_breach
+        ")->first();
 
         $totalAll = (int) ($slaAggregates->total_all ?? 0);
         $respondedOnTime = (int) ($slaAggregates->responded_on_time ?? 0);
@@ -336,7 +377,6 @@ class DashboardController extends Controller
         $resolvedOnTime = (int) ($slaAggregates->resolved_on_time ?? 0);
         $resolutionEvaluated = (int) ($slaAggregates->resolution_evaluated ?? 0);
         $totalBreach = (int) ($slaAggregates->total_unique_breach ?? 0);
-        $totalWarning = (int) ($slaAggregates->total_warning ?? 0);
 
         // Kepatuhan SLA dihitung berdasarkan tiket yang telah dievaluasi statusnya:
         // (tiket tepat waktu / total tiket dievaluasi) * 100.
@@ -357,25 +397,27 @@ class DashboardController extends Controller
             ['name' => 'Pelanggaran Keduanya', 'value' => (int) ($slaAggregates->both_breach ?? 0)],
         ];
 
-        // Kepatuhan SLA per Unit (Bulan Ini / Periode Terpilih) — Cached 60s
-        $slaBarCacheKey = "admin_dashboard_sla_bar_" . md5($slaPeriod . '_' . ($slaUnitId ?? 'all'));
-        $slaBarChartData = Cache::remember($slaBarCacheKey, 60, function () use ($slaPeriod, $slaUnitId) {
+        // Kepatuhan SLA per Unit (Mengikuti filter Bulan/Tahun & Unit terpilih) — Cached 60s
+        $slaBarCacheKey = 'admin_dashboard_sla_bar_' . md5(($year ?? 'all') . '_' . ($month ?? 'all') . '_' . ($slaUnitId ?? 'all'));
+        $slaBarChartData = Cache::remember($slaBarCacheKey, 60, function () use ($year, $month, $slaUnitId, $respBreachSql, $resBreachSql) {
             $query = DB::table('ticket_sla_tracking')
                 ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
                 ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
                 ->join('units', 'sub_units.unit_id', '=', 'units.id')
+                ->whereNotIn('tickets.status', ['reject', 'dibatalkan'])
                 ->select(
                     'units.nama_unit as unit_nama',
                     DB::raw('COUNT(*) as total'),
-                    DB::raw('SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) as dalam_sla'),
-                    DB::raw('SUM(CASE WHEN is_response_breached = 1 OR is_resolution_breached = 1 THEN 1 ELSE 0 END) as breach')
+                    DB::raw("SUM(CASE WHEN NOT ({$respBreachSql}) AND NOT ({$resBreachSql}) THEN 1 ELSE 0 END) as dalam_sla"),
+                    DB::raw("SUM(CASE WHEN ({$respBreachSql}) OR ({$resBreachSql}) THEN 1 ELSE 0 END) as breach")
                 );
 
-            if (strlen($slaPeriod) === 7) {
-                $query->whereYear('tickets.created_at', substr($slaPeriod, 0, 4))
-                      ->whereMonth('tickets.created_at', substr($slaPeriod, 5, 2));
+            if ($year) {
+                $query->whereYear('tickets.created_at', $year);
             }
-
+            if ($month) {
+                $query->whereMonth('tickets.created_at', $month);
+            }
             if ($slaUnitId) {
                 $query->where('units.id', $slaUnitId);
             }
@@ -391,27 +433,36 @@ class DashboardController extends Controller
                 ->toArray();
         });
 
-        // Tren Kepatuhan SLA 12 Bulan Terakhir (Cached 60s)
-        $slaTrendData = Cache::remember('admin_dashboard_sla_trend_12m', 60, function () {
-            return DB::table('ticket_sla_tracking')
+        // Tren Kepatuhan SLA Bulanan (Januari–Desember) — Mengikuti Tahun Terpilih (Cached 60s)
+        $slaTrendYear = $year ?: (int) date('Y');
+        $slaTrendCacheKey = "admin_dashboard_sla_trend_{$slaTrendYear}";
+        $slaTrendData = Cache::remember($slaTrendCacheKey, 60, function () use ($slaTrendYear, $respBreachSql, $resBreachSql) {
+            $trendRaw = DB::table('ticket_sla_tracking')
                 ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
+                ->whereYear('tickets.created_at', $slaTrendYear)
+                ->whereNotIn('tickets.status', ['reject', 'dibatalkan'])
                 ->select(
-                    DB::raw("DATE_FORMAT(tickets.created_at, '%Y-%m') as bulan"),
+                    DB::raw('MONTH(tickets.created_at) as bulan_num'),
                     DB::raw('COUNT(*) as total'),
-                    DB::raw('SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) as dalam_sla'),
-                    DB::raw('ROUND(SUM(CASE WHEN is_response_breached = 0 AND is_resolution_breached = 0 THEN 1 ELSE 0 END) / COUNT(*) * 100, 1) as persentase_sla')
+                    DB::raw("SUM(CASE WHEN NOT ({$respBreachSql}) AND NOT ({$resBreachSql}) THEN 1 ELSE 0 END) as dalam_sla")
                 )
-                ->where('tickets.created_at', '>=', now()->subYear())
-                ->groupBy(DB::raw("DATE_FORMAT(tickets.created_at, '%Y-%m')"))
-                ->orderBy('bulan')
+                ->groupBy(DB::raw('MONTH(tickets.created_at)'))
                 ->get()
-                ->map(fn($row) => [
-                    'bulan' => (string) $row->bulan,
-                    'total' => (int) $row->total,
-                    'dalam_sla' => (int) $row->dalam_sla,
-                    'persentase_sla' => (float) $row->persentase_sla,
-                ])
-                ->toArray();
+                ->keyBy('bulan_num');
+
+            return collect(range(1, 12))->map(function ($b) use ($trendRaw) {
+                $row = $trendRaw->get($b);
+                $total = (int) ($row->total ?? 0);
+                $dalamSla = (int) ($row->dalam_sla ?? 0);
+                $persentase = $total > 0 ? (float) round(($dalamSla / $total) * 100, 1) : 100.0;
+
+                return [
+                    'bulan' => date('M', mktime(0, 0, 0, $b, 1)),
+                    'total' => $total,
+                    'dalam_sla' => $dalamSla,
+                    'persentase_sla' => $persentase,
+                ];
+            })->toArray();
         });
 
         // ── 13. Grafik Tiket Harian (7 Hari Terakhir) ──
@@ -459,15 +510,20 @@ class DashboardController extends Controller
                 'responseCompliance' => $responseCompliance,
                 'resolutionCompliance' => $resolutionCompliance,
                 'totalBreach' => $totalBreach,
-                'totalWarning' => $totalWarning,
+                'totalWarning' => $activeSlaWarning,
                 'totalAll' => $totalAll,
+                'activeBreach' => $activeSlaBreach,
+                'activeWarning' => $activeSlaWarning,
             ],
             'slaPieChartData' => $slaPieChartData,
             'slaBarChartData' => $slaBarChartData,
             'slaTrendData' => $slaTrendData,
+            'slaTrendYear' => $slaTrendYear,
             'slaFilters' => [
-                'period' => $slaPeriod,
+                'period' => ($year && $month) ? sprintf('%04d-%02d', $year, $month) : ($year ? (string) $year : 'all'),
                 'unitId' => $slaUnitId,
+                'year' => $year,
+                'month' => $month,
             ],
         ]);
     }

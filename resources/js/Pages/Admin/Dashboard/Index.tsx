@@ -14,6 +14,13 @@ import { formatTicketId } from '@/lib/utils';
 // 4 warna mutually exclusive untuk Pie Chart SLA: Dalam SLA, Pelanggaran Respon, Pelanggaran Penyelesaian, Pelanggaran Keduanya
 const PIE_COLORS = ['#22c55e', '#f97316', '#ef4444', '#991b1b'];
 
+const SLA_PIE_COLOR_MAP: Record<string, string> = {
+    'Dalam SLA': '#22c55e',
+    'Pelanggaran Respon': '#f97316',
+    'Pelanggaran Penyelesaian': '#ef4444',
+    'Pelanggaran Keduanya': '#991b1b',
+};
+
 const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
     open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
     on_proses: { label: 'Diproses', bg: 'from-orange-500 to-orange-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
@@ -101,6 +108,8 @@ export interface SlaStats {
     totalBreach: number;
     totalWarning: number;
     totalAll: number;
+    activeBreach?: number;
+    activeWarning?: number;
 }
 
 export interface SlaPieChartItem {
@@ -150,6 +159,7 @@ export interface DashboardProps {
     slaPieChartData?: SlaPieChartItem[];
     slaBarChartData?: SlaBarChartItem[];
     slaTrendData?: SlaTrendItem[];
+    slaTrendYear?: number;
     slaFilters?: SlaFilters;
 }
 
@@ -169,6 +179,7 @@ export default function DashboardIndex({
     slaPieChartData = [],
     slaBarChartData = [],
     slaTrendData = [],
+    slaTrendYear,
     slaFilters,
     topUsersAll = [],
     csatTrend = [],
@@ -427,13 +438,13 @@ export default function DashboardIndex({
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-center">
-                                    <p className="text-4xl font-bold text-red-600">{slaStats?.totalBreach ?? 0}</p>
+                                    <p className="text-4xl font-bold text-red-600">{slaStats?.activeBreach ?? slaStats?.totalBreach ?? 0}</p>
                                     <p className="mt-1 flex items-center justify-center gap-1 text-[10px] font-bold text-red-500 uppercase tracking-wider">
                                         🔥 PELANGGARAN SLA
                                     </p>
                                 </div>
                                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-center">
-                                    <p className="text-4xl font-bold text-amber-600">{slaStats?.totalWarning ?? 0}</p>
+                                    <p className="text-4xl font-bold text-amber-600">{slaStats?.activeWarning ?? slaStats?.totalWarning ?? 0}</p>
                                     <p className="mt-1 flex items-center justify-center gap-1 text-[10px] font-bold text-amber-600 uppercase tracking-wider">
                                         ⚠️ Warning (H-1)
                                     </p>
@@ -677,162 +688,215 @@ export default function DashboardIndex({
             </section>
 
             {/* ── SLA Compliance Section ── */}
-            <section className="space-y-6">
-                <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
-                        <Clock className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                    <h2 className="text-lg font-semibold">Kepatuhan SLA</h2>
-                </div>
+            {/* ── SLA Compliance Section ── */}
+            {(() => {
+                const selectedMonthObj = months.find((m) => m.value === month);
+                const slaPeriodLabel = (year && month)
+                    ? `${selectedMonthObj?.label || ''} ${year}`
+                    : (year ? `Tahun ${year}` : (month ? `${selectedMonthObj?.label || ''} (Semua Tahun)` : 'Semua Periode'));
+                const trendYearDisplay = slaTrendYear || (year ? String(year) : String(currentYearNum));
 
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Card>
-                        <CardContent className="p-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Kepatuhan SLA Respon</p>
-                                    <p className="mt-2 text-3xl font-bold text-green-500">{slaStats?.responseCompliance ?? 100}%</p>
+                return (
+                    <section className="space-y-6">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/10">
+                                    <Clock className="h-3.5 w-3.5 text-primary" />
                                 </div>
+                                <h2 className="text-lg font-semibold">Kepatuhan SLA</h2>
+                                <span className="text-xs font-medium text-muted-foreground bg-slate-100 border border-slate-200/80 px-2.5 py-0.5 rounded-full">
+                                    Periode: {slaPeriodLabel}
+                                </span>
                             </div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="p-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Kepatuhan SLA Penyelesaian</p>
-                                    <p className="mt-2 text-3xl font-bold text-primary">{slaStats?.resolutionCompliance ?? 100}%</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                    <Card>
-                        <CardContent className="p-5">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <p className="text-sm text-muted-foreground">Total Pelanggaran</p>
-                                    <p className="mt-2 text-3xl font-bold text-red-500">{slaStats?.totalBreach ?? 0}</p>
-                                    <p className="text-xs text-muted-foreground mt-0.5">dari {slaStats?.totalAll ?? 0} tiket</p>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                        </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Distribusi Kepatuhan SLA</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {safeSlaPieData.length > 0 ? (
-                                <LazyECharts
-                                    option={{
-                                        tooltip: { trigger: 'item', formatter: '{b} : {c} ({d}%)' },
-                                        legend: { bottom: 0 },
-                                        series: [
-                                            {
-                                                name: 'Kepatuhan SLA',
-                                                type: 'pie',
-                                                radius: [20, 100],
-                                                center: ['50%', '50%'],
-                                                roseType: 'radius',
-                                                itemStyle: { borderRadius: 5 },
-                                                label: { show: false },
-                                                data: safeSlaPieData.map((d, i) => ({
-                                                    value: d.value,
-                                                    name: d.name,
-                                                    itemStyle: { color: PIE_COLORS[i % PIE_COLORS.length] },
-                                                })),
-                                            },
-                                        ],
-                                    }}
-                                    height={300}
-                                />
-                            ) : (
-                                <p className="text-sm text-muted-foreground text-center py-8">Belum ada data SLA.</p>
-                            )}
-                        </CardContent>
-                    </Card>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <Card>
+                                <CardContent className="p-5">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Kepatuhan SLA Respon</p>
+                                            <p className="mt-2 text-3xl font-bold text-green-500">{slaStats?.responseCompliance ?? 100}%</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardContent className="p-5">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Kepatuhan SLA Penyelesaian</p>
+                                            <p className="mt-2 text-3xl font-bold text-primary">{slaStats?.resolutionCompliance ?? 100}%</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                            <Card>
+                                <CardContent className="p-5">
+                                    <div className="flex items-start justify-between">
+                                        <div>
+                                            <p className="text-sm text-muted-foreground">Total Pelanggaran</p>
+                                            <p className="mt-2 text-3xl font-bold text-red-500">{slaStats?.totalBreach ?? 0}</p>
+                                            <p className="text-xs text-muted-foreground mt-0.5">dari {slaStats?.totalAll ?? 0} tiket</p>
+                                        </div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        </div>
 
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Tren Kepatuhan SLA (12 Bulan)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            {safeSlaTrendData.length > 0 ? (
-                                <LazyECharts
-                                    option={{
-                                        tooltip: {
-                                            trigger: 'axis',
-                                            formatter: (params: any) => {
-                                                if (Array.isArray(params) && params.length > 0) {
-                                                    const p = params[0];
-                                                    const val = p.value !== undefined && p.value !== null ? p.value : 0;
-                                                    return `${p.name || p.axisValueLabel || ''}<br/>${p.marker || ''} ${p.seriesName || 'Kepatuhan SLA'}: <strong>${val}%</strong>`;
-                                                }
-                                                return '';
-                                            },
-                                        },
-                                        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-                                        xAxis: { type: 'category', data: safeSlaTrendData.map((d) => d.bulan) },
-                                        yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value} %' } },
-                                        series: [
-                                            {
-                                                name: 'Kepatuhan SLA (%)',
-                                                type: 'line',
-                                                smooth: true,
-                                                itemStyle: { color: '#22c55e' },
-                                                symbolSize: 8,
-                                                data: safeSlaTrendData.map((d) => d.persentase_sla),
-                                            },
-                                        ],
-                                    }}
-                                    height={300}
-                                />
-                            ) : (
-                                <p className="text-sm text-muted-foreground text-center py-8">Belum ada data tren SLA.</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-sm font-semibold">Distribusi Kepatuhan SLA</CardTitle>
+                                        <span className="text-[11px] text-muted-foreground font-normal">{slaPeriodLabel}</span>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {safeSlaPieData.length > 0 && safeSlaPieData.some((d) => d.value > 0) ? (
+                                        <LazyECharts
+                                            option={{
+                                                tooltip: {
+                                                    trigger: 'item',
+                                                    formatter: '{b}: <strong>{c} tiket</strong> ({d}%)',
+                                                },
+                                                legend: {
+                                                    bottom: 0,
+                                                    itemWidth: 10,
+                                                    itemHeight: 10,
+                                                    textStyle: { fontSize: 11 },
+                                                },
+                                                series: [
+                                                    {
+                                                        name: 'Kepatuhan SLA',
+                                                        type: 'pie',
+                                                        radius: ['45%', '70%'],
+                                                        center: ['50%', '45%'],
+                                                        avoidLabelOverlap: true,
+                                                        itemStyle: {
+                                                            borderRadius: 6,
+                                                            borderColor: '#fff',
+                                                            borderWidth: 2,
+                                                        },
+                                                        label: {
+                                                            show: false,
+                                                            position: 'center',
+                                                        },
+                                                        emphasis: {
+                                                            label: {
+                                                                show: true,
+                                                                fontSize: 14,
+                                                                fontWeight: 'bold',
+                                                                formatter: '{b}\n{c} ({d}%)',
+                                                            },
+                                                        },
+                                                        data: safeSlaPieData.map((d) => ({
+                                                            value: d.value,
+                                                            name: d.name,
+                                                            itemStyle: { color: SLA_PIE_COLOR_MAP[d.name] || '#3b82f6' },
+                                                        })),
+                                                    },
+                                                ],
+                                            }}
+                                            height={300}
+                                        />
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground text-center py-16">Belum ada data tiket untuk periode ini.</p>
+                                    )}
+                                </CardContent>
+                            </Card>
 
-                {safeSlaBarData.length > 0 && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-sm font-semibold">Kepatuhan SLA per Unit</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <LazyECharts
-                                option={{
-                                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                                    legend: { bottom: 0 },
-                                    grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
-                                    xAxis: { type: 'category', data: safeSlaBarData.map((d) => d.unit_nama) },
-                                    yAxis: { type: 'value' },
-                                    series: [
-                                        {
-                                            name: 'Dalam SLA',
-                                            type: 'bar',
-                                            stack: 'total',
-                                            itemStyle: { color: '#22c55e' },
-                                            data: safeSlaBarData.map((d) => d.dalam_sla),
-                                        },
-                                        {
-                                            name: 'Pelanggaran',
-                                            type: 'bar',
-                                            stack: 'total',
-                                            itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] },
-                                            data: safeSlaBarData.map((d) => d.breach),
-                                        },
-                                    ],
-                                }}
-                                height={300}
-                            />
-                        </CardContent>
-                    </Card>
-                )}
-            </section>
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-sm font-semibold">Tren Kepatuhan SLA ({trendYearDisplay})</CardTitle>
+                                        <span className="text-[11px] text-muted-foreground font-normal">Januari – Desember</span>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    {safeSlaTrendData.length > 0 ? (
+                                        <LazyECharts
+                                            option={{
+                                                tooltip: {
+                                                    trigger: 'axis',
+                                                    formatter: (params: any) => {
+                                                        if (Array.isArray(params) && params.length > 0) {
+                                                            const p = params[0];
+                                                            const item = safeSlaTrendData[p.dataIndex];
+                                                            const val = p.value !== undefined && p.value !== null ? p.value : 0;
+                                                            const total = item?.total ?? 0;
+                                                            const dalamSla = item?.dalam_sla ?? 0;
+                                                            return `<strong>${p.name || p.axisValueLabel || ''} ${trendYearDisplay}</strong><br/>` +
+                                                                   `Kepatuhan: <strong>${val}%</strong><br/>` +
+                                                                   `<span style="font-size:11px;color:#94a3b8">Tiket: ${dalamSla} / ${total} dalam SLA</span>`;
+                                                        }
+                                                        return '';
+                                                    },
+                                                },
+                                                grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                                                xAxis: { type: 'category', data: safeSlaTrendData.map((d) => d.bulan) },
+                                                yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value} %' } },
+                                                series: [
+                                                    {
+                                                        name: 'Kepatuhan SLA (%)',
+                                                        type: 'line',
+                                                        smooth: true,
+                                                        itemStyle: { color: '#22c55e' },
+                                                        symbolSize: 8,
+                                                        data: safeSlaTrendData.map((d) => d.persentase_sla),
+                                                    },
+                                                ],
+                                            }}
+                                            height={300}
+                                        />
+                                    ) : (
+                                        <p className="text-sm text-muted-foreground text-center py-16">Belum ada data tren SLA.</p>
+                                    )}
+                                </CardContent>
+                            </Card>
+                        </div>
+
+                        {safeSlaBarData.length > 0 && (
+                            <Card>
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-center justify-between">
+                                        <CardTitle className="text-sm font-semibold">Kepatuhan SLA per Unit</CardTitle>
+                                        <span className="text-[11px] text-muted-foreground font-normal">{slaPeriodLabel}</span>
+                                    </div>
+                                </CardHeader>
+                                <CardContent>
+                                    <LazyECharts
+                                        option={{
+                                            tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                                            legend: { bottom: 0 },
+                                            grid: { left: '3%', right: '4%', bottom: '10%', containLabel: true },
+                                            xAxis: { type: 'category', data: safeSlaBarData.map((d) => d.unit_nama) },
+                                            yAxis: { type: 'value' },
+                                            series: [
+                                                {
+                                                    name: 'Dalam SLA',
+                                                    type: 'bar',
+                                                    stack: 'total',
+                                                    itemStyle: { color: '#22c55e' },
+                                                    data: safeSlaBarData.map((d) => d.dalam_sla),
+                                                },
+                                                {
+                                                    name: 'Pelanggaran',
+                                                    type: 'bar',
+                                                    stack: 'total',
+                                                    itemStyle: { color: '#ef4444', borderRadius: [4, 4, 0, 0] },
+                                                    data: safeSlaBarData.map((d) => d.breach),
+                                                },
+                                            ],
+                                        }}
+                                        height={300}
+                                    />
+                                </CardContent>
+                            </Card>
+                        )}
+                    </section>
+                );
+            })()}
         </AdminLayout>
     );
 }

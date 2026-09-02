@@ -1,0 +1,279 @@
+import React, { useState, useEffect } from 'react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import toast, { Toaster } from 'react-hot-toast';
+import { 
+ LayoutDashboard, 
+ PlusCircle, 
+ History, 
+ Star, 
+ LogOut,
+ User,
+ MessageSquare,
+} from 'lucide-react';
+import { Button } from '@/Components/ui/button';
+import {
+ DropdownMenu,
+ DropdownMenuContent,
+ DropdownMenuGroup,
+ DropdownMenuItem,
+ DropdownMenuLabel,
+ DropdownMenuTrigger,
+} from "@/Components/ui/dropdown-menu";
+
+import ProfileModal from '@/Components/ProfileModal';
+import NotificationBell from '@/Components/NotificationBell';
+import { BottomNav } from '@/Components/BottomNav';
+import type { BottomNavItem } from '@/Components/BottomNav';
+import { motion } from 'framer-motion';
+import { navItemHover } from '@/lib/animationConfig';
+import PageTransition from '@/Components/PageTransition';
+import { useIdleTimer } from '@/hooks/useIdleTimer';
+import { useWebPush } from '@/hooks/useWebPush';
+import { useChatUnread } from '@/hooks/useChatUnread';
+
+interface UserLayoutProps {
+  children: React.ReactNode;
+  title?: string;
+  hideBottomNav?: boolean;
+}
+
+interface NavItem {
+ label: string;
+ icon: any;
+ route: string;
+}
+
+const userNavItems: NavItem[] = [
+ { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
+ { label: 'Pesan', icon: MessageSquare, route: '/chat' },
+ { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
+ { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
+ { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
+];
+
+function NavLink({ item, active, badge }: { item: NavItem; active: boolean; badge?: number }) {
+ const Icon = item.icon;
+ return (
+  <motion.div variants={navItemHover} initial="rest" whileHover="hover">
+    <Link
+      href={item.route}
+      className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+        active
+          ? 'bg-primary/10 text-primary before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:h-5 before:w-[3px] before:rounded-r-full before:bg-primary'
+          : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+      }`}
+    >
+      <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110' : 'group-hover:scale-110'}`} />
+      <span>{item.label}</span>
+      {badge && badge > 0 ? (
+        <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      ) : null}
+    </Link>
+  </motion.div>
+ );
+}
+
+export default function UserLayout({ children, title, hideBottomNav }: UserLayoutProps) {
+ const { auth, flash, appConfig } = usePage<any>().props;
+ const user = auth.user;
+ const [profileOpen, setProfileOpen] = useState(false);
+ const { subscribe } = useWebPush(user);
+
+ useIdleTimer('/logout');
+
+ const systemName = appConfig?.nama_sistem || 'HALO APU';
+ const faviconUrl = appConfig?.favicon_path ? `/storage/${appConfig.favicon_path}` : '/favicon.ico';
+
+ const { unreadCount } = useChatUnread({
+   user,
+   isAdmin: false,
+   pageTitle: title,
+   systemName,
+   faviconUrl,
+ });
+
+ useEffect(() => {
+ if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
+ if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
+ if (flash?.message) toast(flash.message, { id: 'flash-message' });
+
+ // Listen for Echo notifications
+ if (window.Echo && user) {
+ // Cek apakah sudah ditanya hari ini
+ const lastAskedStr = localStorage.getItem('notif_last_asked');
+ const lastAsked = lastAskedStr ? parseInt(lastAskedStr, 10) : 0;
+ const now = Date.now();
+ const oneDay = 24 * 60 * 60 * 1000;
+ const shouldAsk = (now - lastAsked) > oneDay;
+
+ // Proactive notification permission request
+ if ('Notification' in window && Notification.permission === 'default' && shouldAsk) {
+ toast((t) => (
+ <div className="flex flex-col gap-2">
+ <span className="text-sm font-medium">Aktifkan Notifikasi Browser</span>
+ <span className="text-xs text-muted-foreground">Terima pemberitahuan saat status tiket Anda diperbarui.</span>
+ <div className="flex gap-2 justify-end mt-1">
+ <Button size="sm" variant="outline" onClick={() => {
+ localStorage.setItem('notif_last_asked', Date.now().toString());
+ toast.dismiss(t.id);
+ }}>Nanti</Button>
+ <Button size="sm" onClick={() => {
+ localStorage.setItem('notif_last_asked', Date.now().toString());
+ toast.dismiss(t.id);
+ Notification.requestPermission().then((permission) => {
+ if (permission === 'granted') {
+ subscribe();
+ toast.success('Notifikasi diaktifkan!');
+ }
+ });
+ }}>Aktifkan</Button>
+ </div>
+ </div>
+ ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
+ }
+
+      const channel = `App.Models.User.${user.id}`;
+      
+      window.Echo.private(channel)
+        .notification((notification: any) => {
+          // Cek preferensi notifikasi browser
+          if (user?.notify_browser !== false && 'Notification' in window && Notification.permission === 'granted') {
+            new Notification(notification.title || 'Pemberitahuan Baru', {
+              body: notification.message || '',
+            });
+          }
+          // Tampilkan juga toast fallback di in-app jika diizinkan
+          if (user?.notify_inapp !== false) {
+            toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });
+          }
+        });
+      
+      return () => {
+        window.Echo.leave(channel);
+      };
+    }
+  }, [flash, user]);
+ 
+ const url = usePage().url;
+
+ const SidebarContent = () => (
+ <div className="flex h-full flex-col">
+ <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-5 lg:h-[60px]">
+ <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
+ {appConfig?.logo_path && (
+ <img id="displayBannerImg" src={`/storage/${appConfig.logo_path}`} alt="Banner" style={{ height: '55px', width: 'auto', objectFit: 'contain', display: 'inline-block' }} />
+ )}
+ </Link>
+ </div>
+ <div className="flex-1 overflow-y-auto py-4 px-3 sidebar-scroll">
+ <nav className="flex flex-col gap-1">
+ {userNavItems.map((item) => (
+ <NavLink
+ key={item.route}
+ item={item}
+ active={url.startsWith(item.route) && item.route !== '#'}
+ badge={item.label === 'Pesan' ? unreadCount : undefined}
+ />
+ ))}
+ </nav>
+ </div>
+
+ <div className="border-t px-3 py-3">
+ <div className="rounded-lg bg-muted/60 px-3 py-3">
+ <div className="flex items-center gap-2.5">
+ <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
+ {user?.avatar_path ? (
+ <img src={`/storage/${user.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+ ) : (
+ <User className="h-3.5 w-3.5 text-primary" />
+ )}
+ </div>
+ <div className="min-w-0">
+ <p className="text-xs font-medium text-foreground truncate">{user?.name || user?.username || 'User'}</p>
+ <p className="text-[11px] text-muted-foreground truncate">{user?.email || ''}</p>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ );
+
+ const bottomNavItems: BottomNavItem[] = [
+  { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
+  {
+    label: 'Pesan',
+    icon: MessageSquare,
+    route: '/chat',
+    badge: unreadCount > 0 ? (
+      <span className="px-1.5 py-0.5 text-[9px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    ) : undefined,
+  },
+  { label: 'Buat Tiket', icon: PlusCircle, route: '/tiket/buat' },
+  { label: 'Riwayat', icon: History, route: '/tiket/riwayat' },
+  { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
+ ];
+
+ return (
+ <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
+ <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
+ {title && <Head title={title} />}
+ 
+ <div className="hidden border-r bg-white md:flex flex-col overflow-hidden">
+ <SidebarContent />
+ </div>
+ 
+ <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 ">
+ <header className="relative z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
+ <div className="flex-1" />
+ 
+ <NotificationBell />
+ 
+ <DropdownMenu>
+ <DropdownMenuTrigger asChild>
+ <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 border overflow-hidden">
+ {user?.avatar_path ? (
+ <img src={`/storage/${user.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+ ) : (
+ <User className="h-4 w-4" />
+ )}
+ </Button>
+ </DropdownMenuTrigger>
+ <DropdownMenuContent align="end" className="w-56">
+ <DropdownMenuGroup>
+ <DropdownMenuLabel>
+ <div className="flex flex-col gap-0.5">
+ <span className="text-sm font-medium">{user?.name || user?.username || 'User'}</span>
+ <span className="text-xs font-normal text-muted-foreground">{user?.email || ''}</span>
+ </div>
+ </DropdownMenuLabel>
+ </DropdownMenuGroup>
+ <div className="border-t my-1" />
+ <DropdownMenuItem onClick={() => setProfileOpen(true)} className="cursor-pointer">
+ <User className="h-4 w-4 mr-2" />
+ Ubah Profil
+ </DropdownMenuItem>
+ <DropdownMenuItem className="p-0">
+ <Link href="/logout" method="post" as="button" className="flex w-full cursor-pointer items-center gap-2 px-2 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50 rounded-md">
+ <LogOut className="h-4 w-4" />
+ Keluar
+ </Link>
+ </DropdownMenuItem>
+ </DropdownMenuContent>
+ </DropdownMenu>
+
+ <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={user} isAdmin={false} />
+ </header>
+        <main className="flex-1 overflow-y-auto flex flex-col">
+          <PageTransition className="mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
+            {children}
+          </PageTransition>
+        </main>
+      </div>
+      {!hideBottomNav && <BottomNav items={bottomNavItems} />}
+    </div>
+  );
+}

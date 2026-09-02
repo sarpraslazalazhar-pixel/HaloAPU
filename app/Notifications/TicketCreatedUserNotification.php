@@ -1,0 +1,103 @@
+<?php
+
+namespace App\Notifications;
+
+use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
+use App\Models\Ticket;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Notification;
+
+use App\Traits\FilterNotificationChannels;
+
+class TicketCreatedUserNotification extends Notification implements ShouldBroadcast
+{
+    use Queueable, FilterNotificationChannels;
+
+    public $ticket;
+
+    public function __construct(Ticket $ticket)
+    {
+        $this->ticket = $ticket;
+    }
+
+    public function via(object $notifiable): array
+    {
+        $channels = ['database', 'broadcast', \NotificationChannels\WebPush\WebPushChannel::class];
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+        if (!empty($notifiable->no_wa)) {
+            $channels[] = WhatsAppChannel::class;
+        }
+        return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? 'Umum';
+        return [
+            'title' => 'Tiket Berhasil Dibuat #' . $this->ticket->id,
+            'body' => "Tiket layanan {$layanan} telah diterima dan akan segera diproses.",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => route('tiket.show', $this->ticket->id),
+            'type' => 'ticket_created',
+        ];
+    }
+
+    /**
+     * Get the broadcastable representation of the notification.
+     */
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        return new BroadcastMessage([
+            'type' => 'ticket_created',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Tiket Baru Berhasil Dibuat',
+            'message' => 'Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
+            'url' => route('tiket.show', $this->ticket->id),
+        ]);
+    }
+
+    public function toWebPush($notifiable, $notification)
+    {
+        return (new \NotificationChannels\WebPush\WebPushMessage)
+            ->title('Tiket Baru Berhasil Dibuat')
+            ->icon('/images/logo.png')
+            ->body('Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.')
+            ->action('Lihat Tiket', route('tiket.show', $this->ticket->id))
+            ->data(['url' => route('tiket.show', $this->ticket->id)]);
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'type' => 'ticket_created',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Tiket Baru Berhasil Dibuat',
+            'message' => 'Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
+            'url' => route('tiket.show', $this->ticket->id),
+        ];
+    }
+
+    public function toWhatsApp(object $notifiable): array
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
+        $nama = $notifiable->name ?: $notifiable->username;
+        $url = route('tiket.show', $this->ticket->id);
+        
+        $message = "Halo *{$nama}*\n\n";
+        $message .= "*{$layanan}* telah terdaftar di sistem ticketing Kami.\n\n";
+        $message .= "Kamu bisa memantau status pengajuan melalui link berikut:\n{$url}\n\n";
+        $message .= "Terima kasih,\n";
+        $message .= "Tim Halo APU";
+
+        return [
+            'receiver' => $notifiable->no_wa,
+            'message' => $message,
+        ];
+    }
+}
+

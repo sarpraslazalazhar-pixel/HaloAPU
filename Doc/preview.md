@@ -1,0 +1,25 @@
+- [x] Tiket di dashboard tampilkan hanya 5 & tabel top pengaju di ganti jadi Ringkasan Status
+- [x] branch ganti pelanggaran 
+- [x] ubah modul sla menjadi tabel CRUD
+- [x] unit & sub = layanan & sub layanan
+- [x] step 1 data pengajuan di hapus dan ambil data dari akun manajemen pengguna
+- [x] master data layanan (kanal, jenis)
+- [x] master data struktur (Divisi, Sub divisi, jabatan)
+- [x] master data konfigurasi (form, SLA, remainder, sistem)
+- [x] master data laporan (CSAT, Tiket)
+- [x] master data Management akun (Role, User)
+- [x] notif browser
+- [x] app home browser user
+- [x] notifikasi ke operator masuk tiket
+- [x] tombol hide/show filter pada menu tiketing
+- [x] Ajukan Revisi batas 5 kali
+- [x] dashboard tv tampilkan tambahkan card tiket baru dan hilangkan tabel tiket baru masuk dan Grafik Harian Tiket (7 Hari)
+- [x] laporan tiket tambahkan filter dan card seperti di dasbor
+- [x] saat status baru bisa pilih operator sesuai kanal layanan 
+- [x] suara notif belum bersuara
+- [x] Samping layanan tiketing ada nama operator yang bertugas
+- [x] Tanggal yang sudah lewat gak bisa di pilih
+- [ ] edit foto untuk
+- [x] doubel tiket dari app mobile
+- [x] pesan belum ada notifikasi & icon belum baca
+- [x] remainder pesan 

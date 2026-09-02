@@ -1,0 +1,116 @@
+<?php
+
+namespace App\Notifications;
+
+use App\Channels\WhatsAppChannel;
+use App\Channels\FcmChannel;
+use App\Models\Ticket;
+use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Notifications\Messages\BroadcastMessage;
+use Illuminate\Notifications\Notification;
+use App\Traits\FilterNotificationChannels;
+
+class TicketStatusUpdatedNotification extends Notification implements ShouldBroadcast
+{
+    use Queueable, FilterNotificationChannels;
+
+    public $ticket;
+    public $catatan;
+
+    public function __construct(Ticket $ticket, $catatan = null)
+    {
+        $this->ticket = $ticket;
+        $this->catatan = $catatan;
+    }
+
+    public function via(object $notifiable): array
+    {
+        $channels = ['database', 'broadcast', \NotificationChannels\WebPush\WebPushChannel::class];
+        if (!empty($notifiable->no_wa)) {
+            $channels[] = WhatsAppChannel::class;
+        }
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+        return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        $catatanText = !empty($this->catatan) ? ' (Catatan: ' . $this->catatan . ')' : '';
+        return [
+            'title' => 'Status Tiket Diperbarui',
+            'body' => "Status tiket #{$this->ticket->id} berubah menjadi {$statusStr}{$catatanText}",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => route('tiket.show', $this->ticket->id),
+            'type' => 'ticket_status_updated',
+        ];
+    }
+
+    public function toBroadcast(object $notifiable): BroadcastMessage
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        return new BroadcastMessage([
+            'type' => 'ticket_status_updated',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Status Tiket Diubah',
+            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
+            'url' => route('tiket.show', $this->ticket->id),
+        ]);
+    }
+
+    public function toWebPush($notifiable, $notification)
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        return (new \NotificationChannels\WebPush\WebPushMessage)
+            ->title('Status Tiket Diubah')
+            ->icon('/images/logo.png')
+            ->body('Status tiket Anda berubah menjadi ' . $statusStr . '. Catatan: ' . \Illuminate\Support\Str::limit($this->catatan, 50))
+            ->action('Lihat Tiket', route('tiket.show', $this->ticket->id))
+            ->data(['url' => route('tiket.show', $this->ticket->id)]);
+    }
+
+    public function toArray(object $notifiable): array
+    {
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        return [
+            'type' => 'ticket_status_updated',
+            'ticket_id' => $this->ticket->id,
+            'title' => 'Status Tiket Diubah',
+            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
+            'url' => route('tiket.show', $this->ticket->id),
+        ];
+    }
+
+    public function toWhatsApp(object $notifiable): array
+    {
+        $nama = $notifiable->name ?: $notifiable->username;
+        $statusStr = ucwords(str_replace('_', ' ', $this->ticket->status));
+        $url = route('tiket.show', $this->ticket->id);
+        
+        $message = "Halo *{$nama}* 👋\n\n";
+        $message .= "Ada info baru nih buat pengajuan Kamu. Statusnya udah di-update ya 😊\n\n";
+        $message .= "📌 *Status Sekarang:* {$statusStr}\n";
+        
+        if (!empty($this->catatan)) {
+            $message .= "📝 *Catatan Admin:* _{$this->catatan}_\n\n";
+        } else {
+            $message .= "\n";
+        }
+        
+        if ($this->ticket->status === 'solve' || $this->ticket->status === 'selesai') {
+            $message .= "Karena pengajuan telah selesai, mohon ketersediaannya untuk memberikan Rating Kepuasan (CSAT) melalui link berikut:\n{$url}\n\n";
+        } else {
+            $message .= "Biar lebih jelas, langsung aja cek detailnya di sini:\n{$url}\n\n";
+        }
+        
+        $message .= "Terima kasih";
+
+        return [
+            'receiver' => $notifiable->no_wa,
+            'message' => $message,
+        ];
+    }
+}

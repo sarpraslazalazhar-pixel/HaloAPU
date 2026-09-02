@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "882462882559",
+    "project_id": "haloapu-ac406",
+    "storage_bucket": "haloapu-ac406.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:882462882559:android:1ea33eb92b384eda742aca",
+        "android_client_info": {
+          "package_name": "id.haloapu.mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuKBRLhUERnT-PASsLfHakDzINBn9flpo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

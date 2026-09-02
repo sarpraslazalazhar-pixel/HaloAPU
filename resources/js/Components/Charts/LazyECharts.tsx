@@ -2,12 +2,15 @@ import React, { lazy, Suspense } from 'react';
 import type { EChartsReactProps } from 'echarts-for-react';
 
 const ReactEChartsCore = lazy(async () => {
-    const [{ default: echarts }, { default: ReactEChartsCoreComponent }] = await Promise.all([
+    const [echartsModule, coreModule] = await Promise.all([
         import('@/lib/echarts'),
         import('echarts-for-react/lib/core'),
     ]);
+    const echarts = (echartsModule as any)?.default || echartsModule;
+    const CoreComponent = (coreModule as any)?.default?.default || (coreModule as any)?.default || coreModule;
+
     return {
-        default: (props: EChartsReactProps) => <ReactEChartsCoreComponent echarts={echarts} {...props} />,
+        default: (props: EChartsReactProps) => <CoreComponent echarts={echarts} {...props} />,
     };
 });
 

@@ -1,0 +1,131 @@
+name: Build iOS IPA & Android APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: Select Xcode 16.2
+        shell: bash
+        run: |
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_16.2.app"
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_16.1.app"
+          else
+            echo "Xcode 16.x tidak ditemukan"
+            ls -la /Applications | grep Xcode || true
+            exit 1
+          fi
+
+          xcode-select -p
+          xcodebuild -version
+
+      - name: Prepare Flutter Project
+        shell: bash
+        run: |
+          PROJECT_DIR="$GITHUB_WORKSPACE/Mobile App Flutter/Halo APU mobile"
+
+          if [ ! -f "$PROJECT_DIR/pubspec.yaml" ]; then
+            echo "pubspec.yaml tidak ditemukan"
+            echo "Isi folder:"
+            find "$GITHUB_WORKSPACE/Mobile App Flutter" -maxdepth 3 -type f -name pubspec.yaml
+            exit 1
+          fi
+
+          echo "Flutter project ditemukan:"
+          echo "$PROJECT_DIR"
+
+      - name: Get Flutter Dependencies
+        working-directory: Mobile App Flutter/Halo APU mobile
+        run: |
+          flutter config --no-enable-swift-package-manager
+          flutter config --no-analytics
+          flutter clean
+          flutter pub get
+
+      - name: Install CocoaPods
+        working-directory: Mobile App Flutter/Halo APU mobile/ios
+        run: |
+          pod install --repo-update
+
+      - name: Build iOS App
+        working-directory: Mobile App Flutter/Halo APU mobile
+        run: |
+          flutter build ios \
+            --release \
+            --no-codesign
+
+      - name: Package iOS Artifact
+        working-directory: Mobile App Flutter/Halo APU mobile
+        shell: bash
+        run: |
+          rm -rf build/ios/iphoneos/Payload
+          mkdir -p build/ios/iphoneos/Payload
+
+          cp -R \
+            build/ios/iphoneos/Runner.app \
+            build/ios/iphoneos/Payload/
+
+          cd build/ios/iphoneos
+          zip -r HaloAPU-iOS-unsigned.ipa Payload
+
+      - name: Upload iOS Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaloAPU-iOS-unsigned
+          path: Mobile App Flutter/Halo APU mobile/build/ios/iphoneos/HaloAPU-iOS-unsigned.ipa
+          if-no-files-found: error
+
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: '17'
+          cache: gradle
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: Get Flutter Dependencies
+        working-directory: Mobile App Flutter/Halo APU mobile
+        run: flutter pub get
+
+      - name: Build Android APK
+        working-directory: Mobile App Flutter/Halo APU mobile
+        run: |
+          flutter build apk --debug --android-skip-build-dependency-validation
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HaloAPU-Android-APK-debug
+          path: Mobile App Flutter/Halo APU mobile/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error

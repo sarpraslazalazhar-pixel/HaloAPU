@@ -347,7 +347,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
             }));
 
         try {
-            const response = await axios.post('/ai-bot-haloapu/chat', {
+            const response = await axios.post('/admin/ai/chat', {
                 message: query,
                 history: historyPayload,
             });
@@ -397,8 +397,8 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
     };
 
     return (
-        <AdminLayout title="HaloAPU AI (Uji Coba Rahasia)">
-            <Head title="HaloAPU AI (Uji Coba Rahasia)" />
+        <AdminLayout title="HaloAPU AI (Uji Coba)">
+            <Head title="HaloAPU AI (Uji Coba)" />
 
             <div className="space-y-4 max-w-7xl mx-auto pb-4">
                 {/* Header Card / Page Title */}
@@ -413,7 +413,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
                                     HaloAPU AI
                                 </h1>
                                 <Badge className="bg-sky-50 text-sky-700 border-sky-200 text-[10px] font-bold tracking-wider uppercase">
-                                    Uji Coba Rahasia
+                                    Uji Coba
                                 </Badge>
                                 {hasApiKey ? (
                                     <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-medium flex items-center gap-1">

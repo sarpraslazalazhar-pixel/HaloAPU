@@ -115,6 +115,13 @@ Route::post('/push/subscribe', [\App\Http\Controllers\WebPushController::class, 
 Route::post('/push/unsubscribe', [\App\Http\Controllers\WebPushController::class, 'unsubscribe'])->name('push.unsubscribe');
 
 Route::prefix('admin')->name('admin.')->group(function () {
+    // Akses /admin otomatis diarahkan ke login (jika guest) atau dashboard (jika sudah login)
+    Route::get('/', function () {
+        return auth('admin')->check()
+            ? redirect()->route('admin.dashboard')
+            : redirect()->route('admin.login');
+    });
+
     Route::middleware('guest:admin')->group(function () {
         Route::get('login', [AdminLoginController::class, 'showLoginForm'])->name('login');
         Route::post('login', [AdminLoginController::class, 'login'])->middleware('throttle:5,1');
@@ -246,14 +253,18 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/conversations/{conversation}/typing', [\App\Http\Controllers\Admin\ChatController::class, 'typing'])->name('typing');
             Route::get('/download/{attachment}', [\App\Http\Controllers\Admin\ChatController::class, 'downloadAttachment'])->name('download');
         });
+
+        // HaloAPU AI (Admin)
+        Route::get('/ai', [\App\Http\Controllers\Admin\AiBotController::class, 'index'])->name('ai-bot.index');
+        Route::post('/ai/chat', [\App\Http\Controllers\Admin\AiBotController::class, 'chat'])->name('ai-bot.chat');
     });
 });
 
-// Secret Route: AI Bot HaloAPU (Experimental - Khusus Admin Login)
-Route::middleware('auth:admin')->group(function () {
-    Route::get('/ai-bot-haloapu', [\App\Http\Controllers\Admin\AiBotController::class, 'index'])->name('admin.ai-bot.index');
-    Route::post('/ai-bot-haloapu/chat', [\App\Http\Controllers\Admin\AiBotController::class, 'chat'])->name('admin.ai-bot.chat');
-    Route::get('/admin/ai-bot-haloapu', function () {
-        return redirect()->route('admin.ai-bot.index');
-    });
+// Redirect URL lama /ai-bot-haloapu ke /admin/ai
+Route::get('/ai-bot-haloapu', function () {
+    return redirect()->route('admin.ai-bot.index');
+});
+Route::post('/ai-bot-haloapu/chat', [\App\Http\Controllers\Admin\AiBotController::class, 'chat']);
+Route::get('/admin/ai-bot-haloapu', function () {
+    return redirect()->route('admin.ai-bot.index');
 });

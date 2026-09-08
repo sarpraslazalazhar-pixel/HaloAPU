@@ -22,6 +22,7 @@ import {
  Sparkles,
  MessageSquare,
  Smartphone,
+ Bot,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -592,9 +593,33 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
  {/* Main Content Area */}
  <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 ">
  <header className="relative z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
- <div className="flex-1" />
+  <div className="flex-1" />
 
- <NotificationBell />
+  {/* HaloAPU AI Icon Button */}
+  <TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link href="/admin/ai">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={`rounded-full h-8 w-8 text-zinc-600 hover:text-sky-600 hover:bg-sky-50 transition-colors ${
+              url.startsWith('/admin/ai') ? 'bg-sky-50 text-sky-600 ring-1 ring-sky-200' : ''
+            }`}
+            title="HaloAPU AI"
+          >
+            <Bot className="h-4 w-4" />
+            <span className="sr-only">HaloAPU AI</span>
+          </Button>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        <p className="text-xs">HaloAPU AI</p>
+      </TooltipContent>
+    </Tooltip>
+  </TooltipProvider>
+
+  <NotificationBell />
 
 
  <DropdownMenu>

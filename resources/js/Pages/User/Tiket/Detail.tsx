@@ -169,17 +169,30 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                  <div className="space-y-2">
                    <label className="text-sm font-medium">Lampiran Pendukung Revisi (Opsional)</label>
                    <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file.</p>
-                   <input
-                     type="file" multiple accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
-                     className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                     onChange={e => {
-                       const files = Array.from(e.target.files || []);
-                       if (revData.general_attachments.length + files.length > 3) { alert('Maksimal hanya 3 lampiran.'); return; }
-                       const validFiles = files.filter(f => { if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; } return true; });
-                       setRevData('general_attachments', [...revData.general_attachments, ...validFiles]);
-                       e.target.value = '';
-                     }}
-                   />
+                   <div className="flex items-center gap-3">
+                     <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium cursor-pointer transition-colors border border-blue-200">
+                       <Paperclip className="w-4 h-4" />
+                       <span>Pilih Berkas</span>
+                       <input
+                         type="file"
+                         multiple
+                         accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                         className="hidden"
+                         onChange={e => {
+                           const files = Array.from(e.target.files || []);
+                           if (revData.general_attachments.length + files.length > 3) { alert('Maksimal hanya 3 lampiran.'); return; }
+                           const validFiles = files.filter(f => { if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; } return true; });
+                           setRevData('general_attachments', [...revData.general_attachments, ...validFiles]);
+                           e.target.value = '';
+                         }}
+                       />
+                     </label>
+                     <span className="text-xs text-slate-500">
+                       {revData.general_attachments.length > 0
+                         ? `${revData.general_attachments.length} berkas dipilih`
+                         : 'Belum ada berkas yang dipilih'}
+                     </span>
+                   </div>
                    {errorsRev.general_attachments && <p className="text-red-500 text-sm">{errorsRev.general_attachments}</p>}
                    {revData.general_attachments.length > 0 && (
                      <div className="mt-2 space-y-2">
@@ -223,7 +236,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
            </TabsTrigger>
            <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg">
              <Clock className="h-3.5 w-3.5" />
-             <span>Timeline</span>
+             <span>Jejak Tiket</span>
            </TabsTrigger>
            <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg">
              <Paperclip className="h-3.5 w-3.5" />
@@ -309,25 +322,36 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                      <div className="space-y-2">
                        <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
                        <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file (JPG, PNG, PDF, DOC, DOCX).</p>
-                       <input
-                         type="file"
-                         multiple
-                         accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
-                         className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                         onChange={e => {
-                           const files = Array.from(e.target.files || []);
-                           if (replyData.general_attachments.length + files.length > 3) {
-                             alert('Maksimal hanya 3 lampiran.');
-                             return;
-                           }
-                           const validFiles = files.filter(f => {
-                             if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
-                             return true;
-                           });
-                           setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
-                           e.target.value = '';
-                         }}
-                       />
+                       <div className="flex items-center gap-3">
+                         <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium cursor-pointer transition-colors border border-blue-200">
+                           <Paperclip className="w-4 h-4" />
+                           <span>Pilih Berkas</span>
+                           <input
+                             type="file"
+                             multiple
+                             accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                             className="hidden"
+                             onChange={e => {
+                               const files = Array.from(e.target.files || []);
+                               if (replyData.general_attachments.length + files.length > 3) {
+                                 alert('Maksimal hanya 3 lampiran.');
+                                 return;
+                               }
+                               const validFiles = files.filter(f => {
+                                 if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
+                                 return true;
+                               });
+                               setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
+                               e.target.value = '';
+                             }}
+                           />
+                         </label>
+                         <span className="text-xs text-slate-500">
+                           {replyData.general_attachments.length > 0
+                             ? `${replyData.general_attachments.length} berkas dipilih`
+                             : 'Belum ada berkas yang dipilih'}
+                         </span>
+                       </div>
                        {errorsReply.general_attachments && <p className="text-red-500 text-sm">{errorsReply.general_attachments}</p>}
                        {replyData.general_attachments.length > 0 && (
                          <div className="mt-2 space-y-2">
@@ -383,7 +407,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
              </CardHeader>
              <CardContent>
                {ticket.attachments?.length > 0 ? (
-                 <TicketAttachmentList attachments={ticket.attachments} downloadRoute="tiket.download" />
+                 <TicketAttachmentList attachments={ticket.attachments} downloadRoute="tiket.download" grouped={true} />
                ) : (
                  <p className="text-xs text-slate-500">Tidak ada lampiran file pada tiket ini.</p>
                )}

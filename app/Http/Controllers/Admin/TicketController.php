@@ -87,7 +87,7 @@ class TicketController extends Controller
         $ticket->load([
             'user', 'user.divisi', 'user.orgUnit', 'user.jabatan',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
-            'attachments.field', 'slaTracking',
+            'attachments.field', 'attachments.log', 'attachments.log.admin', 'slaTracking',
             'logs' => fn($q) => $q->latest('timestamp'),
             'logs.admin',
             'logs.attachments',

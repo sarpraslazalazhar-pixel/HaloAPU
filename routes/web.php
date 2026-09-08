@@ -248,3 +248,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
     });
 });
+
+// Secret Route: AI Bot HaloAPU (Experimental - Khusus Admin Login)
+Route::middleware('auth:admin')->group(function () {
+    Route::get('/ai-bot-haloapu', [\App\Http\Controllers\Admin\AiBotController::class, 'index'])->name('admin.ai-bot.index');
+    Route::post('/ai-bot-haloapu/chat', [\App\Http\Controllers\Admin\AiBotController::class, 'chat'])->name('admin.ai-bot.chat');
+    Route::get('/admin/ai-bot-haloapu', function () {
+        return redirect()->route('admin.ai-bot.index');
+    });
+});

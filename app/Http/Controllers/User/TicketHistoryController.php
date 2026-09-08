@@ -93,7 +93,9 @@ class TicketHistoryController extends Controller
             'orgDivisi',
             'orgUnit',
             'jabatan',
-            'attachments',
+            'attachments.field',
+            'attachments.log',
+            'attachments.log.admin',
             'csat',
             'logs' => function ($q) {
                 $q->orderBy('timestamp', 'desc');

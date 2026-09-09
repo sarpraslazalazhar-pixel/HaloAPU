@@ -62,7 +62,7 @@ if (empty($command)) {
     
     echo "<div class='section'><h2>📊 Laravel Pulse Monitoring</h2>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Acheck+--once' style='border-left-color: #00e676;'>📈 pulse:check --once — Ambil snapshot metrik server (CPU, RAM, Disk)</a>";
-    echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Aclear' style='border-left-color: #ff5252;'>🗑️ pulse:clear — Bersihkan seluruh riwayat data Pulse</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Aclear+--force' style='border-left-color: #ff5252;'>🗑️ pulse:clear --force — Bersihkan seluruh riwayat data Pulse</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Arestart' style='border-left-color: #ffab40;'>🔄 pulse:restart — Kirim sinyal restart ke worker Pulse</a>";
     echo "</div>";
     
@@ -1028,6 +1028,7 @@ $allowed = [
     'seed-permissions',
     'pulse:check --once',
     'pulse:check',
+    'pulse:clear --force',
     'pulse:clear',
     'pulse:restart',
     'clear-bootstrap-cache',
@@ -1042,6 +1043,23 @@ require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
 $kernel->bootstrap();
+
+// Daftarkan command paket pihak ketiga (seperti Pulse) yang tidak terdaftar otomatis di mode Web SAPI
+$extraCommands = [
+    \Laravel\Pulse\Commands\CheckCommand::class,
+    \Laravel\Pulse\Commands\ClearCommand::class,
+    \Laravel\Pulse\Commands\RestartCommand::class,
+    \Laravel\Pulse\Commands\WorkCommand::class,
+];
+foreach ($extraCommands as $cmdClass) {
+    if (class_exists($cmdClass)) {
+        try {
+            $kernel->registerCommand($app->make($cmdClass));
+        } catch (\Throwable $e) {
+            // Abaikan jika tidak dapat di-resolve
+        }
+    }
+}
 
 if ($command === 'deploy') {
     echo "<pre>=== Memulai Deployment ===\n\n";

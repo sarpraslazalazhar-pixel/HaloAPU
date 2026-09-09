@@ -23,6 +23,7 @@ import {
  MessageSquare,
  Smartphone,
  Bot,
+ ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -67,102 +68,116 @@ interface NavSubItem {
 }
 
 interface NavItem {
- type: 'link' | 'header' | 'dropdown';
- label: string;
- icon?: any;
- route?: string;
- permissionGroup?: string;
- children?: NavSubItem[];
+  type: 'link' | 'header' | 'dropdown';
+  label: string;
+  icon?: any;
+  route?: string;
+  permissionGroup?: string;
+  superAdminOnly?: boolean;
+  isExternal?: boolean;
+  children?: NavSubItem[];
 }
 
 function isRouteActive(url: string, routePath?: string): boolean {
- if (!routePath) return false;
- const pathOnly = url.split('?')[0].split('#')[0];
- return pathOnly === routePath || pathOnly.startsWith(routePath + '/');
+  if (!routePath) return false;
+  const pathOnly = url.split('?')[0].split('#')[0];
+  return pathOnly === routePath || pathOnly.startsWith(routePath + '/');
 }
 
 const adminNavItems: NavItem[] = [
- { type: 'link', label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
- { type: 'link', label: 'Pesan', icon: MessageSquare, route: '/admin/chat' },
- { type: 'link', label: 'Tiketing', icon: Ticket, route: '/admin/tiket' },
- { type: 'link', label: 'Monitor Grid', icon: Grid3X3, route: '/admin/monitor' },
+  { type: 'link', label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
+  { type: 'link', label: 'Pesan', icon: MessageSquare, route: '/admin/chat' },
+  { type: 'link', label: 'Tiketing', icon: Ticket, route: '/admin/tiket' },
+  { type: 'link', label: 'Monitor Grid', icon: Grid3X3, route: '/admin/monitor' },
 
- { type: 'header', label: 'MASTER DATA' },
- {
- type: 'dropdown',
- label: 'Layanan',
- icon: Database,
- permissionGroup: 'akses-layanan',
- children: [
- { label: 'Kanal Layanan', icon: Database, route: '/admin/master/unit', permissionGroup: 'akses-layanan' },
- { label: 'Jenis Layanan', icon: Database, route: '/admin/master/sub-unit', permissionGroup: 'akses-layanan' },
- ]
- },
- {
- type: 'dropdown',
- label: 'Struktur',
- icon: Users,
- permissionGroup: 'akses-struktur',
- children: [
- { label: 'Divisi', icon: Users, route: '/admin/master/divisi', permissionGroup: 'akses-struktur' },
- { label: 'Sub Divisi', icon: Users, route: '/admin/master/unit-organisasi', permissionGroup: 'akses-struktur' },
- { label: 'Jabatan', icon: Users, route: '/admin/master/jabatan', permissionGroup: 'akses-struktur' },
- ]
- },
+  { type: 'header', label: 'MASTER DATA' },
+  {
+    type: 'dropdown',
+    label: 'Layanan',
+    icon: Database,
+    permissionGroup: 'akses-layanan',
+    children: [
+      { label: 'Kanal Layanan', icon: Database, route: '/admin/master/unit', permissionGroup: 'akses-layanan' },
+      { label: 'Jenis Layanan', icon: Database, route: '/admin/master/sub-unit', permissionGroup: 'akses-layanan' },
+    ]
+  },
+  {
+    type: 'dropdown',
+    label: 'Struktur',
+    icon: Users,
+    permissionGroup: 'akses-struktur',
+    children: [
+      { label: 'Divisi', icon: Users, route: '/admin/master/divisi', permissionGroup: 'akses-struktur' },
+      { label: 'Sub Divisi', icon: Users, route: '/admin/master/unit-organisasi', permissionGroup: 'akses-struktur' },
+      { label: 'Jabatan', icon: Users, route: '/admin/master/jabatan', permissionGroup: 'akses-struktur' },
+    ]
+  },
 
- { type: 'header', label: 'KONFIGURASI', permissionGroup: 'akses-konfigurasi' },
- {
- type: 'dropdown',
- label: 'Konfigurasi',
- icon: Settings,
- permissionGroup: 'akses-konfigurasi',
- children: [
- { label: 'Form', icon: FileEdit, route: '/admin/peraturan-form', permissionGroup: 'akses-konfigurasi' },
- { label: 'SLA', icon: Clock, route: '/admin/sla-config', permissionGroup: 'akses-konfigurasi' },
- { label: 'Reminder', icon: Bell, route: '/admin/reminder-config', permissionGroup: 'akses-konfigurasi' },
- { label: 'Lock Device', icon: Smartphone, route: '/admin/device-lock-config', permissionGroup: 'akses-konfigurasi' },
- { label: 'Sistem', icon: Settings, route: '/admin/konfigurasi', permissionGroup: 'akses-konfigurasi' },
- ]
- },
+  { type: 'header', label: 'KONFIGURASI', permissionGroup: 'akses-konfigurasi' },
+  {
+    type: 'dropdown',
+    label: 'Konfigurasi',
+    icon: Settings,
+    permissionGroup: 'akses-konfigurasi',
+    children: [
+      { label: 'Form', icon: FileEdit, route: '/admin/peraturan-form', permissionGroup: 'akses-konfigurasi' },
+      { label: 'SLA', icon: Clock, route: '/admin/sla-config', permissionGroup: 'akses-konfigurasi' },
+      { label: 'Reminder', icon: Bell, route: '/admin/reminder-config', permissionGroup: 'akses-konfigurasi' },
+      { label: 'Lock Device', icon: Smartphone, route: '/admin/device-lock-config', permissionGroup: 'akses-konfigurasi' },
+      { label: 'Sistem', icon: Settings, route: '/admin/konfigurasi', permissionGroup: 'akses-konfigurasi' },
+    ]
+  },
 
- { type: 'header', label: 'LAPORAN', permissionGroup: 'akses-laporan' },
- { type: 'link', label: 'CSAT', icon: Star, route: '/admin/csat', permissionGroup: 'akses-laporan' },
- { type: 'link', label: 'Tiket', icon: Ticket, route: '/admin/laporan/tiket', permissionGroup: 'akses-laporan' },
+  { type: 'header', label: 'LAPORAN', permissionGroup: 'akses-laporan' },
+  { type: 'link', label: 'CSAT', icon: Star, route: '/admin/csat', permissionGroup: 'akses-laporan' },
+  { type: 'link', label: 'Tiket', icon: Ticket, route: '/admin/laporan/tiket', permissionGroup: 'akses-laporan' },
 
- { type: 'header', label: 'MANAJEMEN AKUN', permissionGroup: 'akses-manajemen-akun' },
- { type: 'link', label: 'Manajemen Peran', icon: Shield, route: '/admin/manajemen-peran', permissionGroup: 'akses-manajemen-akun' },
- { type: 'link', label: 'Manajemen Operator', icon: Shield, route: '/admin/manajemen-operator', permissionGroup: 'akses-manajemen-akun' },
- { type: 'link', label: 'Manajemen Pengguna', icon: Users, route: '/admin/manajemen-user', permissionGroup: 'akses-manajemen-akun' },
+  { type: 'header', label: 'MANAJEMEN AKUN', permissionGroup: 'akses-manajemen-akun' },
+  { type: 'link', label: 'Manajemen Peran', icon: Shield, route: '/admin/manajemen-peran', permissionGroup: 'akses-manajemen-akun' },
+  { type: 'link', label: 'Manajemen Operator', icon: Shield, route: '/admin/manajemen-operator', permissionGroup: 'akses-manajemen-akun' },
+  { type: 'link', label: 'Manajemen Pengguna', icon: Users, route: '/admin/manajemen-user', permissionGroup: 'akses-manajemen-akun' },
 ];
 
 function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: boolean; isCollapsed: boolean; badge?: number }) {
   const Icon = item.icon;
 
+  const content = (
+    <div
+      title={isCollapsed ? item.label : undefined}
+      className={`group relative flex items-center transition-all duration-200 ${isCollapsed
+        ? 'h-10 w-10 justify-center rounded-xl mx-auto'
+        : 'gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full'
+      } ${active
+        ? 'bg-sky-500/10 text-sky-600 font-semibold shadow-sm border border-sky-200/50 '
+        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
+      }`}
+    >
+      <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
+      {!isCollapsed && <span className="truncate">{item.label}</span>}
+      {!isCollapsed && item.isExternal && <ExternalLink className="ml-auto h-3 w-3 opacity-60 group-hover:opacity-100" />}
+      {badge && badge > 0 ? (
+        isCollapsed ? (
+          <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
+        ) : (
+          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        )
+      ) : null}
+    </div>
+  );
+
   return (
     <motion.div variants={navItemHover} initial="rest" whileHover="hover" className="w-full">
-      <Link
-        href={item.route!}
-        title={isCollapsed ? item.label : undefined}
-        className={`group relative flex items-center transition-all duration-200 ${isCollapsed
-          ? 'h-10 w-10 justify-center rounded-xl mx-auto'
-          : 'gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full'
-        } ${active
-          ? 'bg-sky-500/10 text-sky-600 font-semibold shadow-sm border border-sky-200/50 '
-          : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-        }`}
-      >
-        <Icon className={`h-4 w-4 shrink-0 transition-transform duration-200 ${active ? 'scale-110 text-sky-500 ' : 'group-hover:scale-110'}`} />
-        {!isCollapsed && <span className="truncate">{item.label}</span>}
-        {badge && badge > 0 ? (
-          isCollapsed ? (
-            <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
-          ) : (
-            <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
-              {badge > 99 ? '99+' : badge}
-            </span>
-          )
-        ) : null}
-      </Link>
+      {item.isExternal ? (
+        <a href={item.route!} target="_blank" rel="noopener noreferrer" className="block w-full">
+          {content}
+        </a>
+      ) : (
+        <Link href={item.route!} className="block w-full">
+          {content}
+        </Link>
+      )}
     </motion.div>
   );
 }
@@ -462,6 +477,11 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
       <div className="flex-1 min-h-0 overflow-y-auto py-4 px-2.5 sidebar-scroll">
         <nav className="flex flex-col gap-1 pb-6">
           {adminNavItems.map((item, index) => {
+            // Check superAdminOnly
+            if (item.superAdminOnly && !auth?.is_super_admin) {
+              return null;
+            }
+
             // Check permissions
             if (item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
               return null;

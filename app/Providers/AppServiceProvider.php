@@ -44,5 +44,24 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
             return $user->hasRole('Super Admin') ? true : null;
         });
+
+        // Authorization Gate for Laravel Pulse
+        \Illuminate\Support\Facades\Gate::define('viewPulse', function ($user = null) {
+            if ($this->app->environment('local')) {
+                return true;
+            }
+
+            $admin = auth('admin')->user() ?? $user;
+            return $admin && method_exists($admin, 'hasRole') && $admin->hasRole('Super Admin');
+        });
+
+        // Pulse User Details Resolver
+        \Laravel\Pulse\Facades\Pulse::user(function ($user) {
+            return [
+                'name' => $user->name,
+                'email' => $user->email,
+                'avatar' => !empty($user->avatar_path) ? asset('storage/' . $user->avatar_path) : null,
+            ];
+        });
     }
 }

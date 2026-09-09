@@ -10,6 +10,7 @@
         "inertiajs/inertia-laravel": "^3.1",
         "laravel-notification-channels/webpush": "^11.0",
         "laravel/framework": "^13.8",
+        "laravel/pulse": "^1.8",
         "laravel/reverb": "^1.0",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",

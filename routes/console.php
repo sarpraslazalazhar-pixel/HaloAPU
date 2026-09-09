@@ -8,3 +8,4 @@ Schedule::command('reminder:pending')->dailyAt('08:30');
 Schedule::command('reminder:csat')->dailyAt('09:00');
 Schedule::command('reminder:snooze-check')->everyFiveMinutes();
 Schedule::command('tickets:auto-solve')->hourly();
+Schedule::command('pulse:check --once')->everyMinute();

@@ -56,7 +56,14 @@ if (empty($command)) {
     echo "<div class='section'><h2>🚀 Deployment</h2>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy' style='border-left-color: #00e676;'>▶ deploy — Jalankan migrate --force & optimize:clear</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=deploy-cpanel' style='border-left-color: #00b0ff;'>▶ deploy-cpanel — Full cPanel Deploy (Down, Cache, Migrate, Storage, Up)</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=package%3Adiscover' style='border-left-color: #7c4dff;'>📦 package:discover — Deteksi ulang paket Composer (Pulse, Livewire, dll)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=seed-permissions' style='border-left-color: #ffab40;'>🔑 seed-permissions — Perbaiki hak akses sidebar</a>";
+    echo "</div>";
+    
+    echo "<div class='section'><h2>📊 Laravel Pulse Monitoring</h2>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Acheck+--once' style='border-left-color: #00e676;'>📈 pulse:check --once — Ambil snapshot metrik server (CPU, RAM, Disk)</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Aclear' style='border-left-color: #ff5252;'>🗑️ pulse:clear — Bersihkan seluruh riwayat data Pulse</a>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=pulse%3Arestart' style='border-left-color: #ffab40;'>🔄 pulse:restart — Kirim sinyal restart ke worker Pulse</a>";
     echo "</div>";
     
     echo "<div class='section'><h2>⏱️ SLA Management</h2>";
@@ -66,6 +73,7 @@ if (empty($command)) {
     echo "</div>";
     
     echo "<div class='section'><h2>🔍 Diagnostik</h2>";
+    echo "<a href='{$baseUrl}?key={$key}&cmd=clear-bootstrap-cache' style='border-left-color: #ff5252;'>🧹 clear-bootstrap-cache — Hapus cache bootstrap (packages, services, config)</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=check-route'>🔍 check-route — Cek route web.php di server</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=opcache-reset'>🧹 opcache-reset — Hapus cache RAM PHP</a>";
     echo "<a href='{$baseUrl}?key={$key}&cmd=check-storage'>🔍 check-storage — Cek status storage link</a>";
@@ -156,13 +164,42 @@ if ($command === 'check-route') {
 // Command khusus: Reset OPcache
 // ==============================
 if ($command === 'opcache-reset') {
-    echo "<pre>=== Reset OPcache ===\n\n";
+    echo "<pre>=== Reset OPcache & Cache Bootstrap ===\n\n";
     if (function_exists('opcache_reset')) {
         $result = opcache_reset();
         echo $result ? "✅ OPcache berhasil di-reset!\n" : "⚠️ OPcache gagal di-reset (mungkin dinonaktifkan).\n";
     } else {
         echo "❌ Fungsi opcache_reset() tidak tersedia di server ini.\n";
     }
+
+    $cacheFiles = glob(__DIR__ . '/../bootstrap/cache/*.php');
+    foreach ($cacheFiles as $file) {
+        @unlink($file);
+        echo "🧹 Hapus cache bootstrap: " . basename($file) . "\n";
+    }
+    echo "</pre>";
+    exit;
+}
+
+// ==============================
+// Command khusus: Hapus cache bootstrap
+// ==============================
+if ($command === 'clear-bootstrap-cache') {
+    echo "<pre>=== Hapus Cache Bootstrap (packages.php, services.php, config.php) ===\n\n";
+    $cacheFiles = glob(__DIR__ . '/../bootstrap/cache/*.php');
+    if (empty($cacheFiles)) {
+        echo "ℹ️ Tidak ada file cache di bootstrap/cache/.\n";
+    } else {
+        foreach ($cacheFiles as $file) {
+            $name = basename($file);
+            if (@unlink($file)) {
+                echo "✅ Berhasil menghapus: $name\n";
+            } else {
+                echo "❌ Gagal menghapus: $name\n";
+            }
+        }
+    }
+    echo "\nCache bootstrap berhasil dibersihkan! Laravel akan mendeteksi ulang Service Provider & package secara otomatis.\n";
     echo "</pre>";
     exit;
 }
@@ -988,7 +1025,12 @@ $allowed = [
     'sla-diagnose',
     'npm-build',
     'package:discover',
-    'seed-permissions'
+    'seed-permissions',
+    'pulse:check --once',
+    'pulse:check',
+    'pulse:clear',
+    'pulse:restart',
+    'clear-bootstrap-cache',
 ];
 
 if (!in_array($command, $allowed)) {
@@ -1010,6 +1052,10 @@ if ($command === 'deploy') {
         
         echo "2. Menjalankan optimize:clear...\n";
         $kernel->call('optimize:clear');
+        echo Artisan::output() . "\n";
+
+        echo "3. Menjalankan package:discover...\n";
+        $kernel->call('package:discover');
         echo Artisan::output() . "\n";
         
         echo "✅ Deployment Selesai!\n";

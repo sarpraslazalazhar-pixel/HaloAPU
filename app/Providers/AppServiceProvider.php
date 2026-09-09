@@ -55,13 +55,19 @@ class AppServiceProvider extends ServiceProvider
             return $admin && method_exists($admin, 'hasRole') && $admin->hasRole('Super Admin');
         });
 
-        // Pulse User Details Resolver
-        \Laravel\Pulse\Facades\Pulse::user(function ($user) {
-            return [
-                'name' => $user->name,
-                'email' => $user->email,
-                'avatar' => !empty($user->avatar_path) ? asset('storage/' . $user->avatar_path) : null,
-            ];
-        });
+        // Pulse User Details Resolver (only when Pulse is registered and bound)
+        if ($this->app->bound(\Laravel\Pulse\Contracts\ResolvesUsers::class)) {
+            try {
+                \Laravel\Pulse\Facades\Pulse::user(function ($user) {
+                    return [
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'avatar' => !empty($user->avatar_path) ? asset('storage/' . $user->avatar_path) : null,
+                    ];
+                });
+            } catch (\Throwable $e) {
+                // Ignore if Pulse is not yet fully initialized
+            }
+        }
     }
 }

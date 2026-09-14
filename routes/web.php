@@ -153,6 +153,22 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
             Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
             Route::post('/konfigurasi/upload-sound', [SystemConfigController::class, 'uploadSound'])->name('konfigurasi.upload-sound');
+
+            // System Optimization (protected — admin only)
+            Route::get('/system/optimize', function() {
+                \Illuminate\Support\Facades\Artisan::call('config:cache');
+                \Illuminate\Support\Facades\Artisan::call('route:cache');
+                \Illuminate\Support\Facades\Artisan::call('view:cache');
+                return back()->with('success', 'System optimized successfully.');
+            })->name('system.optimize');
+
+            Route::get('/system/clear', function() {
+                \Illuminate\Support\Facades\Artisan::call('config:clear');
+                \Illuminate\Support\Facades\Artisan::call('route:clear');
+                \Illuminate\Support\Facades\Artisan::call('view:clear');
+                \Illuminate\Support\Facades\Artisan::call('cache:clear');
+                return back()->with('success', 'System cache cleared successfully.');
+            })->name('system.clear');
         });
 
         // Manual Scheduler
@@ -260,11 +276,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
     });
 });
 
-// Redirect URL lama /ai-bot-haloapu ke /admin/ai
+// Redirect URL lama /ai-bot-haloapu ke /admin/ai (redirect only, no public chat endpoint)
 Route::get('/ai-bot-haloapu', function () {
     return redirect()->route('admin.ai-bot.index');
 });
-Route::post('/ai-bot-haloapu/chat', [\App\Http\Controllers\Admin\AiBotController::class, 'chat']);
+// REMOVED: Route::post('/ai-bot-haloapu/chat', ...) — was publicly accessible without auth
 Route::get('/admin/ai-bot-haloapu', function () {
     return redirect()->route('admin.ai-bot.index');
 });

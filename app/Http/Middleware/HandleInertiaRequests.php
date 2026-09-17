@@ -63,13 +63,7 @@ class HandleInertiaRequests extends Middleware
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
             ],
-            'appConfig' => fn () => [
-                'nama_sistem' => \App\Models\SystemConfig::getValue('nama_sistem', 'Halo APU'),
-                'logo_path' => \App\Models\SystemConfig::getValue('logo_path'),
-                'banner_path' => \App\Models\SystemConfig::getValue('banner_path'),
-                'favicon_path' => \App\Models\SystemConfig::getValue('favicon_path'),
-                'notification_sound_path' => \App\Models\SystemConfig::getValue('notification_sound_path'),
-            ],
+            'appConfig' => fn () => \App\Models\SystemConfig::getAppConfig(),
             'unread_chat_count' => fn () => $this->getUnreadChatCount($request),
         ]);
     }
@@ -78,43 +72,61 @@ class HandleInertiaRequests extends Middleware
     {
         $admin = $request->user('admin');
         if ($admin) {
-            return \App\Models\Message::whereHas('conversation', function ($q) use ($admin) {
-                $q->where('type', 'public_global')
-                  ->orWhere(function ($q2) use ($admin) {
-                      $q2->where('type', 'admin_bot_reminder')->where('admin_one_id', $admin->id);
-                  })
-                  ->orWhere(function ($q2) use ($admin) {
-                      $q2->where('type', 'admin_direct')->where(function ($q3) use ($admin) {
-                          $q3->where('admin_one_id', $admin->id)->orWhere('admin_two_id', $admin->id);
-                      });
-                  })
-                  ->orWhere(function ($q2) use ($admin) {
-                      $q2->where('type', 'user_admin_direct')->where('admin_one_id', $admin->id);
-                  });
-            })
-            ->where(function ($sq) use ($admin) {
-                $sq->where('sender_type', '!=', \App\Models\Admin::class)
-                   ->orWhere('sender_id', '!=', $admin->id);
-            })
-            ->whereDoesntHave('reads', function ($rq) use ($admin) {
-                $rq->where('user_type', \App\Models\Admin::class)->where('user_id', $admin->id);
-            })
-            ->count();
+            return (int) \Illuminate\Support\Facades\Cache::remember(
+                "unread_chat_admin_{$admin->id}",
+                30,
+                fn () => $this->calculateUnreadChatCountForAdmin($admin)
+            );
         }
 
         $user = $request->user('web');
         if ($user) {
-            return \App\Models\Message::whereHas('conversation', function ($q) use ($user) {
-                $q->where('type', 'public_global')
-                  ->orWhere('user_id', $user->id);
-            })
-            ->where('sender_type', '!=', \App\Models\User::class)
-            ->whereDoesntHave('reads', function ($rq) use ($user) {
-                $rq->where('user_type', \App\Models\User::class)->where('user_id', $user->id);
-            })
-            ->count();
+            return (int) \Illuminate\Support\Facades\Cache::remember(
+                "unread_chat_user_{$user->id}",
+                30,
+                fn () => $this->calculateUnreadChatCountForUser($user)
+            );
         }
 
         return 0;
+    }
+
+    protected function calculateUnreadChatCountForAdmin(Admin $admin): int
+    {
+        return \App\Models\Message::whereHas('conversation', function ($q) use ($admin) {
+            $q->where('type', 'public_global')
+              ->orWhere(function ($q2) use ($admin) {
+                  $q2->where('type', 'admin_bot_reminder')->where('admin_one_id', $admin->id);
+              })
+              ->orWhere(function ($q2) use ($admin) {
+                  $q2->where('type', 'admin_direct')->where(function ($q3) use ($admin) {
+                      $q3->where('admin_one_id', $admin->id)->orWhere('admin_two_id', $admin->id);
+                  });
+              })
+              ->orWhere(function ($q2) use ($admin) {
+                  $q2->where('type', 'user_admin_direct')->where('admin_one_id', $admin->id);
+              });
+        })
+        ->where(function ($sq) use ($admin) {
+            $sq->where('sender_type', '!=', \App\Models\Admin::class)
+               ->orWhere('sender_id', '!=', $admin->id);
+        })
+        ->whereDoesntHave('reads', function ($rq) use ($admin) {
+            $rq->where('user_type', \App\Models\Admin::class)->where('user_id', $admin->id);
+        })
+        ->count();
+    }
+
+    protected function calculateUnreadChatCountForUser(User $user): int
+    {
+        return \App\Models\Message::whereHas('conversation', function ($q) use ($user) {
+            $q->where('type', 'public_global')
+              ->orWhere('user_id', $user->id);
+        })
+        ->where('sender_type', '!=', \App\Models\User::class)
+        ->whereDoesntHave('reads', function ($rq) use ($user) {
+            $rq->where('user_type', \App\Models\User::class)->where('user_id', $user->id);
+        })
+        ->count();
     }
 }

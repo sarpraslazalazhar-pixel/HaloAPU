@@ -72,7 +72,7 @@ class OpenTicketReminderCommand extends Command
 
                     if ($admins->isEmpty()) {
                         // Fallback ke Super Admin jika tidak ada admin unit yang terhubung
-                        $superAdmins = Admin::role('Super Admin')->get();
+                        $superAdmins = Admin::whereHas('roles', fn($q) => $q->whereIn('name', ['superadmin', 'Super Admin']))->get();
                         $admins = $admins->merge($superAdmins);
                     }
 

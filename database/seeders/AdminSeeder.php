@@ -18,7 +18,7 @@ class AdminSeeder extends Seeder
         DB::table('model_has_roles')->where('model_type', 'App\Models\Admin')->delete();
 
         // Ensure roles exist in case PermissionSeeder was not run
-        Role::firstOrCreate(['name' => 'Super Admin', 'guard_name' => 'admin']);
+        Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'admin']);
         Role::firstOrCreate(['name' => 'Operator', 'guard_name' => 'admin']);
 
         $admin = Admin::create([
@@ -27,7 +27,7 @@ class AdminSeeder extends Seeder
             'password' => Hash::make('password'),
             'name' => 'Super Administrator'
         ]);
-        $admin->assignRole('Super Admin');
+        $admin->assignRole('superadmin');
 
         $operator = Admin::create([
             'username' => 'operator1',

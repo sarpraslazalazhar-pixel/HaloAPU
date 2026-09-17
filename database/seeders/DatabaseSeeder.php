@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             UnitSeeder::class,
             SubUnitSeeder::class,
             FormFieldSeeder::class,
+            PermissionSeeder::class,
             AdminSeeder::class,
             UserSeeder::class,
             SlaConfigSeeder::class,

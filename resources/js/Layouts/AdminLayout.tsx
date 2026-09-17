@@ -182,9 +182,9 @@ function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: 
   );
 }
 
-function NavDropdown({ item, isCollapsed, url, permissions }: { item: NavItem; isCollapsed: boolean; url: string; permissions?: string[] }) {
+function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { item: NavItem; isCollapsed: boolean; url: string; permissions?: string[]; isSuperAdmin?: boolean }) {
   const visibleChildren = item.children?.filter(child =>
-    !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup))
+    isSuperAdmin || !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup))
   ) || [];
 
   if (visibleChildren.length === 0) return null;
@@ -483,7 +483,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
             }
 
             // Check permissions
-            if (item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
+            if (!auth?.is_super_admin && item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
               return null;
             }
 
@@ -510,6 +510,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
                   isCollapsed={collapsed}
                   url={url}
                   permissions={auth.permissions}
+                  isSuperAdmin={auth?.is_super_admin}
                 />
               );
             }

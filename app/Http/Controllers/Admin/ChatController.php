@@ -328,7 +328,7 @@ class ChatController extends Controller
         } elseif ($request->filled('user_id')) {
             $query->where('user_id', $request->user_id);
         } else {
-            if (!$admin->hasRole('Super Admin') && !$admin->hasPermissionTo('akses-laporan')) {
+            if (!$admin->hasRole(['superadmin', 'Super Admin']) && !$admin->hasPermissionTo('akses-laporan')) {
                 $unitIds = $admin->units->pluck('id')->toArray();
                 $query->where(function ($q) use ($admin, $unitIds) {
                     $q->where('assigned_admin_id', $admin->id)

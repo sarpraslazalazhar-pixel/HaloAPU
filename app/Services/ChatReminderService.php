@@ -44,7 +44,7 @@ class ChatReminderService
 
                 // 3. Super Admin (mengawasi seluruh unit & tiket)
                 try {
-                    $superAdmins = Admin::role('Super Admin')->get();
+                    $superAdmins = Admin::whereHas('roles', fn($q) => $q->whereIn('name', ['superadmin', 'Super Admin']))->get();
                     $admins = $admins->concat($superAdmins);
                 } catch (\Exception $se) {
                     // ignore

@@ -23,7 +23,7 @@ class TicketController extends Controller
         $query = Ticket::with(['user.divisi', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin']);
 
         $admin = auth('admin')->user();
-        if (!$admin->hasRole('Super Admin')) {
+        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
             if ($admin->hasRole('Operator')) {
                 $query->where('assigned_admin_id', $admin->id);
             } else {
@@ -35,6 +35,8 @@ class TicketController extends Controller
             }
         }
 
+        $activeStatuses = ['open', 'on_proses', 'pending', 'need_revision', 'solve'];
+
         if ($request->filled('unit_id')) {
             $query->where('unit_id', $request->unit_id);
         }
@@ -43,7 +45,10 @@ class TicketController extends Controller
         }
         if ($request->filled('status')) {
             $statuses = is_array($request->status) ? $request->status : [$request->status];
-            $query->whereIn('status', $statuses);
+            $allowedStatuses = array_values(array_intersect($statuses, $activeStatuses));
+            $query->whereIn('status', $allowedStatuses);
+        } else {
+            $query->whereIn('status', $activeStatuses);
         }
         if ($request->filled('date_from')) {
             $query->whereDate('created_at', '>=', $request->date_from);
@@ -72,7 +77,7 @@ class TicketController extends Controller
     public function show(Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole('Super Admin')) {
+        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
             if ($admin->hasRole('Operator')) {
                 if ($ticket->assigned_admin_id !== $admin->id) {
                     abort(403, 'Anda tidak berhak mengakses tiket ini.');
@@ -111,7 +116,7 @@ class TicketController extends Controller
     public function updateStatus(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole('Super Admin')) {
+        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
             if ($admin->hasRole('Operator')) {
                 if ($ticket->assigned_admin_id !== $admin->id) {
                     abort(403, 'Anda tidak berhak mengubah status tiket ini.');
@@ -327,7 +332,7 @@ class TicketController extends Controller
     public function assignOperator(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole('Super Admin') && !$admin->hasPermissionTo('akses-assign-operator')) {
+        if (!$admin->hasRole(['superadmin', 'Super Admin']) && !$admin->hasPermissionTo('akses-assign-operator')) {
             abort(403, 'Anda tidak memiliki hak akses untuk menugaskan operator.');
         }
 

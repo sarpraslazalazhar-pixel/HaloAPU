@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -14,48 +14,137 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
 
 
 const validTransitions: Record<string, string[]> = {
- open: ['on_proses', 'reject', 'pending'],
- on_proses: ['solve', 'pending', 'reject'],
- pending: ['on_proses'],
- need_revision: ['solve', 'pending', 'reject'],
+  open: ['on_proses', 'reject', 'pending'],
+  on_proses: ['solve', 'pending', 'reject'],
+  pending: ['on_proses'],
+  need_revision: ['solve', 'pending', 'reject'],
 };
 
 const statusLabels: Record<string, string> = {
- open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', need_revision: 'Butuh Revisi', accepted: 'Diterima User',
+  open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', need_revision: 'Butuh Revisi', accepted: 'Diterima User',
 };
 
 export default function TicketDetail({ ticket, formFields, operators }: any) {
- const { auth } = usePage().props as any;
- const admin = auth?.admin || auth?.user;
- const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
+  const { auth, errors: pageErrors } = usePage().props as any;
+  const admin = auth?.admin || auth?.user;
+  const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
 
- const [editorOpen, setEditorOpen] = useState(false);
- const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
- const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
- const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
- const { data: assignData, setData: setAssignData, patch: patchAssign, processing: processingAssign, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
+  const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
+  const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
+  const { data: assignData, setData: setAssignData, patch: patchAssign, processing: processingAssign, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
 
- const transitions = validTransitions[ticket.status] || [];
+  const transitions = validTransitions[ticket.status] || [];
 
- const handleStatusSubmit = (e: React.FormEvent) => {
-   e.preventDefault();
-   postStatus(route('admin.tiket.status', ticket.id), {
-     onSuccess: () => {
-       resetStatus();
-     }
-   });
- };
+  useEffect(() => {
+    setAssignData('assigned_admin_id', ticket.assigned_admin_id || '');
+  }, [ticket.assigned_admin_id]);
 
- const handlePrioritySubmit = (e: React.FormEvent) => {
-   e.preventDefault();
-   patchPriority(route('admin.tiket.priority', ticket.id));
- };
+  useEffect(() => {
+    setPriorityData('priority', ticket.priority || '');
+  }, [ticket.priority]);
 
- const handleAssignSubmit = (e: React.FormEvent) => {
-   e.preventDefault();
-   patchAssign(route('admin.tiket.assign', ticket.id));
- };
+  const handlePrioritySubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    patchPriority(route('admin.tiket.priority', ticket.id), {
+      preserveScroll: true,
+    });
+  };
+
+  const handleMainSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const currentAssignedId = ticket.assigned_admin_id ? String(ticket.assigned_admin_id) : '';
+    const selectedAssignedId = assignData.assigned_admin_id ? String(assignData.assigned_admin_id) : '';
+    const isOperatorChanged = canAssignOperator && selectedAssignedId !== '' && selectedAssignedId !== currentAssignedId;
+
+    const currentPriority = ticket.priority || '';
+    const selectedPriority = priorityData.priority || '';
+    const isPriorityChanged = selectedPriority !== '' && selectedPriority !== currentPriority;
+
+    // Skenario 1: Ubah status dipilih
+    if (statusData.status) {
+      setIsSubmitting(true);
+      postStatus(route('admin.tiket.status', ticket.id), {
+        preserveScroll: true,
+        onSuccess: () => {
+          resetStatus();
+          if (isOperatorChanged) {
+            router.patch(route('admin.tiket.assign', ticket.id), {
+              assigned_admin_id: selectedAssignedId,
+            }, {
+              preserveScroll: true,
+              onSuccess: () => {
+                if (isPriorityChanged) {
+                  router.patch(route('admin.tiket.priority', ticket.id), {
+                    priority: selectedPriority,
+                  }, {
+                    preserveScroll: true,
+                    onFinish: () => setIsSubmitting(false),
+                  });
+                } else {
+                  setIsSubmitting(false);
+                }
+              },
+              onError: () => setIsSubmitting(false),
+            });
+          } else if (isPriorityChanged) {
+            router.patch(route('admin.tiket.priority', ticket.id), {
+              priority: selectedPriority,
+            }, {
+              preserveScroll: true,
+              onFinish: () => setIsSubmitting(false),
+            });
+          } else {
+            setIsSubmitting(false);
+          }
+        },
+        onError: () => setIsSubmitting(false),
+      });
+      return;
+    }
+
+    // Skenario 2: Status tidak diubah, tapi Operator diubah
+    if (isOperatorChanged) {
+      setIsSubmitting(true);
+      router.patch(route('admin.tiket.assign', ticket.id), {
+        assigned_admin_id: selectedAssignedId,
+      }, {
+        preserveScroll: true,
+        onSuccess: () => {
+          if (isPriorityChanged) {
+            router.patch(route('admin.tiket.priority', ticket.id), {
+              priority: selectedPriority,
+            }, {
+              preserveScroll: true,
+              onFinish: () => setIsSubmitting(false),
+            });
+          } else {
+            setIsSubmitting(false);
+          }
+        },
+        onError: () => setIsSubmitting(false),
+      });
+      return;
+    }
+
+    // Skenario 3: Hanya Prioritas yang diubah
+    if (isPriorityChanged) {
+      setIsSubmitting(true);
+      router.patch(route('admin.tiket.priority', ticket.id), {
+        priority: selectedPriority,
+      }, {
+        preserveScroll: true,
+        onFinish: () => setIsSubmitting(false),
+      });
+      return;
+    }
+
+    alert('Silakan pilih status, operator, atau prioritas yang ingin diubah terlebih dahulu.');
+  };
 
  const renderFormValue = (field: any) => {
    if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
@@ -174,135 +263,193 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
            </div>
 
            <div className="space-y-6">
-             {canAssignOperator && (
-               <Card>
-                 <CardHeader><CardTitle>Penugasan Operator</CardTitle></CardHeader>
-                 <CardContent>
-                   <form onSubmit={handleAssignSubmit} className="space-y-4">
-                     <div className="space-y-2">
-                       <label className="text-sm font-medium">Tugaskan ke Operator</label>
-                       <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={assignData.assigned_admin_id} onChange={e => setAssignData('assigned_admin_id', e.target.value)}>
-                         <option value="">-- Pilih Operator --</option>
-                         {operators?.map((op: any) => (
-                           <option key={op.id} value={op.id}>{op.name || op.username}</option>
-                         ))}
-                       </select>
-                       {errorsAssign.assigned_admin_id && <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id}</p>}
-                     </div>
-                     <Button type="submit" variant="secondary" className="w-full" disabled={processingAssign}>
-                       Tugaskan
-                     </Button>
-                     {ticket.assigned_admin && (
-                       <div className="text-sm text-slate-500 mt-2 text-center">
-                         Saat ini ditugaskan ke: <span className="font-semibold text-slate-800">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
-                       </div>
-                     )}
-                   </form>
-                 </CardContent>
-               </Card>
-             )}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Aksi Tiket</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <form onSubmit={handleMainSubmit} className="space-y-4">
+                    <div className="space-y-2">
+                      <span className="text-sm text-slate-500">Status Saat Ini:</span>
+                      <div><StatusBadge status={ticket.status} /></div>
+                    </div>
 
-             <Card>
-               <CardHeader><CardTitle>Aksi Status</CardTitle></CardHeader>
-               <CardContent>
-                 {transitions.length > 0 ? (
-                   <form onSubmit={handleStatusSubmit} className="space-y-4">
-                     <div className="space-y-2">
-                       <span className="text-sm text-slate-500">Status Saat Ini:</span>
-                       <div><StatusBadge status={ticket.status} /></div>
-                     </div>
-                     <div className="space-y-2">
-                       <label className="text-sm font-medium">Ubah ke</label>
-                       <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={statusData.status} onChange={e => setStatusData('status', e.target.value)}>
-                         <option value="">Pilih status</option>
-                         {transitions.map((s: string) => (
-                           <option key={s} value={s}>{statusLabels[s] || s}</option>
-                         ))}
-                       </select>
-                       {errorsStatus.status && <p className="text-red-500 text-sm">{errorsStatus.status}</p>}
-                     </div>
-                     <div className="space-y-2">
-                       <label className="text-sm font-medium">Catatan Admin <span className="text-red-500">*</span></label>
-                       <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={statusData.catatan} onChange={e => setStatusData('catatan', e.target.value)} placeholder="Wajib diisi..." />
-                       {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
-                     </div>
-                     <div className="space-y-2">
-                       <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
-                       <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file (JPG, PNG, PDF, DOC, DOCX).</p>
-                        <div className="flex items-center gap-3">
-                          <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium cursor-pointer transition-colors border border-blue-200">
-                            <Paperclip className="w-4 h-4" />
-                            <span>Pilih Berkas</span>
-                            <input
-                              type="file"
-                              multiple
-                              accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
-                              className="hidden"
-                              onChange={e => {
-                                const files = Array.from(e.target.files || []);
-                                if (statusData.general_attachments.length + files.length > 3) {
-                                  alert('Maksimal hanya 3 lampiran.');
-                                  return;
-                                }
-                                const validFiles = files.filter(f => {
-                                  if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
-                                  return true;
-                                });
-                                setStatusData('general_attachments', [...statusData.general_attachments, ...validFiles]);
-                                e.target.value = '';
-                              }}
-                            />
-                          </label>
-                          <span className="text-xs text-slate-500">
-                            {statusData.general_attachments.length > 0
-                              ? `${statusData.general_attachments.length} berkas dipilih`
-                              : 'Belum ada berkas yang dipilih'}
-                          </span>
+                    {transitions.length > 0 ? (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Ubah Status</label>
+                          <select
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                            value={statusData.status}
+                            onChange={e => setStatusData('status', e.target.value)}
+                          >
+                            <option value="">Pilih status baru (opsional jika hanya tugaskan operator)</option>
+                            {transitions.map((s: string) => (
+                              <option key={s} value={s}>{statusLabels[s] || s}</option>
+                            ))}
+                          </select>
+                          {errorsStatus.status && <p className="text-red-500 text-sm">{errorsStatus.status}</p>}
                         </div>
-                       {errorsStatus.general_attachments && <p className="text-red-500 text-sm">{errorsStatus.general_attachments}</p>}
-                       {statusData.general_attachments.length > 0 && (
-                         <div className="mt-2 space-y-2">
-                           {statusData.general_attachments.map((file, idx) => (
-                             <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
-                               <span className="truncate max-w-[200px]">{file.name}</span>
-                               <div className="flex items-center gap-3">
-                                 {file.type.startsWith('image/') && (
-                                   <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'admin'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
-                                 )}
-                                 <button type="button" onClick={() => setStatusData('general_attachments', statusData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
-                               </div>
-                             </div>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                     <Button type="submit" className="w-full" disabled={processingStatus}>Simpan Perubahan Status</Button>
-                   </form>
-                 ) : (
-                   <p className="text-sm text-slate-500">Tidak ada transisi status yang tersedia.</p>
-                 )}
-               </CardContent>
-             </Card>
 
-             <Card>
-               <CardHeader><CardTitle>Prioritas SLA</CardTitle></CardHeader>
-               <CardContent>
-                 <form onSubmit={handlePrioritySubmit} className="space-y-4">
-                   <div className="space-y-2">
-                     <label className="text-sm font-medium">Ubah Prioritas</label>
-                     <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={priorityData.priority} onChange={e => setPriorityData('priority', e.target.value)}>
-                       <option value="">Pilih Prioritas (Default: Sedang)</option>
-                       <option value="Rendah">Rendah</option>
-                       <option value="Sedang">Sedang</option>
-                       <option value="Tinggi">Tinggi</option>
-                       <option value="Urgen">Urgen</option>
-                     </select>
-                     {errorsPriority.priority && <p className="text-red-500 text-sm">{errorsPriority.priority}</p>}
-                   </div>
-                   <Button type="submit" variant="secondary" className="w-full" disabled={processingPriority}>Set Prioritas</Button>
-                 </form>
-               </CardContent>
-             </Card>
+                        {canAssignOperator && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">
+                              Tugaskan ke Operator <span className="text-xs text-slate-400 font-normal">(Opsional)</span>
+                            </label>
+                            <select
+                              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                              value={assignData.assigned_admin_id}
+                              onChange={e => setAssignData('assigned_admin_id', e.target.value)}
+                            >
+                              <option value="">-- Pilih Operator --</option>
+                              {operators?.map((op: any) => (
+                                <option key={op.id} value={op.id}>{op.name || op.username}</option>
+                              ))}
+                            </select>
+                            {(errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id) && (
+                              <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id}</p>
+                            )}
+                            {ticket.assigned_admin && (
+                              <p className="text-xs text-slate-500">
+                                Saat ini ditugaskan ke: <span className="font-semibold text-slate-700">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">
+                            Catatan Admin {statusData.status && <span className="text-red-500">*</span>}
+                          </label>
+                          <textarea
+                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[90px]"
+                            value={statusData.catatan}
+                            onChange={e => setStatusData('catatan', e.target.value)}
+                            placeholder={statusData.status ? "Wajib diisi saat ubah status..." : "Catatan admin (opsional jika hanya penugasan operator)..."}
+                          />
+                          {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
+                          <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file (JPG, PNG, PDF, DOC, DOCX).</p>
+                          <div className="flex items-center gap-3">
+                            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium cursor-pointer transition-colors border border-blue-200">
+                              <Paperclip className="w-4 h-4" />
+                              <span>Pilih Berkas</span>
+                              <input
+                                type="file"
+                                multiple
+                                accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                                className="hidden"
+                                onChange={e => {
+                                  const files = Array.from(e.target.files || []);
+                                  if (statusData.general_attachments.length + files.length > 3) {
+                                    alert('Maksimal hanya 3 lampiran.');
+                                    return;
+                                  }
+                                  const validFiles = files.filter(f => {
+                                    if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
+                                    return true;
+                                  });
+                                  setStatusData('general_attachments', [...statusData.general_attachments, ...validFiles]);
+                                  e.target.value = '';
+                                }}
+                              />
+                            </label>
+                            <span className="text-xs text-slate-500">
+                              {statusData.general_attachments.length > 0
+                                ? `${statusData.general_attachments.length} berkas dipilih`
+                                : 'Belum ada berkas yang dipilih'}
+                            </span>
+                          </div>
+                          {errorsStatus.general_attachments && <p className="text-red-500 text-sm">{errorsStatus.general_attachments}</p>}
+                          {statusData.general_attachments.length > 0 && (
+                            <div className="mt-2 space-y-2">
+                              {statusData.general_attachments.map((file, idx) => (
+                                <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
+                                  <span className="truncate max-w-[200px]">{file.name}</span>
+                                  <div className="flex items-center gap-3">
+                                    {file.type.startsWith('image/') && (
+                                      <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'admin'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
+                                    )}
+                                    <button type="button" onClick={() => setStatusData('general_attachments', statusData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <Button type="submit" className="w-full" disabled={isSubmitting || processingStatus}>
+                          {isSubmitting || processingStatus ? 'Menyimpan...' : 'Simpan'}
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-slate-500">Tidak ada transisi status yang tersedia.</p>
+                        {canAssignOperator && (
+                          <div className="space-y-3">
+                            <div className="space-y-2">
+                              <label className="text-sm font-medium">Tugaskan ke Operator</label>
+                              <select
+                                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                                value={assignData.assigned_admin_id}
+                                onChange={e => setAssignData('assigned_admin_id', e.target.value)}
+                              >
+                                <option value="">-- Pilih Operator --</option>
+                                {operators?.map((op: any) => (
+                                  <option key={op.id} value={op.id}>{op.name || op.username}</option>
+                                ))}
+                              </select>
+                              {(errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id) && (
+                                <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id}</p>
+                              )}
+                              {ticket.assigned_admin && (
+                                <p className="text-xs text-slate-500">
+                                  Saat ini ditugaskan ke: <span className="font-semibold text-slate-700">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
+                                </p>
+                              )}
+                            </div>
+                            <Button type="submit" className="w-full" disabled={isSubmitting}>
+                              {isSubmitting ? 'Menyimpan...' : 'Simpan Penugasan'}
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </form>
+
+                  {/* Divider & SLA Priority Section */}
+                  <div className="pt-4 border-t border-slate-200">
+                    <form onSubmit={handlePrioritySubmit} className="space-y-3">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Prioritas SLA</label>
+                        <select
+                          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                          value={priorityData.priority}
+                          onChange={e => setPriorityData('priority', e.target.value)}
+                        >
+                          <option value="">Pilih Prioritas (Default: Sedang)</option>
+                          <option value="Rendah">Rendah</option>
+                          <option value="Sedang">Sedang</option>
+                          <option value="Tinggi">Tinggi</option>
+                          <option value="Urgen">Urgen</option>
+                        </select>
+                        {errorsPriority.priority && <p className="text-red-500 text-sm">{errorsPriority.priority}</p>}
+                      </div>
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        className="w-full"
+                        disabled={processingPriority || isSubmitting}
+                      >
+                        {processingPriority ? 'Menyimpan...' : 'Set Prioritas'}
+                      </Button>
+                    </form>
+                  </div>
+                </CardContent>
+              </Card>
 
              {/* SLA Tracking Card */}
              {ticket.sla_tracking && (

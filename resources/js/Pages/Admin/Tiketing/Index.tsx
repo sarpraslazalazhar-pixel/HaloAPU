@@ -11,11 +11,11 @@ import { Eye, Filter } from 'lucide-react';
 import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
- { value: 'open', label: 'Baru' },
- { value: 'on_proses', label: 'Diproses' },
- { value: 'pending', label: 'Tertunda' },
- { value: 'waiting_approval', label: 'Menunggu Review' },
- { value: 'need_revision', label: 'Butuh Revisi' },
+  { value: 'open', label: 'Baru' },
+  { value: 'on_proses', label: 'Diproses' },
+  { value: 'pending', label: 'Tertunda' },
+  { value: 'need_revision', label: 'Butuh Revisi' },
+  { value: 'solve', label: 'Menunggu Review' },
 ];
 
 interface Ticket {

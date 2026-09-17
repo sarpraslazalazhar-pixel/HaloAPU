@@ -43,7 +43,10 @@ export default function Index({ roles, permissions }: Props) {
  { label: 'Penugasan (Menugaskan Tiket ke Operator)', value: 'akses-assign-operator' },
  ];
 
+ const isSuperAdminRole = (name: string) => ['superadmin', 'Super Admin'].includes(name);
+
  const openModal = (role?: Role) => {
+ if (role && isSuperAdminRole(role.name)) return;
  clearErrors();
  if (role) {
  setEditingRole(role);
@@ -78,7 +81,7 @@ export default function Index({ roles, permissions }: Props) {
  };
 
  const handleDelete = (role: Role) => {
- if (role.name === 'Super Admin') return;
+ if (isSuperAdminRole(role.name)) return;
  
  Swal.fire({
  title: 'Hapus Role?',
@@ -147,7 +150,7 @@ export default function Index({ roles, permissions }: Props) {
  </div>
  </td>
  <td className="px-6 py-4 text-right">
- {role.name !== 'Super Admin' ? (
+ {!isSuperAdminRole(role.name) ? (
  <div className="flex justify-end gap-2">
  <Button variant="ghost" size="icon" onClick={() => openModal(role)} className="h-8 w-8 text-slate-500 hover:text-blue-600">
  <Edit2 className="h-4 w-4" />

@@ -44,7 +44,7 @@ class RoleManagementController extends Controller
     {
         $role = $manajemen_peran;
 
-        if ($role->name === 'Super Admin') {
+        if (in_array(strtolower(str_replace(' ', '', $role->name)), ['superadmin'])) {
             return back()->with('error', 'Role Super Admin tidak dapat diubah.');
         }
 
@@ -66,7 +66,7 @@ class RoleManagementController extends Controller
     {
         $role = $manajemen_peran;
 
-        if ($role->name === 'Super Admin') {
+        if (in_array(strtolower(str_replace(' ', '', $role->name)), ['superadmin'])) {
             return back()->with('error', 'Role Super Admin tidak dapat dihapus.');
         }
 

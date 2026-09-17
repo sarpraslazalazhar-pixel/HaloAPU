@@ -42,7 +42,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Implicitly grant "Super Admin" role all permissions
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
-            return $user->hasRole('Super Admin') ? true : null;
+            return $user->hasRole(['superadmin', 'Super Admin']) ? true : null;
         });
 
         // Authorization Gate for Laravel Pulse
@@ -52,7 +52,7 @@ class AppServiceProvider extends ServiceProvider
             }
 
             $admin = auth('admin')->user() ?? $user;
-            return $admin && method_exists($admin, 'hasRole') && $admin->hasRole('Super Admin');
+            return $admin && method_exists($admin, 'hasRole') && $admin->hasRole(['superadmin', 'Super Admin']);
         });
 
         // Pulse User Details Resolver (only when Pulse is registered and bound)

@@ -26,7 +26,7 @@ class PermissionSeeder extends Seeder
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'admin']);
         }
 
-        $superAdmin = Role::firstOrCreate(['name' => 'Super Admin', 'guard_name' => 'admin']);
+        $superAdmin = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'admin']);
         $admin = Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'admin']);
         $operator = Role::firstOrCreate(['name' => 'Operator', 'guard_name' => 'admin']);
 

@@ -51,9 +51,9 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $webUser,
                 'admin' => $adminUser,
-                'is_super_admin' => $adminUser ? $adminUser->hasRole('Super Admin') : false,
+                'is_super_admin' => $adminUser ? $adminUser->hasRole(['superadmin', 'Super Admin']) : false,
                 'permissions' => $request->user('admin') 
-                    ? ($request->user('admin')->hasRole('Super Admin') 
+                    ? ($request->user('admin')->hasRole(['superadmin', 'Super Admin']) 
                         ? \Spatie\Permission\Models\Permission::pluck('name') 
                         : $request->user('admin')->getAllPermissions()->pluck('name')) 
                     : [],

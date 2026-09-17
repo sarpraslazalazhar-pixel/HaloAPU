@@ -68,7 +68,7 @@ class CheckSlaCommand extends Command
                         $adminsToNotify->push($ticket->assignedAdmin);
                     }
                     try {
-                        $superAdmins = Admin::role('Super Admin')->get();
+                        $superAdmins = Admin::whereHas('roles', fn($q) => $q->whereIn('name', ['superadmin', 'Super Admin']))->get();
                         $adminsToNotify = $adminsToNotify->concat($superAdmins);
                     } catch (\Exception $se) {
                         // ignore

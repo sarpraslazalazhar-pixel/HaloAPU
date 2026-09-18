@@ -12,24 +12,17 @@ import {
   CheckCheck,
   Download,
   FileText,
-  Image as ImageIcon,
   Edit2,
   Trash2,
   CornerUpLeft,
-  Clock,
-  User as UserIcon,
-  ChevronDown,
   Loader2,
-  AlertCircle,
   ExternalLink,
   MessageSquare,
   Copy,
-  MoreVertical,
   ChevronLeft,
   Bot,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
-import { Input } from '@/Components/ui/input';
 import { Badge } from '@/Components/ui/badge';
 import {
   Dialog,
@@ -39,7 +32,7 @@ import {
 } from '@/Components/ui/dialog';
 import TicketReferenceCard from './TicketReferenceCard';
 import { useChatSound } from '@/hooks/useChatSound';
-import { format, isToday, isYesterday } from 'date-fns';
+import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export interface ChatMessage {
@@ -49,6 +42,7 @@ export interface ChatMessage {
   sender_id: number;
   sender_name: string;
   sender_avatar?: string | null;
+  sender?: { avatar_path?: string | null } | null;
   ticket?: {
     id: number;
     formatted_id: string;
@@ -98,6 +92,8 @@ interface ChatWindowProps {
     } | null;
     title: string;
     subtitle?: string;
+    is_bot?: boolean;
+    type?: string;
   } | null;
   initialMessages: ChatMessage[];
   currentUser: {
@@ -163,10 +159,13 @@ export function ChatWindow({
 
   // Handle Realtime Echo Listener
   useEffect(() => {
-    if (!conversation?.id || !(window as any).Echo) return;
+    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js).
+    const echo = (window as any).Echo;
+
+    if (!conversation?.id || !echo) return;
 
     const channelName = `chat.conversation.${conversation.id}`;
-    const echoChannel = (window as any).Echo.private(channelName);
+    const echoChannel = echo.private(channelName);
 
     // Join Echo Channel
     echoChannel
@@ -175,6 +174,7 @@ export function ChatWindow({
 
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMsg.id)) return prev;
+
           return [...prev, newMsg];
         });
 
@@ -187,8 +187,10 @@ export function ChatWindow({
 
         if (!isSelf) {
           playSound();
+
           if (document.hidden) {
             toast.success(`Pesan Baru dari ${newMsg.sender_name}`, { id: `chat-notif-${newMsg.id}` });
+
             if ('Notification' in window && Notification.permission === 'granted') {
               new Notification(`Pesan Baru - ${newMsg.sender_name}`, {
                 body: newMsg.body || '[Lampiran]',
@@ -200,6 +202,7 @@ export function ChatWindow({
             const readUrl = isAdmin
               ? route('admin.chat.read', { conversation: conversation.id })
               : route('chat.read', { conversation: conversation.id });
+
             axios.post(readUrl).catch(() => {});
           }
         }
@@ -221,12 +224,16 @@ export function ChatWindow({
           prev.map((m) => {
             const alreadyRead = m.reads?.some((r) => {
               const sameUser = r.user_id === e.userId;
+
               const sameType =
                 (r.user_type?.includes('User') && e.userType?.includes('User')) ||
                 (r.user_type?.includes('Admin') && e.userType?.includes('Admin'));
+
               return sameUser && sameType;
             });
+
             if (alreadyRead) return m;
+
             return {
               ...m,
               reads: [
@@ -248,7 +255,7 @@ export function ChatWindow({
       });
 
     return () => {
-      (window as any).Echo.leave(channelName);
+      echo.leave(channelName);
     };
   }, [conversation?.id, currentUser, playSound, scrollToBottom]);
 
@@ -260,6 +267,7 @@ export function ChatWindow({
 
     if (!isTyping) {
       setIsTyping(true);
+
       const typingUrl = isAdmin
         ? route('admin.chat.typing', { conversation: conversation.id })
         : route('chat.typing', { conversation: conversation.id });
@@ -271,6 +279,7 @@ export function ChatWindow({
 
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
+
       const typingUrl = isAdmin
         ? route('admin.chat.typing', { conversation: conversation.id })
         : route('chat.typing', { conversation: conversation.id });
@@ -282,10 +291,12 @@ export function ChatWindow({
   // Fetch tickets for attachment modal
   const fetchTickets = async () => {
     setLoadingTickets(true);
+
     try {
       const url = isAdmin
         ? route('admin.chat.tickets', { conversation_id: conversation?.id })
         : route('chat.tickets');
+
       const res = await axios.get(url);
       setTicketsList(res.data.tickets || []);
     } catch {
@@ -309,8 +320,10 @@ export function ChatWindow({
       if (file.size > maxBytes) {
         toast.error(`Ukuran file ${file.name} melebihi batas 3 MB!`);
         e.target.value = '';
+
         return;
       }
+
       setSelectedFile(file);
     }
   };
@@ -318,6 +331,7 @@ export function ChatWindow({
   // Submit Send Message
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
     if (!conversation?.id || isSending) return;
 
     if (editingMessage) {
@@ -341,6 +355,7 @@ export function ChatWindow({
       } catch (err: any) {
         toast.error(err.response?.data?.error || 'Gagal memperbarui pesan');
       }
+
       return;
     }
 
@@ -348,9 +363,13 @@ export function ChatWindow({
 
     setIsSending(true);
     const formData = new FormData();
+
     if (inputText.trim()) formData.append('body', inputText.trim());
+
     if (selectedTicket) formData.append('ticket_id', selectedTicket.id);
+
     if (replyingTo) formData.append('reply_to_message_id', String(replyingTo.id));
+
     if (selectedFile) formData.append('attachment', selectedFile);
 
     try {
@@ -363,6 +382,7 @@ export function ChatWindow({
       });
 
       const newMsg = res.data.message;
+
       if (newMsg) {
         setMessages((prev) => [...prev, newMsg]);
         scrollToBottom(true);
@@ -391,11 +411,13 @@ export function ChatWindow({
   useEffect(() => {
     const handleClick = () => setContextMenu(null);
     window.addEventListener('click', handleClick);
+
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
   const handleDeleteMessage = async (msgId: number) => {
     setContextMenu(null);
+
     const result = await Swal.fire({
       title: 'Hapus Pesan?',
       text: 'Pesan ini akan dihapus dari percakapan.',
@@ -430,6 +452,7 @@ export function ChatWindow({
   const formatMessageTime = (dateStr: string) => {
     try {
       const d = new Date(dateStr);
+
       return format(d, 'HH:mm');
     } catch {
       return '';
@@ -466,11 +489,13 @@ export function ChatWindow({
           {(() => {
             const isBot = conversation.is_bot || conversation.type === 'admin_bot_reminder' || conversation.title?.includes('Bot Pengingat');
             const isPublic = conversation.type === 'public_global' || conversation.subtitle === 'Grup Publik';
+
             const isOnline = isBot || isPublic || (
               conversation.user?.id ? (onlineUsers || []).some((u) => {
                 const sameId = u.id === conversation.user?.id;
                 const isTargetAdmin = conversation.subtitle?.includes('Admin') || conversation.type === 'admin_direct';
                 const sameType = isTargetAdmin ? u.type === 'admin' : u.type === 'user';
+
                 return sameId && sameType;
               }) : false
             );
@@ -594,6 +619,7 @@ export function ChatWindow({
                 r.user_id === msg.sender_id &&
                 ((msg.sender_type?.includes('User') && r.user_type?.includes('User')) ||
                  (msg.sender_type?.includes('Admin') && r.user_type?.includes('Admin')));
+
               return !isSender;
             });
 
@@ -612,9 +638,9 @@ export function ChatWindow({
                   }`}>
                     {isBotMsg ? (
                       <Bot className="h-4 w-4 text-indigo-600" />
-                    ) : msg.sender_avatar || (msg.sender as any)?.avatar_path ? (
+                    ) : msg.sender_avatar || msg.sender?.avatar_path ? (
                       <img
-                        src={msg.sender_avatar || ('/storage/' + (msg.sender as any).avatar_path)}
+                        src={msg.sender_avatar || ('/storage/' + msg.sender?.avatar_path)}
                         alt={msg.sender_name}
                         className="h-full w-full object-cover"
                       />
@@ -1022,18 +1048,23 @@ export function ChatWindow({
                   </div>
                   {(() => {
                     const s = ticket.status?.toLowerCase() || '';
+
                     if (s === 'solve' || s === 'closed' || s === 'selesai') {
                       return <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] shrink-0 font-semibold">solve</Badge>;
                     }
+
                     if (s === 'open' || s === 'buka') {
                       return <Badge className="bg-sky-50 text-sky-700 border border-sky-200 text-[10px] shrink-0 font-semibold">open</Badge>;
                     }
+
                     if (s === 'need_revision' || s === 'revisi') {
                       return <Badge className="bg-orange-50 text-orange-700 border border-orange-200 text-[10px] shrink-0 font-semibold">need_revision</Badge>;
                     }
+
                     if (s === 'pending' || s === 'pending_user') {
                       return <Badge className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] shrink-0 font-semibold">pending</Badge>;
                     }
+
                     return <Badge variant="outline" className="text-[10px] shrink-0">{ticket.status}</Badge>;
                   })()}
                 </div>

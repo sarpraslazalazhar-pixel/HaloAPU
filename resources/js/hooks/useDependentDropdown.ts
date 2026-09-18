@@ -15,6 +15,7 @@ export function useDependentDropdown(baseUrl: string) {
     if (!parentId) {
       setOptions([]);
       setLoading(false);
+
       return;
     }
 
@@ -23,10 +24,12 @@ export function useDependentDropdown(baseUrl: string) {
 
     setLoading(true);
     setOptions([]); // Kosongkan langsung agar UI tidak menampilkan data lama
+
     try {
       const decodedUrl = decodeURIComponent(baseUrl);
       const url = decodedUrl.replace(/\{[^}]+\}/, String(parentId));
       const { data } = await axios.get(url, { signal: controller.signal });
+
       // Hanya update state jika request ini belum dibatalkan
       if (!controller.signal.aborted) {
         setOptions(data);
@@ -36,6 +39,7 @@ export function useDependentDropdown(baseUrl: string) {
       if (axios.isCancel(err) || err?.name === 'AbortError' || err?.name === 'CanceledError') {
         return;
       }
+
       setOptions([]);
     } finally {
       // Hanya hentikan loading jika ini masih controller yang aktif

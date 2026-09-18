@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, router, useForm } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
@@ -8,7 +8,7 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, XCircle, Eye, CheckCircle2, Edit2, MessageSquare, Clock, Paperclip, Info } from 'lucide-react';
+import { XCircle, Eye, CheckCircle2, Edit2, Clock, Paperclip, Info } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
@@ -22,10 +22,10 @@ interface DetailProps {
 }
 
 export default function Detail({ ticket, formFields, maxRevisions }: DetailProps) {
- const { auth } = usePage<any>().props;
- const user = auth?.user;
 
+ // SAFETY: general_attachments holds uploaded File instances for replies.
  const { data: replyData, setData: setReplyData, post: postReply, processing: processingReply, errors: errorsReply, reset: resetReply } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
+ // SAFETY: general_attachments holds uploaded File instances for revision submissions.
  const { data: revData, setData: setRevData, post: postRev, processing: processingRev, errors: errorsRev, reset: resetRev } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
  const [showRevForm, setShowRevForm] = useState(false);
  const [showConfirm, setShowConfirm] = useState(false);
@@ -41,6 +41,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const renderFormValue = (field: any) => {
    if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
      const fieldAttachments = ticket.attachments?.filter((a: any) => a.field_id == field.id);
+
      return fieldAttachments && fieldAttachments.length > 0 ? (
        <div className="flex flex-col gap-2 mt-1">
          {fieldAttachments.map((attachment: any, idx: number) => (
@@ -55,43 +56,44 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
    }
 
    const value = ticket.form_data?.[field.id];
+
    if (value === undefined || value === null || value === '') return '-';
+
    if (field.tipe_field === 'nominal_rp') {
      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
    }
-   if (field.tipe_field === 'checkbox' && typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
-   if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) return value.join(', ');
-   
-   const stringValue = String(value);
-   const urlRegex = /(https?:\/\/[^\s]+)/g;
-   if (urlRegex.test(stringValue)) {
-     const parts = stringValue.split(urlRegex);
-     return (
-       <>
-         {parts.map((part, i) => {
-           if (part.match(/^https?:\/\//)) {
-             return (
-               <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
-                 {part}
-               </a>
-             );
-           }
-           return <span key={i}>{part}</span>;
-         })}
-       </>
-     );
-   }
-   
-   return stringValue;
- };
 
- const currentUser = {
-   id: user?.id,
-   name: user?.name || user?.username,
-   type: 'user' as const,
- };
+    if (field.tipe_field === 'checkbox') return value ? 'Ya' : 'Tidak';
 
- return (
+    if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) return value.join(', ');
+    
+    const stringValue = String(value);
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+
+    if (urlRegex.test(stringValue)) {
+      const parts = stringValue.split(urlRegex);
+
+      return (
+        <>
+          {parts.map((part, i) => {
+            if (part.match(/^https?:\/\//)) {
+              return (
+                <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline break-all">
+                  {part}
+                </a>
+              );
+            }
+
+            return <span key={i}>{part}</span>;
+          })}
+        </>
+      );
+    }
+    
+    return stringValue;
+  };
+
+  return (
    <UserLayout title={`Tiket #TKT-${formatTicketId(ticket.id)}`}>
      <div className="max-w-4xl mx-auto py-8 px-4">
        <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
@@ -180,8 +182,17 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                          className="hidden"
                          onChange={e => {
                            const files = Array.from(e.target.files || []);
-                           if (revData.general_attachments.length + files.length > 3) { alert('Maksimal hanya 3 lampiran.'); return; }
-                           const validFiles = files.filter(f => { if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; } return true; });
+
+                           if (revData.general_attachments.length + files.length > 3) { alert('Maksimal hanya 3 lampiran.');
+
+ return; }
+
+                           const validFiles = files.filter(f => { if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`);
+
+ return false; }
+
+ return true; });
+
                            setRevData('general_attachments', [...revData.general_attachments, ...validFiles]);
                            e.target.value = '';
                          }}
@@ -333,14 +344,21 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                              className="hidden"
                              onChange={e => {
                                const files = Array.from(e.target.files || []);
+
                                if (replyData.general_attachments.length + files.length > 3) {
                                  alert('Maksimal hanya 3 lampiran.');
+
                                  return;
                                }
+
                                const validFiles = files.filter(f => {
-                                 if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
+                                 if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`);
+
+ return false; }
+
                                  return true;
                                });
+
                                setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
                                e.target.value = '';
                              }}
@@ -434,6 +452,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
              newFiles[fileToEdit.index] = editedFile;
              setRevData('general_attachments', newFiles);
            }
+
            setEditorOpen(false);
          }}
        />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { useForm } from '@inertiajs/react';
 import { Button } from '@/Components/ui/button';
@@ -31,15 +31,29 @@ interface SlaConfig {
 }
 
 const PRIORITIES = ['Rendah', 'Sedang', 'Tinggi', 'Urgen'];
+
 const JENIS_OPTIONS = [
  { value: 'respon', label: 'Respon' },
  { value: 'penyelesaian', label: 'Penyelesaian' }
 ];
 
-export default function SlaConfigIndex({ configs, subUnits, filters }: { configs: any; subUnits: SubUnit[]; filters?: { search?: string } }) {
+export default function SlaConfigIndex({ configs, subUnits, filters: _filters }: { configs: any; subUnits: SubUnit[]; filters?: { search?: string } }) {
  const [isAddOpen, setIsAddOpen] = useState(false);
  const [editConfig, setEditConfig] = useState<SlaConfig | null>(null);
  const [tingkat, setTingkat] = useState<'global' | 'spesifik'>('global');
+
+ const groupedSubUnits = useMemo(() => {
+ const map: Record<string, SubUnit[]> = {};
+
+ for (const su of subUnits) {
+ const unitName = su.unit?.nama_unit || 'Lainnya';
+
+ if (!map[unitName]) map[unitName] = [];
+ map[unitName].push(su);
+ }
+
+ return map;
+ }, [subUnits]);
 
  const { data, setData, post, put, delete: destroy, reset, errors, transform } = useForm<any>({
  sub_unit_id: '',
@@ -67,6 +81,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
 
  const handleEdit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editConfig) {
  transform((formData: any) => ({
  ...formData,
@@ -165,14 +180,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
  <SelectValue placeholder="Pilih Sub Unit" />
  </SelectTrigger>
  <SelectContent>
- {Object.entries(
- subUnits.reduce((acc, su) => {
- const unitName = su.unit?.nama_unit || 'Lainnya';
- if (!acc[unitName]) acc[unitName] = [];
- acc[unitName].push(su);
- return acc;
- }, {} as Record<string, typeof subUnits>)
- ).map(([unitName, items]) => (
+ {Object.entries(groupedSubUnits).map(([unitName, items]) => (
  <SelectGroup key={unitName}>
  <SelectLabel>{unitName}</SelectLabel>
  {items.map(su => (
@@ -338,14 +346,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters }: { configs
  <SelectValue placeholder="Pilih Sub Unit" />
  </SelectTrigger>
  <SelectContent>
- {Object.entries(
- subUnits.reduce((acc, su) => {
- const unitName = su.unit?.nama_unit || 'Lainnya';
- if (!acc[unitName]) acc[unitName] = [];
- acc[unitName].push(su);
- return acc;
- }, {} as Record<string, typeof subUnits>)
- ).map(([unitName, items]) => (
+ {Object.entries(groupedSubUnits).map(([unitName, items]) => (
  <SelectGroup key={unitName}>
  <SelectLabel>{unitName}</SelectLabel>
  {items.map(su => (

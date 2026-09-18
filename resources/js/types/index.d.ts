@@ -59,6 +59,8 @@ export interface FormField {
  child_fields?: FormField[];
 }
 
+export type FormFieldValue = string | number | boolean | string[] | null | undefined;
+
 export interface Ticket {
  id: number;
  user_id: number;
@@ -67,7 +69,7 @@ export interface Ticket {
  jabatan_id: number | null;
  unit_id: number;
  sub_unit_id: number;
- form_data: Record<string, any>;
+ form_data: Record<string, FormFieldValue>;
  status: string;
  created_at: string;
  updated_at: string;
@@ -112,7 +114,7 @@ export interface NotificationData {
  prioritas?: string;
  snoozed?: boolean;
  done_at?: string;
- [key: string]: any;
+ [key: string]: string | number | boolean | null | undefined;
 }
 
 export interface NotificationItem {

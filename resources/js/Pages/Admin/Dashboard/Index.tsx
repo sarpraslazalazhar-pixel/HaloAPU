@@ -11,23 +11,20 @@ import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 
 // ── 1. Color Palettes & Metadata ──
-// 4 warna mutually exclusive untuk Pie Chart SLA: Dalam SLA, Pelanggaran Respon, Pelanggaran Penyelesaian, Pelanggaran Keduanya
-const PIE_COLORS = ['#22c55e', '#f97316', '#ef4444', '#991b1b'];
-
-const SLA_PIE_COLOR_MAP: Record<string, string> = {
+const SLA_PIE_COLOR_MAP = {
     'Dalam SLA': '#22c55e',
     'Pelanggaran Respon': '#f97316',
     'Pelanggaran Penyelesaian': '#ef4444',
     'Pelanggaran Keduanya': '#991b1b',
-};
+} satisfies Record<string, string>;
 
-const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
+const STATUS_META = {
     open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
     on_proses: { label: 'Diproses', bg: 'from-orange-500 to-orange-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
     pending: { label: 'Tertunda', bg: 'from-zinc-500 to-zinc-600', icon: Hourglass, anim: 'group-hover:rotate-180 transition-transform duration-500 group-hover:opacity-100' },
     solve: { label: 'Selesai', bg: 'from-green-500 to-green-600', icon: CheckCircle, anim: 'group-hover:scale-125 group-hover:opacity-100' },
     reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
-};
+} satisfies Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }>;
 
 // ── 2. TypeScript Interfaces ──
 export interface StatusCounts {
@@ -167,7 +164,7 @@ export interface DashboardProps {
 export default function DashboardIndex({
     totalTickets = 0,
     statusCounts,
-    topUsers = [],
+    topUsers: _topUsers = [],
     followUpTickets = [],
     monthlyChartData = [],
     yearlyChartData = [],
@@ -180,7 +177,7 @@ export default function DashboardIndex({
     slaBarChartData = [],
     slaTrendData = [],
     slaTrendYear,
-    slaFilters,
+    slaFilters: _slaFilters,
     topUsersAll = [],
     csatTrend = [],
     tiketBulanan = [],
@@ -188,9 +185,11 @@ export default function DashboardIndex({
     const [month, setMonth] = useState<string>(
         filters?.month !== null && filters?.month !== undefined ? String(filters.month) : ''
     );
+
     const [year, setYear] = useState<string>(
         filters?.year !== null && filters?.year !== undefined ? String(filters.year) : ''
     );
+
     const [selectedUnit, setSelectedUnit] = useState<string>('');
     const [chartMode, setChartMode] = useState<'bulanan' | 'tahunan'>('bulanan');
 
@@ -198,7 +197,9 @@ export default function DashboardIndex({
 
     const applyFilter = () => {
         const params: Record<string, string> = {};
+
         if (month) params.month = month;
+
         if (year) params.year = year;
         router.get(route('admin.dashboard'), params, {
             preserveState: true,
@@ -212,6 +213,7 @@ export default function DashboardIndex({
 
     // Perhitungan Tingkat Penyelesaian Aman (0 - 100%)
     const solveCount = statusCounts?.solve ?? 0;
+
     const completionRate = totalTickets > 0
         ? Math.min(100, Math.max(0, Math.round((solveCount / totalTickets) * 100)))
         : 0;
@@ -238,6 +240,7 @@ export default function DashboardIndex({
     ];
 
     const currentYearNum = new Date().getFullYear();
+
     const years = [
         { value: '', label: 'Semua Tahun' },
         ...Array.from({ length: 5 }, (_, i) => ({
@@ -303,6 +306,9 @@ export default function DashboardIndex({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                 {Object.entries(STATUS_META).map(([key, meta]) => {
                     const Icon = meta.icon;
+                    // SAFETY: key is one of the STATUS_META keys which map directly to keys of StatusCounts.
+                    const count = statusCounts?.[key as keyof StatusCounts] ?? 0;
+
                     return (
                         <div
                             key={key}
@@ -316,7 +322,7 @@ export default function DashboardIndex({
                                     <Icon className={`h-6 w-6 text-white opacity-70 transition-all duration-300 ${meta.anim}`} />
                                 </div>
                                 <p className="mt-3 text-3xl font-bold">
-                                    {statusCounts?.[key as keyof StatusCounts] ?? 0}
+                                    {count}
                                 </p>
                             </div>
                         </div>
@@ -414,6 +420,7 @@ export default function DashboardIndex({
                                 const percent = totalTickets > 0
                                     ? Math.min(100, Math.max(0, (bar.count / totalTickets) * 100))
                                     : 0;
+
                                 return (
                                     <div key={bar.label} className="space-y-2">
                                         <div className="flex items-center justify-between text-xs font-bold">
@@ -691,9 +698,11 @@ export default function DashboardIndex({
             {/* ── SLA Compliance Section ── */}
             {(() => {
                 const selectedMonthObj = months.find((m) => m.value === month);
+
                 const slaPeriodLabel = (year && month)
                     ? `${selectedMonthObj?.label || ''} ${year}`
                     : (year ? `Tahun ${year}` : (month ? `${selectedMonthObj?.label || ''} (Semua Tahun)` : 'Semua Periode'));
+
                 const trendYearDisplay = slaTrendYear || (year ? String(year) : String(currentYearNum));
 
                 return (
@@ -753,7 +762,7 @@ export default function DashboardIndex({
                                     </div>
                                 </CardHeader>
                                 <CardContent>
-                                    {safeSlaPieData.length > 0 && safeSlaPieData.some((d) => d.value > 0) ? (
+                                    {safeSlaPieData.some((d) => d.value > 0) ? (
                                         <LazyECharts
                                             option={{
                                                 tooltip: {
@@ -793,7 +802,8 @@ export default function DashboardIndex({
                                                         data: safeSlaPieData.map((d) => ({
                                                             value: d.value,
                                                             name: d.name,
-                                                            itemStyle: { color: SLA_PIE_COLOR_MAP[d.name] || '#3b82f6' },
+                                                            // SAFETY: Look up SLA pie slice color by name using keyof; fallback to default blue.
+                                                            itemStyle: { color: SLA_PIE_COLOR_MAP[d.name as keyof typeof SLA_PIE_COLOR_MAP] || '#3b82f6' },
                                                         })),
                                                     },
                                                 ],
@@ -826,10 +836,12 @@ export default function DashboardIndex({
                                                             const val = p.value !== undefined && p.value !== null ? p.value : 0;
                                                             const total = item?.total ?? 0;
                                                             const dalamSla = item?.dalam_sla ?? 0;
+
                                                             return `<strong>${p.name || p.axisValueLabel || ''} ${trendYearDisplay}</strong><br/>` +
                                                                    `Kepatuhan: <strong>${val}%</strong><br/>` +
                                                                    `<span style="font-size:11px;color:#94a3b8">Tiket: ${dalamSla} / ${total} dalam SLA</span>`;
                                                         }
+
                                                         return '';
                                                     },
                                                 },

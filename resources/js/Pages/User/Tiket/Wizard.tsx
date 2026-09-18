@@ -51,8 +51,11 @@ export default function Wizard({ unitList }: WizardProps) {
   const { data, setData, post, transform, processing, errors, setError, clearErrors } = useForm({
     unit_id: '',
     sub_unit_id: '',
-    form_data: {} as Record<string, any>,
+    // SAFETY: form_data is initially empty and will be populated with field answers keyed by field ID.
+    form_data: {} as Record<string, string | number | boolean | string[] | null>,
+    // SAFETY: attachments maps field ID to array of uploaded files.
     attachments: {} as Record<string, File[]>,
+    // SAFETY: general_attachments is an empty array for additional uploaded files.
     general_attachments: [] as File[],
   });
 
@@ -84,6 +87,7 @@ export default function Wizard({ unitList }: WizardProps) {
     if (activeStep === STEPS.length - 1) {
       setCanSubmit(false);
       const timer = setTimeout(() => setCanSubmit(true), 1000);
+
       return () => clearTimeout(timer);
     }
   }, [activeStep]);
@@ -115,6 +119,7 @@ export default function Wizard({ unitList }: WizardProps) {
           text: 'Maksimal hanya 3 lampiran per isian.',
           confirmButtonColor: '#3b82f6'
         });
+
         return;
       }
 
@@ -126,13 +131,16 @@ export default function Wizard({ unitList }: WizardProps) {
             text: `Ukuran file ${file.name} melebihi 3 MB.`,
             confirmButtonColor: '#3b82f6'
           });
+
           return false;
         }
+
         return true;
       });
       
       newAttachments[String(fieldId)] = [...currentFiles, ...validFiles];
     }
+
     setData('attachments', newAttachments);
   };
 
@@ -149,12 +157,15 @@ export default function Wizard({ unitList }: WizardProps) {
     
     if (step === 0) {
       if (!data.unit_id) { setError('unit_id', 'Kanal Layanan wajib dipilih'); isValid = false; }
+
       if (!data.sub_unit_id) { setError('sub_unit_id', 'Jenis Layanan wajib dipilih'); isValid = false; }
     } else if (step === 1) {
       nonUploadFields.forEach(field => {
         const isVisible = !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value;
+
         if (isVisible && field.wajib && field.tipe_field !== 'info_peraturan') {
           const val = data.form_data[field.id];
+
           if (val === undefined || val === null || val === '' || (Array.isArray(val) && val.length === 0)) {
             setError(`form_data.${field.id}`, `${field.label} wajib diisi`);
             isValid = false;
@@ -164,8 +175,10 @@ export default function Wizard({ unitList }: WizardProps) {
     } else if (step === 2) {
       uploadFields.forEach(field => {
         const isVisible = !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value;
+
         if (isVisible && field.wajib) {
           const files = data.attachments[String(field.id)];
+
           if (!files || files.length === 0) {
             setError(`attachments.${field.id}`, `${field.label} wajib diunggah`);
             isValid = false;
@@ -179,6 +192,7 @@ export default function Wizard({ unitList }: WizardProps) {
 
   const nextStep = () => {
     if (fieldsLoading) return;
+
     if (validateStep(activeStep)) {
       setDirection(1);
       setActiveStep(prev => Math.min(prev + 1, STEPS.length - 1));
@@ -200,6 +214,7 @@ export default function Wizard({ unitList }: WizardProps) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+
     if (activeStep !== STEPS.length - 1) return;
     transform((data) => ({
       ...data,
@@ -235,6 +250,7 @@ export default function Wizard({ unitList }: WizardProps) {
 
   const getSelectedName = (list: any[], id: string | number) => {
     const item = list.find((i: any) => String(i.id) === String(id));
+
     return item ? (item.nama_unit || item.nama_layanan || '-') : '-';
   };
 
@@ -408,15 +424,18 @@ export default function Wizard({ unitList }: WizardProps) {
                             .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
                             .map(field => {
                               const value = data.form_data[field.id];
-                              const displayValue = field.tipe_field === 'checkbox'
-                                ? (value ? 'Ya' : 'Tidak')
-                                : field.tipe_field === 'multi_pilih'
-                                ? (value?.length ? value.join(', ') : '-')
-                                : field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file'
-                                ? (value?.name || '-')
-                                : field.tipe_field === 'nominal_rp' && value
-                                ? new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value))
-                                : value ?? '-';
+                              let displayValue: React.ReactNode = '-';
+
+                              if (field.tipe_field === 'checkbox') {
+                                displayValue = value ? 'Ya' : 'Tidak';
+                              } else if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) {
+                                displayValue = value.length ? value.join(', ') : '-';
+                              } else if (field.tipe_field === 'nominal_rp' && value) {
+                                displayValue = new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value));
+                              } else if (value != null && !Array.isArray(value)) {
+                                displayValue = String(value);
+                              }
+
                               return <ReviewRow key={field.id} label={field.label} value={displayValue} />;
                             })}
                         </ReviewSection>
@@ -428,6 +447,7 @@ export default function Wizard({ unitList }: WizardProps) {
                             .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
                             .map(field => {
                               const files = data.attachments[String(field.id)] || [];
+
                               return (
                                 <ReviewRow 
                                   key={field.id} 
@@ -448,7 +468,7 @@ export default function Wizard({ unitList }: WizardProps) {
                             <p className="font-medium">Terdapat kesalahan:</p>
                             <ul className="list-disc list-inside mt-1">
                               {Object.entries(errors).map(([key, msg]) => (
-                                <li key={key}>{msg as string}</li>
+                                <li key={key}>{String(msg)}</li>
                               ))}
                             </ul>
                           </div>

@@ -81,6 +81,7 @@ interface NavItem {
 function isRouteActive(url: string, routePath?: string): boolean {
   if (!routePath) return false;
   const pathOnly = url.split('?')[0].split('#')[0];
+
   return pathOnly === routePath || pathOnly.startsWith(routePath + '/');
 }
 
@@ -202,12 +203,16 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
 
   useEffect(() => {
     if (!popoverOpen) return;
+
     const handleClick = (e: MouseEvent) => {
+      // SAFETY: MouseEvent.target is an EventTarget; contains() requires Node, which all DOM elements implement.
       if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
         setPopoverOpen(false);
       }
     };
+
     document.addEventListener('mousedown', handleClick);
+
     return () => document.removeEventListener('mousedown', handleClick);
   }, [popoverOpen]);
 
@@ -236,6 +241,7 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
               {visibleChildren.map((child, idx) => {
                 const active = isRouteActive(url, child.route);
                 const ChildIcon = child.icon || Icon;
+
                 return (
                   <Link
                     key={idx}
@@ -287,6 +293,7 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
             {visibleChildren.map((child, idx) => {
               const active = isRouteActive(url, child.route);
               const ChildIcon = child.icon;
+
               return (
                 <motion.div key={idx} variants={navItemHover} initial="rest" whileHover="hover">
                   <Link
@@ -345,15 +352,18 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     if (typeof window !== 'undefined') {
       return localStorage.getItem('admin_sidebar_collapsed') === 'true';
     }
+
     return false;
   });
 
   const toggleCollapse = () => {
     setIsCollapsed(prev => {
       const next = !prev;
+
       if (typeof window !== 'undefined') {
         localStorage.setItem('admin_sidebar_collapsed', String(next));
       }
+
       return next;
     });
   };
@@ -362,7 +372,9 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
 
   useEffect(() => {
     if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
+
     if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
+
     if (flash?.message) toast(flash.message, { id: 'flash-message' });
 
     // Listen for Echo notifications
@@ -456,6 +468,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
                 alt="Favicon"
                 className="h-full w-full object-contain"
                 onError={(e) => {
+                  // SAFETY: onError target is the <img> HTMLElement; the event is synthetic React SyntheticEvent whose target has a style property.
                   (e.target as HTMLElement).style.display = 'none';
                 }}
               />
@@ -493,6 +506,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
                   <div key={index} className="my-2 border-t border-border/60 mx-2" />
                 );
               }
+
               return (
                 <div key={index} className="px-3 pt-4 pb-1">
                   <p className="text-[11px] font-bold text-muted-foreground/70 uppercase tracking-widest">
@@ -517,6 +531,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
 
             const active = item.route ? isActive(item.route) : false;
             const badge = item.label === 'Pesan' ? unreadCount : undefined;
+
             return <NavLink key={index} item={item} active={active} isCollapsed={collapsed} badge={badge} />;
           })}
         </nav>

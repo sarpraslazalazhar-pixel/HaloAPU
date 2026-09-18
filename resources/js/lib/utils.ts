@@ -7,9 +7,12 @@ export function cn(...inputs: ClassValue[]) {
 
 export function formatDateId(dateString: string | null | undefined): string {
  if (!dateString) return '-';
+
  try {
  const d = new Date(dateString);
+
  if (isNaN(d.getTime())) return '-';
+
  return d.toLocaleString('id-ID', { 
  day: '2-digit', 
  month: 'short', 
@@ -25,8 +28,10 @@ export function formatDateId(dateString: string | null | undefined): string {
 export function formatTicketId(id: string | number | null | undefined): string {
  if (!id) return '-';
  const str = String(id);
+
  if (str.length === 9) {
  return str.replace(/(\d{3})(\d{3})(\d{3})/, '$1-$2-$3');
  }
+
  return str;
 }

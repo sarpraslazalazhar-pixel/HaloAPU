@@ -31,8 +31,11 @@ export default function SlaBadge({
 }: SlaBadgeProps) {
  const getStatus = () => {
  const tStatus = ticketStatus?.toLowerCase();
+
  if (tStatus === 'dibatalkan' || tStatus === 'batal') return { label: 'Batal', color: 'bg-gray-500 text-white' };
+
  if (resolvedAt) return { label: 'Selesai', color: 'bg-[#0d6efd] text-white' };
+
  if (isBreached) return { label: 'Pelanggaran', color: 'bg-red-600 text-white' };
  
  if (deadline) {
@@ -64,6 +67,7 @@ export default function SlaBadge({
  const minutes = diffMinutes % 60;
 
  if (hours > 0) return`${hours} jam ${minutes} menit`;
+
  return`${minutes} menit`;
  };
 

@@ -53,6 +53,7 @@ const userNavItems: NavItem[] = [
 
 function NavLink({ item, active, badge }: { item: NavItem; active: boolean; badge?: number }) {
  const Icon = item.icon;
+
  return (
   <motion.div variants={navItemHover} initial="rest" whileHover="hover">
     <Link
@@ -96,7 +97,9 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
 
  useEffect(() => {
  if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
+
  if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
+
  if (flash?.message) toast(flash.message, { id: 'flash-message' });
 
  // Listen for Echo notifications
@@ -144,6 +147,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
               body: notification.message || '',
             });
           }
+
           // Tampilkan juga toast fallback di in-app jika diizinkan
           if (user?.notify_inapp !== false) {
             toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });

@@ -4,9 +4,9 @@ import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { FolderOpen, Clock, CheckCircle2, XCircle, PlusCircle, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, type Variants } from 'framer-motion';
 
-const containerVariants = {
+const containerVariants: Variants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -16,7 +16,7 @@ const containerVariants = {
   },
 };
 
-const itemVariants = {
+const itemVariants: Variants = {
   hidden: { opacity: 0, y: 15 },
   visible: {
     opacity: 1,
@@ -45,9 +45,13 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
 
   const timeGreeting = () => {
     const hour = new Date().getHours();
+
     if (hour < 12) return 'Selamat pagi';
+
     if (hour < 15) return 'Selamat siang';
+
     if (hour < 18) return 'Selamat sore';
+
     return 'Selamat malam';
   };
 
@@ -72,6 +76,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
         <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {STATUS_CARDS.map((card) => {
             const Icon = card.icon;
+
             return (
               <motion.div
                 key={card.label}
@@ -102,6 +107,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {QUICK_ACTIONS.map((action) => {
               const Icon = action.icon;
+
               return (
                 <Link key={action.label} href={action.href}>
                   <motion.div

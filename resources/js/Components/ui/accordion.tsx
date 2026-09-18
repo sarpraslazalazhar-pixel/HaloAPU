@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useId } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 
@@ -18,7 +18,7 @@ type ItemContextType = {
 
 const ItemContext = createContext<ItemContextType>({ value: '' });
 
-export function Accordion({ children, type = 'multiple', className }: { children: React.ReactNode; type?: 'single' | 'multiple'; className?: string }) {
+export function Accordion({ children, type: _type = 'multiple', className }: { children: React.ReactNode; type?: 'single' | 'multiple'; className?: string }) {
  const [openItems, setOpenItems] = useState<string[]>([]);
 
  const toggleItem = useCallback((value: string) => {

@@ -18,7 +18,7 @@ interface Divisi {
  org_units_count: number;
 }
 
-export default function DivisiIndex({ divisis, filters }: { divisis: any; filters?: { search?: string } }) {
+export default function DivisiIndex({ divisis, filters: _filters }: { divisis: any; filters?: { search?: string } }) {
  const [isAddOpen, setIsAddOpen] = useState(false);
  const [editItem, setEditItem] = useState<Divisi | null>(null);
 
@@ -38,6 +38,7 @@ export default function DivisiIndex({ divisis, filters }: { divisis: any; filter
 
  const handleEdit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editItem) {
  put(route('admin.master.divisi.update', editItem.id), {
  onSuccess: () => {

@@ -38,6 +38,9 @@ class SecurityHeaders
         // Restrict browser features (camera, microphone, geolocation)
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
+        // Prevent search engines from indexing internal helpdesk data
+        $response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+
         // HSTS — Force HTTPS for 1 year (only in production with HTTPS)
         if ($request->secure() || config('app.env') === 'production') {
             $response->headers->set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains; preload');

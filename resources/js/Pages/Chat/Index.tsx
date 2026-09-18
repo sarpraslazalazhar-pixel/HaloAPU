@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Head, usePage, router } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import ConversationList, { ConversationItem } from '@/Components/Chat/ConversationList';
 import ChatWindow, { ChatMessage } from '@/Components/Chat/ChatWindow';
@@ -24,21 +24,28 @@ export default function UserChatIndex({
   const user = auth.user;
 
   const [convList, setConvList] = useState<ConversationItem[]>(conversations);
+
   const [activeId, setActiveId] = useState<number | null>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const activeParam = params.get('active');
+
       if (activeParam) return parseInt(activeParam, 10);
+
       if (window.innerWidth < 768) return null;
     }
+
     return activeConversationId;
   });
+
   const [currentConv, setCurrentConv] = useState<any>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768 && !new URLSearchParams(window.location.search).has('active')) {
       return null;
     }
+
     return activeConversation;
   });
+
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
 
   const { playSound } = useChatSound();
@@ -67,10 +74,13 @@ export default function UserChatIndex({
 
   // Presence channel to track real-time online / offline users
   useEffect(() => {
-    if (!(window as any).Echo) return;
+    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this effect runs.
+    const echo = (window as any).Echo;
+
+    if (!echo) return;
 
     try {
-      const presence = (window as any).Echo.join('chat.presence')
+      const _presence = echo.join('chat.presence')
         .here((users: any[]) => {
           setOnlineUsers(users || []);
         })
@@ -86,6 +96,7 @@ export default function UserChatIndex({
         });
 
       return () => {
+        // SAFETY: Echo is verified to exist at effect setup time.
         (window as any).Echo.leave('chat.presence');
       };
     } catch {
@@ -114,6 +125,7 @@ export default function UserChatIndex({
         }
 
         const remaining = prevList.filter((_, i) => i !== index);
+
         return [updated, ...remaining];
       } else {
         const newConvItem: ConversationItem = {
@@ -127,6 +139,7 @@ export default function UserChatIndex({
           is_last_message_read: isFromActiveChat,
           unread_count: isFromActiveChat || isSelf ? 0 : 1,
         };
+
         return [newConvItem, ...prevList];
       }
     });
@@ -134,24 +147,30 @@ export default function UserChatIndex({
 
   // Global Echo listener for user's personal channel and public global chat
   useEffect(() => {
-    if (!user?.id || !(window as any).Echo) return;
+    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this effect runs.
+    const echo = (window as any).Echo;
+
+    if (!user?.id || !echo) return;
 
     const userChannelName = `App.Models.User.${user.id}`;
     const publicChannelName = `chat.public_global`;
 
-    const userChannel = (window as any).Echo.private(userChannelName);
-    const publicChannel = (window as any).Echo.private(publicChannelName);
+    const userChannel = echo.private(userChannelName);
+    const publicChannel = echo.private(publicChannelName);
 
     const handleIncomingMessage = (e: any) => {
       const newMsg: ChatMessage = e.messageData;
+
       if (!newMsg) return;
 
       const isCurrentActive = activeId === newMsg.conversation_id;
       updateConversationOnMessage(newMsg, isCurrentActive);
 
       const isSelf = newMsg.sender_id === user.id && newMsg.sender_type.includes('User');
+
       if (!isCurrentActive && !isSelf) {
         playSound();
+
         if (document.hidden) {
           toast.success(`Pesan Baru dari ${newMsg.sender_name}`, { id: `chat-notif-${newMsg.id}` });
         }
@@ -170,11 +189,13 @@ export default function UserChatIndex({
       if (e.userId !== user.id && e.conversationId) {
         setTypingMap((prev) => {
           const updated = { ...prev };
+
           if (e.isTyping) {
             updated[e.conversationId] = e.userName;
           } else {
             delete updated[e.conversationId];
           }
+
           return updated;
         });
       }
@@ -188,8 +209,8 @@ export default function UserChatIndex({
     publicChannel.listen('.UserTypingStatus', handleTypingStatus);
 
     return () => {
-      (window as any).Echo.leave(userChannelName);
-      (window as any).Echo.leave(publicChannelName);
+      echo.leave(userChannelName);
+      echo.leave(publicChannelName);
     };
   }, [user?.id, activeId, playSound, updateConversationOnMessage]);
 
@@ -206,7 +227,9 @@ export default function UserChatIndex({
     window.history.pushState({ activeId: id }, '', `/chat?active=${id}`);
 
     setIsLoadingMessages(true);
+
     try {
+      // SAFETY: window.axios is injected by Laravel's bootstrap.js; it is available on all pages after bootstrap.
       const res = await (window as any).axios.get(`/chat/conversations/${id}`);
       setCurrentConv(res.data.conversation);
       setMessages(res.data.messages || []);
@@ -222,8 +245,10 @@ export default function UserChatIndex({
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
       const active = params.get('active');
+
       if (active) {
         const parsedId = parseInt(active, 10);
+
         if (parsedId && parsedId !== activeId) {
           handleSelectConversation(parsedId);
         }
@@ -234,6 +259,7 @@ export default function UserChatIndex({
     };
 
     window.addEventListener('popstate', handlePopState);
+
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeId]);
 
@@ -248,6 +274,7 @@ export default function UserChatIndex({
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
+
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 

@@ -68,6 +68,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
 
  const handleEdit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editSubUnit) {
  put(route('admin.master.sub-unit.update', editSubUnit.id), {
  onSuccess: () => {

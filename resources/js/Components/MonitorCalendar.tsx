@@ -32,6 +32,7 @@ const isVehicleAsset = (tipe?: string, name?: string) => {
   }
   
   const vehicleKeywords = ['panther', 'apv', 'grand max', 'elf', 'innova', 'avanza', 'xenia', 'mobil', 'bus', 'hiace'];
+
   return vehicleKeywords.some(keyword => n.includes(keyword));
 };
 

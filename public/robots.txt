@@ -1,2 +1,25 @@
 User-agent: *
-Disallow:
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /tiket/
+Disallow: /chat/
+Disallow: /tv
+Disallow: /system/
+Disallow: /api/
+Disallow: /lupa-password
+Disallow: /reset-password/
+
+Allow: /login$
+Allow: /favicon.ico
+Allow: /favicon.png
+Allow: /images/
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+

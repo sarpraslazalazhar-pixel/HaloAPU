@@ -9,7 +9,9 @@ export function useChatSound({ soundUrl }: UseChatSoundOptions = {}) {
 
   const playDefaultChime = useCallback(() => {
     try {
+      // SAFETY: webkitAudioContext is a vendor-prefixed AudioContext available in older Safari/Chrome; checking at runtime is the only way to access it.
       const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+
       if (!AudioContextClass) return;
       const ctx = new AudioContextClass();
 
@@ -48,6 +50,7 @@ export function useChatSound({ soundUrl }: UseChatSoundOptions = {}) {
       if (!audioRef.current) {
         audioRef.current = new Audio(soundUrl);
       }
+
       audioRef.current.play().catch(() => {
         // Fallback to programmatic chime if audio element playback blocked
         playDefaultChime();

@@ -45,24 +45,25 @@ const isVehicleAsset = (tipe?: string, name?: string) => {
   }
   
   const vehicleKeywords = ['panther', 'apv', 'grand max', 'elf', 'innova', 'avanza', 'xenia', 'mobil', 'bus', 'hiace'];
+
   return vehicleKeywords.some(keyword => n.includes(keyword));
 };
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS = {
   'Tersedia': 'bg-green-500/10 border-green-500/30 ',
   'Dipesan': 'bg-yellow-500/10 border-yellow-500/30 ',
   'Sedang Dipakai': 'bg-red-500/10 border-red-500/30 ',
   'Menunggu Persetujuan': 'bg-blue-500/10 border-blue-500/30 ',
   'Selesai Digunakan': 'bg-slate-500/10 border-slate-500/30 ',
-};
+} satisfies Record<string, string>;
 
-const STATUS_BADGE_COLORS: Record<string, string> = {
+const STATUS_BADGE_COLORS = {
   'Tersedia': 'bg-green-500 text-white hover:bg-green-600',
   'Dipesan': 'bg-yellow-500 text-black hover:bg-yellow-600',
   'Sedang Dipakai': 'bg-red-500 text-white hover:bg-red-600',
   'Menunggu Persetujuan': 'bg-blue-500 text-white hover:bg-blue-600',
   'Selesai Digunakan': 'bg-slate-600 text-white hover:bg-slate-700',
-};
+} satisfies Record<string, string>;
 
 export default function MonitorGrid({ assets = [], calendarData = [], lastUpdated }: MonitorGridProps) {
   const [view, setView] = useState<'grid' | 'calendar'>('grid');
@@ -97,14 +98,17 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
     );
   }
 
-  const groupedAssets = assets.reduce((groups, asset) => {
+  const groupedAssets: Record<string, AssetData[]> = {};
+
+  for (const asset of assets) {
     const type = asset.tipe || 'Lainnya';
-    if (!groups[type]) {
-      groups[type] = [];
+
+    if (!groupedAssets[type]) {
+      groupedAssets[type] = [];
     }
-    groups[type].push(asset);
-    return groups;
-  }, {} as Record<string, AssetData[]>);
+
+    groupedAssets[type].push(asset);
+  }
 
   const renderAssetCard = (asset: AssetData) => (
     <Card

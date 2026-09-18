@@ -12,24 +12,24 @@ interface Props {
  configs: ReminderConfig[];
 }
 
-const JENIS_LABELS: Record<string, string> = {
+const JENIS_LABELS = {
   booking: 'Reminder Booking',
   sla_half: 'Pengingat 50% Waktu SLA',
   sla: 'Peringatan SLA Breach (100%)',
   pending_lama: 'Tiket Pending Lama',
   csat: 'CSAT Belum Diisi',
-};
+} satisfies Record<string, string>;
 
-const LEAD_TIME_UNITS: Record<string, string> = {
+const LEAD_TIME_UNITS = {
   booking: 'hari sebelum',
   sla_half: 'otomatis (50% SLA)',
   sla: 'otomatis (100% SLA)',
   pending_lama: 'hari pending',
   csat: 'hari setelah solve',
-};
+} satisfies Record<string, string>;
 
 export default function ReminderConfigIndex({ configs }: Props) {
- const { data, setData, put, processing } = useForm({
+  const { data, setData, put, processing } = useForm({
  configs: configs.map(c => ({
  id: c.id,
  jenis_reminder: c.jenis_reminder,
@@ -42,11 +42,13 @@ export default function ReminderConfigIndex({ configs }: Props) {
  const toggleChannel = (index: number, channel: string) => {
  const updated = [...data.configs];
  const channels = updated[index].channel_aktif;
+
  if (channels.includes(channel)) {
  updated[index].channel_aktif = channels.filter(c => c !== channel);
  } else {
  updated[index].channel_aktif = [...channels, channel];
  }
+
  setData('configs', updated);
  };
 
@@ -104,29 +106,35 @@ export default function ReminderConfigIndex({ configs }: Props) {
  <TableBody>
  {data.configs.map((config, index) => (
  <TableRow key={config.id}>
- <TableCell className="font-medium">
- {JENIS_LABELS[config.jenis_reminder] || config.jenis_reminder}
- </TableCell>
-  <TableCell>
-  {config.jenis_reminder === 'sla' || config.jenis_reminder === 'sla_half' ? (
-  <span className="text-sm text-muted-foreground italic">
-  {config.jenis_reminder === 'sla_half' ? 'Otomatis (50% dari SLA)' : 'Otomatis (100% SLA Breach)'}
-  </span>
-  ) : (
-  <div className="flex items-center gap-2">
-  <Input
-  type="number"
-  min={0}
-  value={config.lead_time_value}
-  onChange={(e) => updateLeadTime(index, parseInt(e.target.value) || 0)}
-  className="w-20"
-  />
-  <span className="text-sm text-muted-foreground whitespace-nowrap">
-  {LEAD_TIME_UNITS[config.jenis_reminder]}
-  </span>
-  </div>
-  )}
-  </TableCell>
+								<TableCell className="font-medium">
+									{
+										// SAFETY: Look up reminder label by type using keyof; fallback to raw type string.
+										JENIS_LABELS[config.jenis_reminder as keyof typeof JENIS_LABELS] || config.jenis_reminder
+									}
+								</TableCell>
+								<TableCell>
+									{config.jenis_reminder === 'sla' || config.jenis_reminder === 'sla_half' ? (
+										<span className="text-sm text-muted-foreground italic">
+											{config.jenis_reminder === 'sla_half' ? 'Otomatis (50% dari SLA)' : 'Otomatis (100% SLA Breach)'}
+										</span>
+									) : (
+										<div className="flex items-center gap-2">
+											<Input
+												type="number"
+												min={0}
+												value={config.lead_time_value}
+												onChange={(e) => updateLeadTime(index, parseInt(e.target.value) || 0)}
+												className="w-20"
+											/>
+											<span className="text-sm text-muted-foreground whitespace-nowrap">
+												{
+													// SAFETY: Look up lead time unit by type using keyof.
+													LEAD_TIME_UNITS[config.jenis_reminder as keyof typeof LEAD_TIME_UNITS]
+												}
+											</span>
+										</div>
+									)}
+								</TableCell>
   <TableCell className="text-center">
   <Checkbox
   checked={config.channel_aktif.includes('in_app')}

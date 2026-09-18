@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Head, usePage, router } from '@inertiajs/react';
+import { Head, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import ConversationList, { ConversationItem } from '@/Components/Chat/ConversationList';
 import ChatWindow, { ChatMessage } from '@/Components/Chat/ChatWindow';
@@ -24,21 +24,28 @@ export default function AdminChatIndex({
   const admin = auth.admin || auth.user;
 
   const [convList, setConvList] = useState<ConversationItem[]>(conversations);
+
   const [activeId, setActiveId] = useState<number | null>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const activeParam = params.get('active');
+
       if (activeParam) return parseInt(activeParam, 10);
+
       if (window.innerWidth < 768) return null;
     }
+
     return activeConversationId;
   });
+
   const [currentConv, setCurrentConv] = useState<any>(() => {
     if (typeof window !== 'undefined' && window.innerWidth < 768 && !new URLSearchParams(window.location.search).has('active')) {
       return null;
     }
+
     return activeConversation;
   });
+
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
 
   const { playSound } = useChatSound();
@@ -67,10 +74,13 @@ export default function AdminChatIndex({
 
   // Presence channel to track real-time online / offline users
   useEffect(() => {
-    if (!(window as any).Echo) return;
+    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this effect runs.
+    const echo = (window as any).Echo;
+
+    if (!echo) return;
 
     try {
-      const presence = (window as any).Echo.join('chat.presence')
+      const _presence = echo.join('chat.presence')
         .here((users: any[]) => {
           setOnlineUsers(users || []);
         })
@@ -86,6 +96,7 @@ export default function AdminChatIndex({
         });
 
       return () => {
+        // SAFETY: Echo is verified to exist at effect setup time.
         (window as any).Echo.leave('chat.presence');
       };
     } catch {
@@ -114,6 +125,7 @@ export default function AdminChatIndex({
         }
 
         const remaining = prevList.filter((_, i) => i !== index);
+
         return [updated, ...remaining];
       } else {
         const newConvItem: ConversationItem = {
@@ -127,6 +139,7 @@ export default function AdminChatIndex({
           is_last_message_read: isFromActiveChat,
           unread_count: isFromActiveChat || isSelf ? 0 : 1,
         };
+
         return [newConvItem, ...prevList];
       }
     });
@@ -134,24 +147,30 @@ export default function AdminChatIndex({
 
   // Global Echo listener for admin's personal channel and public global chat
   useEffect(() => {
-    if (!admin?.id || !(window as any).Echo) return;
+    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this effect runs.
+    const echo = (window as any).Echo;
+
+    if (!admin?.id || !echo) return;
 
     const adminChannelName = `App.Models.Admin.${admin.id}`;
     const publicChannelName = `chat.public_global`;
 
-    const adminChannel = (window as any).Echo.private(adminChannelName);
-    const publicChannel = (window as any).Echo.private(publicChannelName);
+    const adminChannel = echo.private(adminChannelName);
+    const publicChannel = echo.private(publicChannelName);
 
     const handleIncomingMessage = (e: any) => {
       const newMsg: ChatMessage = e.messageData;
+
       if (!newMsg) return;
 
       const isCurrentActive = activeId === newMsg.conversation_id;
       updateConversationOnMessage(newMsg, isCurrentActive);
 
       const isSelf = newMsg.sender_id === admin.id && newMsg.sender_type.includes('Admin');
+
       if (!isCurrentActive && !isSelf) {
         playSound();
+
         if (document.hidden) {
           toast.success(`Pesan Baru dari ${newMsg.sender_name}`, { id: `chat-notif-${newMsg.id}` });
         }
@@ -170,11 +189,13 @@ export default function AdminChatIndex({
       if (e.userId !== admin.id && e.conversationId) {
         setTypingMap((prev) => {
           const updated = { ...prev };
+
           if (e.isTyping) {
             updated[e.conversationId] = e.userName;
           } else {
             delete updated[e.conversationId];
           }
+
           return updated;
         });
       }
@@ -188,8 +209,8 @@ export default function AdminChatIndex({
     publicChannel.listen('.UserTypingStatus', handleTypingStatus);
 
     return () => {
-      (window as any).Echo.leave(adminChannelName);
-      (window as any).Echo.leave(publicChannelName);
+      echo.leave(adminChannelName);
+      echo.leave(publicChannelName);
     };
   }, [admin?.id, activeId, playSound, updateConversationOnMessage]);
 
@@ -206,7 +227,9 @@ export default function AdminChatIndex({
     window.history.pushState({ activeId: id }, '', `/admin/chat?active=${id}`);
 
     setIsLoadingMessages(true);
+
     try {
+      // SAFETY: window.axios is injected by Laravel's bootstrap.js; it is available on all pages after bootstrap.
       const res = await (window as any).axios.get(`/admin/chat/conversations/${id}`);
       setCurrentConv(res.data.conversation);
       setMessages(res.data.messages || []);
@@ -222,8 +245,10 @@ export default function AdminChatIndex({
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
       const active = params.get('active');
+
       if (active) {
         const parsedId = parseInt(active, 10);
+
         if (parsedId && parsedId !== activeId) {
           handleSelectConversation(parsedId);
         }
@@ -234,6 +259,7 @@ export default function AdminChatIndex({
     };
 
     window.addEventListener('popstate', handlePopState);
+
     return () => window.removeEventListener('popstate', handlePopState);
   }, [activeId]);
 
@@ -248,6 +274,7 @@ export default function AdminChatIndex({
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
     window.addEventListener('resize', checkMobile);
+
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 

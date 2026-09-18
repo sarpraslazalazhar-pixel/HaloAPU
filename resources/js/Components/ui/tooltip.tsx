@@ -4,7 +4,7 @@ import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
 import { cn } from "@/lib/utils"
 
 function TooltipProvider({
- delayDuration,
+ delayDuration: _delayDuration,
  children,
  ...props
 }: TooltipPrimitive.Provider.Props & { delayDuration?: number }) {
@@ -16,7 +16,7 @@ function TooltipProvider({
 }
 
 function Tooltip({
- delayDuration,
+ delayDuration: _delayDuration,
  ...props
 }: TooltipPrimitive.Root.Props & { delayDuration?: number }) {
  return (
@@ -41,6 +41,7 @@ function TooltipTrigger({
  />
  )
  }
+
  return (
  <TooltipPrimitive.Trigger
  data-slot="tooltip-trigger"

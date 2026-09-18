@@ -43,7 +43,7 @@ export function ConversationList({
   conversations,
   activeId,
   onSelect,
-  isAdmin = false,
+  isAdmin: _isAdmin = false,
   onlineUsers = [],
   typingMap = {},
   currentUserId,
@@ -54,9 +54,11 @@ export function ConversationList({
 
   const filtered = conversations.filter((c) => {
     if (filterUnread && c.unread_count === 0) return false;
+
     if (!search.trim()) return true;
 
     const term = search.toLowerCase();
+
     return (
       c.title.toLowerCase().includes(term) ||
       (c.subtitle?.toLowerCase().includes(term) ?? false) ||
@@ -68,10 +70,14 @@ export function ConversationList({
 
   const formatTime = (dateStr?: string) => {
     if (!dateStr) return '';
+
     try {
       const d = new Date(dateStr);
+
       if (isToday(d)) return format(d, 'HH:mm');
+
       if (isYesterday(d)) return 'Kemarin';
+
       return format(d, 'dd/MM/yy');
     } catch {
       return '';
@@ -83,9 +89,13 @@ export function ConversationList({
     if (item.is_bot || item.type === 'admin_bot_reminder' || item.title.includes('Bot Pengingat')) {
       return <Bot className="h-5 w-5 text-indigo-600" />;
     }
+
     if (item.user?.avatar) return null; // use img
+
     if (item.subtitle === 'Grup Publik') return <MessageSquare className="h-5 w-5 text-sky-600" />;
+
     if (item.subtitle?.includes('Admin')) return <Shield className="h-5 w-5 text-sky-600" />;
+
     return <UserIcon className="h-5 w-5 text-sky-600" />;
   };
 
@@ -147,6 +157,7 @@ export function ConversationList({
                 const sameId = u.id === item.user?.id;
                 const isTargetAdmin = item.subtitle?.includes('Admin') || item.type === 'admin_direct';
                 const sameType = isTargetAdmin ? u.type === 'admin' : u.type === 'user';
+
                 return sameId && sameType;
               }) : false
             );
@@ -166,6 +177,7 @@ export function ConversationList({
                 ? `https://ui-avatars.com/api/?name=${encodeURIComponent(item.title)}&background=0284c7&color=fff`
                 : null)
             );
+
             const icon = getAvatarIcon(item);
 
             return (

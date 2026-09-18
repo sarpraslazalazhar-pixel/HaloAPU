@@ -32,12 +32,16 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [showFilter, setShowFilter] = useState(() => {
  return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
  });
+
  const [unitId, setUnitId] = useState(filters?.unit_id || '');
  const [subUnitId, setSubUnitId] = useState(filters?.sub_unit_id || '');
+
  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(() => {
  const s = filters?.status;
+
  return Array.isArray(s) ? s : s ? [s] : [];
  });
+
  const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
  const [dateTo, setDateTo] = useState(filters?.date_to || '');
  const [divisiId, setDivisiId] = useState(filters?.divisi_id || '');
@@ -58,12 +62,19 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
 
  const applyFilter = () => {
  const params: any = {};
+
  if (unitId) params.unit_id = unitId;
+
  if (subUnitId) params.sub_unit_id = subUnitId;
+
  if (selectedStatuses.length > 0) params.status = selectedStatuses;
+
  if (dateFrom) params.date_from = dateFrom;
+
  if (dateTo) params.date_to = dateTo;
+
  if (divisiId) params.divisi_id = divisiId;
+
  if (orgUnitId) params.org_unit_id = orgUnitId;
  router.get(route('admin.tiket.index'), params, { });
  };
@@ -74,7 +85,9 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  header: 'SLA',
  render: (t: any) => {
  const sla = t.sla_tracking;
+
  if (!sla) return <span className="text-slate-400">-</span>;
+
  return (
  <SlaBadge
  priority={t.priority}
@@ -145,7 +158,9 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  {showFilter && (
  <div className="bg-white rounded-lg border p-4 mb-4 space-y-4">
  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
- <select className="rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={unitId} onChange={e => { setUnitId(e.target.value); setSubUnitId(''); setSubUnits([]); if (e.target.value) fetch(`/api/sub-units/${e.target.value}`).then(r => r.json()).then(setSubUnits); }}>
+ <select className="rounded-md border border-input bg-transparent px-3 py-2 text-sm" value={unitId} onChange={e => { setUnitId(e.target.value); setSubUnitId(''); setSubUnits([]);
+
+ if (e.target.value) fetch(`/api/sub-units/${e.target.value}`).then(r => r.json()).then(setSubUnits); }}>
  <option value="">Semua Unit</option>
  {units.map((u: any) => <option key={u.id} value={u.id}>{u.nama_unit}</option>)}
  </select>

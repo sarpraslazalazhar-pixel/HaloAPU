@@ -5,6 +5,7 @@ import toast, { Toaster } from 'react-hot-toast';
 
 export default function UserLogin() {
   const { appConfig, flash } = usePage<any>().props;
+
   const { data, setData, post, processing, errors } = useForm({
     username: '',
     password: '',
@@ -15,13 +16,16 @@ export default function UserLogin() {
 
   useEffect(() => {
     const sessionAlert = sessionStorage.getItem('session_expired_alert');
+
     if (sessionAlert) {
       toast.error(sessionAlert, { id: 'session-expired-toast', duration: 5000 });
       sessionStorage.removeItem('session_expired_alert');
     }
+
     if (flash?.error) {
       toast.error(flash.error, { id: 'flash-error' });
     }
+
     if (flash?.success) {
       toast.success(flash.success, { id: 'flash-success' });
     }

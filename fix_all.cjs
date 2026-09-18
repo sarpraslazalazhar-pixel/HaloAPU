@@ -1,4 +1,5 @@
 const fs = require('fs');
+
 const path = require('path');
 
 function walk(dir) {
@@ -7,6 +8,7 @@ function walk(dir) {
     list.forEach(function(file) {
         file = path.join(dir, file);
         const stat = fs.statSync(file);
+
         if (stat && stat.isDirectory()) { 
             results = results.concat(walk(file));
         } else { 
@@ -15,6 +17,7 @@ function walk(dir) {
             }
         }
     });
+
     return results;
 }
 
@@ -62,6 +65,7 @@ files.forEach(file => {
         content = content.replace(/<ToastPrimitive /g, '<ToastPrimitive.Root ');
         content = content.replace(/<\/ToastPrimitive>/g, '</ToastPrimitive.Root>');
     }
+
     if (file.endsWith('toaster.tsx')) {
         content = content.replace(/import \{ Toaster as ToasterPrimitive \} from "@base-ui\/react\/toast"/, 'import { Toast as ToastPrimitive } from "@base-ui/react/toast"');
         content = content.replace(/ToasterPrimitive\.Props/g, 'ToastPrimitive.Provider.Props');

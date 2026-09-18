@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { ReactSketchCanvas, ReactSketchCanvasRef } from 'react-sketch-canvas';
-import { X, Save, Eraser, PenTool, RotateCcw, RotateCw, Undo, Redo, Download } from 'lucide-react';
+import { X, Save, Eraser, PenTool, Undo, Redo } from 'lucide-react';
 
 interface ImageEditorModalProps {
     isOpen: boolean;
@@ -13,7 +13,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageFile, onSave }:
     const canvasRef = useRef<ReactSketchCanvasRef>(null);
     const [imageUrl, setImageUrl] = useState<string>('');
     const [strokeColor, setStrokeColor] = useState('#ef4444');
-    const [strokeWidth, setStrokeWidth] = useState(4);
+    const [strokeWidth, _setStrokeWidth] = useState(4);
     const [isEraser, setIsEraser] = useState(false);
     const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
     const [isProcessing, setIsProcessing] = useState(false);
@@ -22,16 +22,20 @@ export default function ImageEditorModal({ isOpen, onClose, imageFile, onSave }:
         if (isOpen && imageFile) {
             const reader = new FileReader();
             reader.onload = (e) => {
+                // SAFETY: FileReader.result is string when readAsDataURL is used; null is only possible if the read failed, which is checked by the if-guard below.
                 const b64 = e.target?.result as string;
+
                 if (b64) {
                     setImageUrl(b64);
                     const img = new Image();
                     img.onload = () => {
                         setDimensions({ width: img.width, height: img.height });
                     };
+
                     img.src = b64;
                 }
             };
+
             reader.readAsDataURL(imageFile);
         } else {
             setImageUrl('');
@@ -44,6 +48,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageFile, onSave }:
     const handleSave = async () => {
         if (!canvasRef.current || isProcessing) return;
         setIsProcessing(true);
+
         try {
             const dataUrl = await canvasRef.current.exportImage('png');
             
@@ -86,6 +91,7 @@ export default function ImageEditorModal({ isOpen, onClose, imageFile, onSave }:
 
     if (dimensions.width > 0 && dimensions.height > 0) {
         const ratio = dimensions.width / dimensions.height;
+
         if (ratio > maxWidth / maxHeight) {
             // Width is the constraining factor
             wrapperWidth = '100%';

@@ -1,0 +1,460 @@
+<title>Halo APU SEO Audit</title>
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-card: #f8fafc;
+  --bg-card-hover: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #475569;
+  --text-subtle: #94a3b8;
+  --border: #e2e8f0;
+  --border-strong: #cbd5e1;
+  --code-bg: #f1f5f9;
+  --code-text: #b91c1c;
+  --accent: #0284c7;
+  --accent-light: #e0f2fe;
+  --danger-bg: #fef2f2;
+  --danger-border: #fecaca;
+  --danger-text: #b91c1c;
+  --success-bg: #f0fdf4;
+  --success-border: #bbf7d0;
+  --success-text: #15803d;
+  --warning-bg: #fffbeb;
+  --warning-border: #fde68a;
+  --warning-text: #b45309;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1120;
+    --bg-card: #131d33;
+    --bg-card-hover: #1a2744;
+    --text-main: #f8fafc;
+    --text-muted: #cbd5e1;
+    --text-subtle: #64748b;
+    --border: #1e293b;
+    --border-strong: #334155;
+    --code-bg: #1e293b;
+    --code-text: #f87171;
+    --accent: #38bdf8;
+    --accent-light: #0c4a6e;
+    --danger-bg: #450a0a;
+    --danger-border: #7f1d1d;
+    --danger-text: #fca5a5;
+    --success-bg: #052e16;
+    --success-border: #14532d;
+    --success-text: #86efac;
+    --warning-bg: #451a03;
+    --warning-border: #78350f;
+    --warning-text: #fcd34d;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b1120;
+  --bg-card: #131d33;
+  --bg-card-hover: #1a2744;
+  --text-main: #f8fafc;
+  --text-muted: #cbd5e1;
+  --text-subtle: #64748b;
+  --border: #1e293b;
+  --border-strong: #334155;
+  --code-bg: #1e293b;
+  --code-text: #f87171;
+  --accent: #38bdf8;
+  --accent-light: #0c4a6e;
+  --danger-bg: #450a0a;
+  --danger-border: #7f1d1d;
+  --danger-text: #fca5a5;
+  --success-bg: #052e16;
+  --success-border: #14532d;
+  --success-text: #86efac;
+  --warning-bg: #451a03;
+  --warning-border: #78350f;
+  --warning-text: #fcd34d;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--text-main);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  line-height: 1.6;
+  margin: 0;
+  padding-inline: 20px;
+  padding-block: 32px 80px;
+}
+
+.report-container {
+  max-width: 860px;
+  margin: 0 auto;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-color: var(--accent-light);
+  color: var(--accent);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+h1 {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  margin: 0 0 8px;
+  color: var(--text-main);
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 16px;
+  margin: 0 0 32px;
+}
+
+h2 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin: 44px 0 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 24px 0 10px;
+  color: var(--text-main);
+}
+
+p {
+  margin: 0 0 16px;
+  color: var(--text-muted);
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin: 20px 0 28px;
+}
+
+.kpi-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-val {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.kpi-val.danger { color: var(--danger-text); }
+.kpi-val.success { color: var(--success-text); }
+.kpi-val.warning { color: var(--warning-text); }
+
+.kpi-label {
+  font-size: 12px;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 4px;
+}
+
+.alert-box {
+  background-color: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 20px 0;
+  color: var(--danger-text);
+}
+
+.alert-box strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.alert-box p {
+  margin: 0;
+  color: inherit;
+  font-size: 14px;
+}
+
+ul, ol {
+  margin: 0 0 20px;
+  padding-left: 20px;
+  color: var(--text-muted);
+}
+
+li {
+  margin-bottom: 8px;
+}
+
+li strong {
+  color: var(--text-main);
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.88em;
+  background-color: var(--code-bg);
+  color: var(--code-text);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+pre {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  line-height: 1.5;
+  margin: 12px 0 24px;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--text-main);
+}
+
+.action-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 24px;
+}
+
+.action-card h3 {
+  margin-top: 0;
+}
+
+.fix-item {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.fix-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.fix-title {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-main);
+}
+
+.fix-pill {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 9999px;
+}
+
+.fix-pill.high { background: var(--danger-bg); color: var(--danger-text); border: 1px solid var(--danger-border); }
+.fix-pill.med { background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border); }
+.fix-pill.low { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); }
+
+.meta-footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+</style>
+
+<div class="report-container">
+  <div class="badge">Audit Technical SEO & Privasi</div>
+  <h1>dev.haloapu.id</h1>
+  <p class="subtitle">Laporan Audit Technical SEO & Kebijakan Perayapan · 18 September 2026</p>
+
+  <p>Halo APU adalah sistem helpdesk internal berbasis Laravel 13 dan Inertia.js React. Sebagai aplikasi operasional, sasaran SEO utamanya adalah <strong>perlindungan indeks (zero accidental indexing)</strong> pada area data sensitif dan kesiapan metadata yang bersih.</p>
+
+  <div class="kpi-grid">
+    <div class="kpi-card">
+      <div class="kpi-val danger">Terbuka</div>
+      <div class="kpi-label">Aturan robots.txt</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-val danger">2 Rute</div>
+      <div class="kpi-label">Endpoint Cache Publik</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-val warning">0 Tag</div>
+      <div class="kpi-label">Meta Robots / Description</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-val success">Lengkap</div>
+      <div class="kpi-label">Security Headers (CSP/HSTS)</div>
+    </div>
+  </div>
+
+  <h2>1. Verdict (Ringkasan Eksekutif)</h2>
+  <ul>
+    <li><strong>Karakteristik Sistem:</strong> Aplikasi helpdesk internal. Tidak ditujukan untuk perolehan traffic organik publik dari mesin pencari.</li>
+    <li><strong>Celah Kritis #1:</strong> <code>public/robots.txt</code> saat ini bernilai <code>Disallow:</code> kosong, memperbolehkan Googlebot, Bingbot, dan AI scraper merayapi seluruh endpoint sistem.</li>
+    <li><strong>Celah Kritis #2:</strong> Rute utilitas <code>/system/clear</code> dan <code>/system/optimize</code> pada <code>routes/web.php</code> dapat diakses publik tanpa login. Jika bot perayap mengeksekusi URL ini, cache sistem terhapus terus-menerus dan membebani resource server.</li>
+    <li><strong>Celah Kritis #3:</strong> Halaman TV Dashboard di <code>/tv</code> menampilkan data tiket dan antrean publik tanpa tag <code>noindex</code>, sehingga berpotensi terindeks ke hasil pencarian.</li>
+  </ul>
+
+  <h2>2. Top Priority (Aksi Utama Minggu Ini)</h2>
+
+  <div class="action-card">
+    <h3>Langkah 1: Perbarui <code>public/robots.txt</code></h3>
+    <p>Kunci perayapan bot ke seluruh rute privat, API, dan utilitas:</p>
+<pre><code>User-agent: *
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /tiket/
+Disallow: /chat/
+Disallow: /tv
+Disallow: /system/
+Disallow: /api/
+Disallow: /lupa-password
+Disallow: /reset-password/
+
+Allow: /login$
+Allow: /favicon.ico
+Allow: /images/
+
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+</code></pre>
+  </div>
+
+  <div class="action-card">
+    <h3>Langkah 2: Amankan Rute Cache di <code>routes/web.php</code></h3>
+    <p>Bungkus endpoint <code>/system/optimize</code> dan <code>/system/clear</code> dengan middleware <code>auth</code> dan <code>role:admin</code>:</p>
+<pre><code>Route::middleware(['auth', 'role:admin'])->prefix('system')->group(function () {
+    Route::get('/optimize', function() {
+        \Illuminate\Support\Facades\Artisan::call('config:cache');
+        \Illuminate\Support\Facades\Artisan::call('route:cache');
+        \Illuminate\Support\Facades\Artisan::call('view:cache');
+        return 'System optimized.';
+    });
+
+    Route::get('/clear', function() {
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+        return 'System cache cleared.';
+    });
+});
+</code></pre>
+  </div>
+
+  <div class="action-card">
+    <h3>Langkah 3: Tambahkan Header HTTP <code>X-Robots-Tag</code></h3>
+    <p>Pada <code>app/Http/Middleware/SecurityHeaders.php</code>, tambahkan baris berikut agar seluruh response membawa instruksi noindex:</p>
+<pre><code>$response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+</code></pre>
+  </div>
+
+  <h2>3. Small Fixes (Perbaikan Teknis)</h2>
+
+  <div class="fix-item">
+    <div class="fix-header">
+      <span class="fix-title">1. Meta Description & Meta Robots di <code>resources/views/app.blade.php</code></span>
+      <span class="fix-pill high">Tinggi</span>
+    </div>
+    <p>Tambahkan tag meta dasar di dalam <code>&lt;head&gt;</code>:</p>
+<pre><code>&lt;meta name="robots" content="noindex, nofollow"&gt;
+&lt;meta name="description" content="Sistem Layanan Helpdesk Internal Halo APU. Layanan pelaporan dan monitoring tiket."&gt;
+</code></pre>
+  </div>
+
+  <div class="fix-item">
+    <div class="fix-header">
+      <span class="fix-title">2. Pasang Link Canonical Dinamis</span>
+      <span class="fix-pill med">Sedang</span>
+    </div>
+    <p>Mencegah duplikasi URL antara subdomain dan port:</p>
+<pre><code>&lt;link rel="canonical" href="{{ url()->current() }}"&gt;
+</code></pre>
+  </div>
+
+  <div class="fix-item">
+    <div class="fix-header">
+      <span class="fix-title">3. Open Graph Tags untuk Link Preview Chat Internal</span>
+      <span class="fix-pill med">Sedang</span>
+    </div>
+    <p>Agar saat tautan login dibagikan di WhatsApp/Teams, kartu preview tampil rapi:</p>
+<pre><code>&lt;meta property="og:type" content="website"&gt;
+&lt;meta property="og:title" content="{{ config('app.name', 'Halo APU') }}"&gt;
+&lt;meta property="og:description" content="Portal Helpdesk Internal Halo APU"&gt;
+&lt;meta property="og:image" content="{{ asset('images/logo.png') }}"&gt;
+&lt;meta property="og:url" content="{{ url()->current() }}"&gt;
+</code></pre>
+  </div>
+
+  <div class="fix-item">
+    <div class="fix-header">
+      <span class="fix-title">4. Preconnect Google Fonts</span>
+      <span class="fix-pill low">Rendah</span>
+    </div>
+    <p>Mempercepat handshake TLS saat merender font eksternal:</p>
+<pre><code>&lt;link rel="preconnect" href="https://fonts.googleapis.com"&gt;
+&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin&gt;
+</code></pre>
+  </div>
+
+  <h2>4. What's Working Now (Kondisi Bagus Saat Ini)</h2>
+  <ul>
+    <li><strong>Security Headers Lengkap:</strong> <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, HSTS, dan CSP sudah aktif via middleware.</li>
+    <li><strong>Vite Asset Bundling:</strong> Hashing aset otomatis untuk cache busting instan.</li>
+    <li><strong>Pencegahan Direktori Browsing:</strong> <code>Options -Indexes</code> aktif di <code>.htaccess</code>.</li>
+    <li><strong>301 Redirect Trailing Slash:</strong> Normalisasi URL trailing slash berjalan dengan baik.</li>
+  </ul>
+
+  <h2>5. Roadmap Tindakan</h2>
+  <ol>
+    <li><strong>Hari 1:</strong> Terapkan perbaikan <code>robots.txt</code> dan amankan rute <code>/system/*</code>.</li>
+    <li><strong>Hari 2:</strong> Tambahkan <code>X-Robots-Tag</code> di <code>SecurityHeaders.php</code>.</li>
+    <li><strong>Hari 3:</strong> Lengkapi meta tags dan link canonical di <code>resources/views/app.blade.php</code>.</li>
+  </ol>
+
+  <div class="meta-footer">
+    <p>Generated by the <a href="https://openseo.so/docs/skills/seo-audit" target="_blank" rel="noopener">OpenSEO SEO Audit skill</a>, run on September 18, 2026.</p>
+    <p>Audit berbasis analisis kode sumber statis Laravel 13, routing web, konfigurasi web server, dan kepatuhan robots exclusion RFC 9309.</p>
+  </div>
+</div>

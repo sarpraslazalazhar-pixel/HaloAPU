@@ -3,6 +3,7 @@ import React, { FormEventHandler } from 'react';
 
 export default function ForgotPassword({ status }: { status?: string }) {
  const { appConfig } = usePage<any>().props;
+
  const { data, setData, post, processing, errors } = useForm({
  email: '',
  });

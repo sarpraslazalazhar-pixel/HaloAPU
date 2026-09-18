@@ -1,4 +1,5 @@
 const fs = require('fs');
+
 const path = require('path');
 
 function processDirectory(directory) {
@@ -29,8 +30,8 @@ function processFile(filePath) {
     
     // Clean up space near quotes in className
     content = content.replace(/="/g, '="');
-    content = content.replace(/ \`/g, '`');
-    content = content.replace(/\` /g, '`');
+    content = content.replace(/ `/g, '`');
+    content = content.replace(/` /g, '`');
     
     if (content !== originalContent) {
         fs.writeFileSync(filePath, content, 'utf8');
@@ -39,5 +40,7 @@ function processFile(filePath) {
 }
 
 const targetDir = path.join(__dirname, 'resources', 'js');
+
 processDirectory(targetDir);
+
 console.log('Done!');

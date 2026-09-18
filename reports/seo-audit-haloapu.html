@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="id"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>dev.haloapu.id — Laporan Audit Technical SEO & Indexing</title>
+<style>
+:root{--bg:#fff;--fg:#0a0a0a;--fg-2:#454545;--fg-3:#8f8f8f;--rule:#ebebeb;--rule-2:#dcdcdc;--sunk:#fafafa;--accent:#0284c7;--danger:#dc2626;--success:#16a34a;--warning:#d97706}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--fg);margin:0;padding:0 24px 120px;font-size:17px;line-height:1.65;letter-spacing:-.003em;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.shell{max-width:1100px;margin:0 auto}
+header{padding:40px 0 0;max-width:760px}
+.badge{display:inline-block;background:#f0f9ff;color:#0369a1;border:1px solid #bae6fd;font-size:12px;font-weight:600;padding:3px 10px;border-radius:999px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:14px}
+h1{font-size:clamp(30px,5vw,46px);font-weight:700;line-height:1.1;letter-spacing:-.03em;margin:0;text-wrap:balance}
+.byline{margin:18px 0 0;font-size:15px;color:var(--fg-2)}
+.body{display:grid;grid-template-columns:minmax(0,720px) 1fr;gap:0 64px;margin:40px 0 0}
+article{grid-column:1;grid-row:1;min-width:0}
+.rail{grid-column:2;grid-row:1;font-size:14px;color:var(--fg-3);padding-top:6px}
+.rail .sticky{position:sticky;top:40px}
+.toc-label{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);margin:0 0 10px;font-weight:600}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc li{margin:0 0 8px}
+.toc a{color:var(--fg-2);text-decoration:none}
+.toc a:hover{color:var(--accent)}
+@media (max-width:900px){.body{grid-template-columns:1fr}.rail{display:none}}
+article p{margin:0 0 22px;text-wrap:pretty}
+h2{font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.25;margin:50px 0 20px;text-wrap:balance;border-bottom:1px solid var(--rule);padding-bottom:8px}
+h3{font-size:18px;font-weight:600;letter-spacing:-.01em;margin:30px 0 12px}
+.finding{list-style:none;padding:0;margin:0 0 24px}
+.finding li{margin:0 0 8px;color:var(--fg-2)}
+.finding b{color:var(--fg);font-weight:600}
+a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+strong{font-weight:600}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;font-size:.86em;background:var(--sunk);border:1px solid var(--rule);padding:2px 6px;border-radius:4px;color:#b91c1c}
+pre{background:var(--sunk);border:1px solid var(--rule);border-radius:6px;padding:14px 16px;overflow-x:auto;font-size:13.5px;line-height:1.5;margin:0 0 22px}
+pre code{background:none;border:none;padding:0;color:var(--fg)}
+ul,ol{margin:0 0 22px;padding-left:22px}
+li{margin:0 0 10px}
+li::marker{color:var(--fg-3)}
+.note{border-left:3px solid var(--accent);background:#f8fafc;padding:14px 18px;margin:0 0 24px;border-radius:0 6px 6px 0}
+.note p{margin:0;color:var(--fg-2);font-size:15px}
+.note.alert{border-left-color:var(--danger);background:#fef2f2}
+.note.alert p{color:#991b1b}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:0 0 30px}
+.stat-card{background:var(--sunk);border:1px solid var(--rule);border-radius:8px;padding:16px}
+.stat-card .val{font-size:28px;font-weight:700;line-height:1;margin-bottom:6px}
+.stat-card .val.warn{color:var(--danger)}
+.stat-card .val.ok{color:var(--success)}
+.stat-card .lbl{font-size:13px;color:var(--fg-3);text-transform:uppercase;letter-spacing:.05em}
+hr{border:none;border-top:1px solid var(--rule);margin:50px 0}
+footer{max-width:720px;margin:50px 0 0;padding:24px 0 0;border-top:1px solid var(--rule);font-size:14px;color:var(--fg-3)}
+@media print{
+  @page{margin:0 0 12mm 0;@bottom-center{content:counter(page) " of " counter(pages);font:10px sans-serif;color:#8f8f8f}}
+  body{background:#fff;color:#111;padding:14mm 16mm 6mm;font-size:10.5pt}
+  .shell,.body{display:block;max-width:none}
+  header{padding:0;max-width:none}
+  h1{font-size:22pt}
+  h2{font-size:14pt;margin:18pt 0 8pt}
+  h3{font-size:11pt;margin:12pt 0 4pt}
+  article,footer{max-width:none}
+  .rail{display:none}
+  h1,h2,h3{break-after:avoid}
+  pre,.note{break-inside:avoid}
+  p,li{orphans:3;widows:3}
+  a{text-decoration:none}
+}
+</style></head>
+<body><div class="shell">
+
+<header>
+  <span class="badge">Technical SEO & Privacy Audit</span>
+  <h1>dev.haloapu.id</h1>
+  <p class="byline">Disusun untuk Tim Pengembang Halo APU · 18 September 2026</p>
+</header>
+
+<div class="body">
+  <aside class="rail"><div class="sticky">
+    <p class="toc-label">Daftar Isi</p>
+    <nav class="toc" aria-label="Daftar Isi">
+      <ol>
+        <li><a href="#verdict">1. Verdict (Ringkasan)</a></li>
+        <li><a href="#top-priority">2. Top Priority (Aksi Minggu Ini)</a></li>
+        <li><a href="#small-fixes">3. Small Fixes (Perbaikan Teknis)</a></li>
+        <li><a href="#whats-working">4. What's Working Now</a></li>
+        <li><a href="#what-to-do-next">5. What to Do Next</a></li>
+        <li><a href="#how-this-report-was-made">Metodologi</a></li>
+      </ol>
+    </nav>
+  </div></aside>
+
+  <article>
+    <p>Halo APU merupakan aplikasi helpdesk internal terintegrasi berbasis Laravel 13 dan Inertia.js React. Audit ini berfokus pada <strong>Technical SEO</strong>, <strong>keamanan perayapan (crawl safety)</strong>, serta <strong>pencegahan kebocoran indeks data sensitif</strong> ke mesin pencari publik (Google, Bing, Yahoo).</p>
+
+    <h2 id="verdict">1. Verdict (Ringkasan Eksekutif)</h2>
+    <div class="card-grid">
+      <div class="stat-card">
+        <div class="val warn">Terbuka</div>
+        <div class="lbl">Status robots.txt</div>
+      </div>
+      <div class="stat-card">
+        <div class="val warn">2 Endpoint</div>
+        <div class="lbl">Rute Sistem Tanpa Auth</div>
+      </div>
+      <div class="stat-card">
+        <div class="val warn">0 Tag</div>
+        <div class="lbl">Meta Robots / X-Robots</div>
+      </div>
+      <div class="stat-card">
+        <div class="val ok">Aktif</div>
+        <div class="lbl">Security Headers (CSP/HSTS)</div>
+      </div>
+    </div>
+
+    <ul>
+      <li><strong>Karakteristik Domain:</strong> Sistem helpdesk internal operasional (bukan portal konten publik). Sasaran SEO adalah <em>zero-leakage indexing</em> pada area operasional dan metadata bersih pada gerbang login publik.</li>
+      <li><strong>Celah Kritis #1:</strong> File <code>public/robots.txt</code> mengizinkan seluruh bot merayapi seluruh direktori (<code>User-agent: * Disallow:</code>). Bot perayap publik diizinkan merayapi endpoint apa pun.</li>
+      <li><strong>Celah Kritis #2:</strong> Rute utilitas <code>/system/clear</code> dan <code>/system/optimize</code> pada <code>routes/web.php</code> bersifat publik tanpa autentikasi. Jika crawler atau scraper mengunjungi URL ini, cache aplikasi terhapus secara otomatis dan memicu lonjakan beban CPU/I/O server.</li>
+      <li><strong>Celah Kritis #3:</strong> Halaman TV operasional <code>/tv</code> bersifat publik dan menampilkan nomor tiket serta status pekerjaan langsung tanpa tag <code>noindex</code>, berpotensi masuk ke indeks pencarian Google.</li>
+      <li><strong>Kelengkapan Metadata:</strong> Template <code>resources/views/app.blade.php</code> belum memiliki meta description, Open Graph preview, dan canonical tag.</li>
+    </ul>
+
+    <h2 id="top-priority">2. Top Priority (Aksi Utama Minggu Ini)</h2>
+    <p>Satu tindakan paling penting minggu ini adalah <strong>menutup celah perayapan bot publik pada rute sistem dan menerapkan kebijakan noindex ketat</strong>.</p>
+
+    <h3>Langkah 1: Perbarui <code>public/robots.txt</code></h3>
+    <ul class="finding">
+      <li><b>Status Saat Ini:</b> File hanya berisi <code>User-agent: * \n Disallow:</code> yang berarti mengizinkan semua bot merayapi semua rute.</li>
+      <li><b>Solusi:</b> Ganti isi <code>public/robots.txt</code> dengan aturan pemblokiran perayap untuk semua halaman sistem, admin, API, dan dashboard TV:</li>
+    </ul>
+
+<pre><code># robots.txt untuk Halo APU (dev.haloapu.id)
+User-agent: *
+# Larang perayapan seluruh area aplikasi privat dan utilitas
+Disallow: /admin/
+Disallow: /dashboard
+Disallow: /tiket/
+Disallow: /chat/
+Disallow: /tv
+Disallow: /system/
+Disallow: /api/
+Disallow: /lupa-password
+Disallow: /reset-password/
+
+# Izinkan hanya landing page login jika ingin terdeteksi oleh nama brand
+Allow: /login$
+Allow: /favicon.ico
+Allow: /images/
+
+# Larang pengindeksan AI crawler dan scraper data
+User-agent: GPTBot
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: Google-Extended
+Disallow: /
+</code></pre>
+
+    <h3>Langkah 2: Amankan Endpoint Utilitas di <code>routes/web.php</code></h3>
+    <ul class="finding">
+      <li><b>Status Saat Ini:</b> <code>/system/optimize</code> dan <code>/system/clear</code> dapat dieksekusi siapa saja dengan metode GET tanpa proteksi token atau auth.</li>
+      <li><b>Solusi:</b> Pindahkan kedua rute ini ke dalam grup middleware <code>auth</code> dan <code>role:admin</code>, atau hapus rute web ini dan jalankan perintah optimasi murni melalui CLI (Artisan).</li>
+    </ul>
+
+<pre><code>// Pindahkan ke dalam middleware auth dan admin
+Route::middleware(['auth', 'role:admin'])->prefix('system')->group(function () {
+    Route::get('/optimize', function() {
+        \Illuminate\Support\Facades\Artisan::call('config:cache');
+        \Illuminate\Support\Facades\Artisan::call('route:cache');
+        \Illuminate\Support\Facades\Artisan::call('view:cache');
+        return 'System optimized successfully.';
+    });
+
+    Route::get('/clear', function() {
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+        return 'System cache cleared successfully.';
+    });
+});
+</code></pre>
+
+    <h3>Langkah 3: Tambahkan Header HTTP <code>X-Robots-Tag</code></h3>
+    <ul class="finding">
+      <li><b>Status:</b> File <code>app/Http/Middleware/SecurityHeaders.php</code> sudah ada dan berjalan di setiap response HTTP.</li>
+      <li><b>Solusi:</b> Tambahkan instruksi <code>X-Robots-Tag: noindex, nofollow, noarchive</code> di dalam middleware ini untuk memastikan seluruh halaman dinamis tidak disimpan dalam cache mesin pencari:</li>
+    </ul>
+
+<pre><code>// Tambahkan di dalam app/Http/Middleware/SecurityHeaders.php pada handle():
+$response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+</code></pre>
+
+    <div class="note">
+      <p><strong>Catatan Istilah:</strong> <code>X-Robots-Tag</code> adalah instruksi HTTP header kepada crawler mesin pencari (seperti Googlebot) yang berfungsi sama seperti tag HTML meta robots, namun berlaku efektif untuk seluruh tipe file (HTML, API JSON, PDF, dan lampiran file).</p>
+    </div>
+
+    <h2 id="small-fixes">3. Small Fixes (Perbaikan Teknis Pendukung)</h2>
+
+    <h3>1. Tambahkan Meta Robots dan Meta Description di <code>resources/views/app.blade.php</code></h3>
+    <ul class="finding">
+      <li><b>Status:</b> Tag <code>&lt;head&gt;</code> hanya memuat <code>charset</code>, <code>viewport</code>, dan <code>title</code>. Tidak ada deskripsi dan meta indexing.</li>
+      <li><b>Perbaikan:</b> Tambahkan tag meta standar pada template utama:</li>
+    </ul>
+<pre><code>&lt;meta name="robots" content="noindex, nofollow"&gt;
+&lt;meta name="description" content="Sistem Layanan Helpdesk Internal Halo APU. Akses terproteksi untuk pelaporan tiket dan pemantauan operasional."&gt;
+</code></pre>
+
+    <h3>2. Pasang Tag Canonical Dinamis</h3>
+    <ul class="finding">
+      <li><b>Status:</b> Tidak ada tag <code>&lt;link rel="canonical"&gt;</code>.</li>
+      <li><b>Perbaikan:</b> Pasang link canonical dinamis pada <code>app.blade.php</code> agar crawler memahami URL acuan resmi:</li>
+    </ul>
+<pre><code>&lt;link rel="canonical" href="{{ url()-&gt;current() }}"&gt;
+</code></pre>
+
+    <h3>3. Pasang Open Graph (OG) Meta Tags untuk Internal Share Preview</h3>
+    <ul class="finding">
+      <li><b>Status:</b> Ketika tautan portal helpdesk dibagikan di WhatsApp, Telegram, atau Slack tim, tidak muncul preview visual (thumbnail/deskripsi) yang profesional.</li>
+      <li><b>Perbaikan:</b> Tambahkan Open Graph dasar pada <code>app.blade.php</code>:</li>
+    </ul>
+<pre><code>&lt;meta property="og:type" content="website"&gt;
+&lt;meta property="og:title" content="{{ config('app.name', 'Halo APU') }} - Helpdesk System"&gt;
+&lt;meta property="og:description" content="Layanan bantuan tiket dan monitoring operasional internal Halo APU."&gt;
+&lt;meta property="og:image" content="{{ asset('images/logo.png') }}"&gt;
+&lt;meta property="og:url" content="{{ url()-&gt;current() }}"&gt;
+</code></pre>
+
+    <h3>4. Tambahkan Preconnect untuk Web Fonts</h3>
+    <ul class="finding">
+      <li><b>Status:</b> CSP mengizinkan Google Fonts (<code>fonts.googleapis.com</code> dan <code>fonts.gstatic.com</code>), namun belum ada <code>preconnect</code> di <code>&lt;head&gt;</code>.</li>
+      <li><b>Perbaikan:</b> Tambahkan baris preconnect untuk mempercepat proses TLS handshake font saat halaman login dimuat:</li>
+    </ul>
+<pre><code>&lt;link rel="preconnect" href="https://fonts.googleapis.com"&gt;
+&lt;link rel="preconnect" href="https://fonts.gstatic.com" crossorigin&gt;
+</code></pre>
+
+    <h3>5. Perbaiki Hierarki Semantik Heading H1 di Layar Login</h3>
+    <ul class="finding">
+      <li><b>Status:</b> Pada <code>resources/js/Pages/Auth/UserLogin.tsx</code> dan <code>AdminLogin.tsx</code>, judul form login menggunakan elemen teks biasa tanpa tag semantik <code>&lt;h1&gt;</code>.</li>
+      <li><b>Perbaikan:</b> Gunakan tag <code>&lt;h1&gt;</code> untuk judul "Login ke Halo APU" guna memenuhi standar aksesibilitas dan struktur dokumen HTML yang valid.</li>
+    </ul>
+
+    <h2 id="whats-working">4. What's Working Now (Aspek yang Sudah Bagus)</h2>
+    <ul>
+      <li><strong>Security Headers Komprehensif:</strong> Middleware <code>SecurityHeaders.php</code> sudah mengimplementasikan <code>X-Frame-Options: DENY</code>, <code>X-Content-Type-Options: nosniff</code>, HSTS (Strict-Transport-Security), dan Content Security Policy (CSP). Ini adalah nilai tambah besar untuk keamanan web.</li>
+      <li><strong>Asset Bundling Modern (Vite):</strong> Aset JavaScript dan CSS di-bundle dengan hashing unik (misal: <code>app-BQGaRtfq.js</code>), mendukung cache-busting instan saat rilis kode baru.</li>
+      <li><strong>Pencegahan Directory Browsing:</strong> File <code>public/.htaccess</code> mengaktifkan <code>Options -Indexes</code>, mencegah pengunjung melihat daftar isi folder server.</li>
+      <li><strong>Canonical Trailing Slash:</strong> File <code>.htaccess</code> secara otomatis melakukan redirect 301 untuk URL dengan trailing slash (menghilangkan potensi duplikasi URL).</li>
+      <li><strong>Viewport Standar Mobile:</strong> Pengaturan <code>viewport</code> pada <code>app.blade.php</code> sudah responsif dan ramah perangkat seluler.</li>
+    </ul>
+
+    <h2 id="what-to-do-next">5. What to Do Next (Rencana Tindakan Berurutan)</h2>
+    <ol>
+      <li><strong>Hari ke-1 (Prioritas Tertinggi):</strong> Update <code>public/robots.txt</code> dengan aturan pembatasan di atas dan pindahkan rute <code>/system/clear</code> & <code>/system/optimize</code> ke dalam otentikasi admin.</li>
+      <li><strong>Hari ke-2:</strong> Tambahkan header <code>X-Robots-Tag: noindex, nofollow, noarchive</code> ke dalam <code>app/Http/Middleware/SecurityHeaders.php</code>.</li>
+      <li><strong>Hari ke-3:</strong> Perbarui <code>resources/views/app.blade.php</code> dengan meta description, tag canonical, dan Open Graph preview.</li>
+      <li><strong>Hari ke-4:</strong> Pasang tag semantik <code>&lt;h1&gt;</code> pada komponen form autentikasi di frontend.</li>
+    </ol>
+
+    <h2 id="how-this-report-was-made">Metodologi & Verifikasi</h2>
+    <p>Generated by the <a href="https://openseo.so/docs/skills/seo-audit" target="_blank" rel="noopener">OpenSEO SEO Audit skill</a>, run on September 18, 2026.</p>
+    <p>Laporan ini disusun berdasarkan audit kode statis (white-box technical analysis) terhadap repositori Halo APU:</p>
+    <ul>
+      <li><strong>Verifikasi Routing & Aksesibilitas:</strong> Pemeriksaan rute publik vs terotentikasi pada <code>routes/web.php</code>.</li>
+      <li><strong>Verifikasi Crawl Policy:</strong> Analisis file konfigurasi <code>public/robots.txt</code> dan <code>public/.htaccess</code> terhadap standar RFC 9309.</li>
+      <li><strong>Verifikasi Metadata HTML:</strong> Peninjauan langsung tag <code>&lt;head&gt;</code> pada <code>resources/views/app.blade.php</code> serta komponen Inertia React pada <code>resources/js/Pages/Auth/</code> dan <code>resources/js/Pages/Tv/</code>.</li>
+      <li><strong>Verifikasi Response Headers:</strong> Peninjauan implementasi middleware keamanan pada <code>app/Http/Middleware/SecurityHeaders.php</code> dan <code>bootstrap/app.php</code>.</li>
+    </ul>
+
+  </article>
+</div>
+
+<footer>
+  <p>&copy; 2026 Halo APU Dev Team. Laporan Technical SEO & Keamanan Pengindeksan Web.</p>
+</footer>
+
+</div></body></html>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import { Head, useForm, router } from '@inertiajs/react';
-import { Plus, Edit2, Trash2, Shield } from 'lucide-react';
+import { useForm, router } from '@inertiajs/react';
+import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import {
@@ -25,12 +25,13 @@ interface Props {
  permissions: Permission[];
 }
 
-export default function Index({ roles, permissions }: Props) {
+export default function Index({ roles, permissions: _permissions }: Props) {
  const [isModalOpen, setIsModalOpen] = useState(false);
  const [editingRole, setEditingRole] = useState<Role | null>(null);
 
  const { data, setData, post, put, processing, errors, reset, clearErrors } = useForm({
  name: '',
+ // SAFETY: permissions is always a string[] populated from PERMISSION_GROUPS values via checkbox inputs.
  permissions: [] as string[],
  });
 
@@ -48,6 +49,7 @@ export default function Index({ roles, permissions }: Props) {
  const openModal = (role?: Role) => {
  if (role && isSuperAdminRole(role.name)) return;
  clearErrors();
+
  if (role) {
  setEditingRole(role);
  setData({
@@ -58,6 +60,7 @@ export default function Index({ roles, permissions }: Props) {
  setEditingRole(null);
  reset();
  }
+
  setIsModalOpen(true);
  };
 
@@ -69,6 +72,7 @@ export default function Index({ roles, permissions }: Props) {
 
  const handleSubmit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editingRole) {
  put(route('admin.manajemen-peran.update', editingRole.id), {
  onSuccess: () => closeModal(),

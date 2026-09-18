@@ -1,11 +1,13 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { FormField } from '@/types';
 import FieldRenderer from '@/Components/FormBuilder/FieldRenderer';
 
+export type DynamicFieldValue = string | number | boolean | string[] | File | File[] | null | undefined;
+
 interface DynamicFieldProps {
  fields: FormField[];
- values: Record<string, any>;
- onChange: (fieldId: number, value: any) => void;
+ values: Record<string, DynamicFieldValue>;
+ onChange: (fieldId: number, value: DynamicFieldValue) => void;
  errors?: Record<string, string>;
 }
 
@@ -13,6 +15,7 @@ export default function DynamicField({ fields, values, onChange, errors }: Dynam
  const visibleFields = fields.filter(field => {
  if (!field.parent_field_id) return true;
  const parentValue = values[field.parent_field_id];
+
  return parentValue === field.trigger_value;
  });
 

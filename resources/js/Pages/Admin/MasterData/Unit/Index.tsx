@@ -54,6 +54,7 @@ function IconPicker({ selectedIcon, onSelect }: { selectedIcon: string; onSelect
  <div className="grid grid-cols-7 sm:grid-cols-9 gap-1.5 max-h-36 overflow-y-auto p-1 border rounded bg-background">
  {filteredIcons.map(iconName => {
  const isSelected = selectedIcon === iconName;
+
  return (
  <button
  key={iconName}
@@ -75,7 +76,7 @@ function IconPicker({ selectedIcon, onSelect }: { selectedIcon: string; onSelect
  );
 }
 
-export default function UnitIndex({ units, filters }: { units: any; filters?: { search?: string } }) {
+export default function UnitIndex({ units, filters: _filters }: { units: any; filters?: { search?: string } }) {
  const [isAddOpen, setIsAddOpen] = useState(false);
  const [editUnit, setEditUnit] = useState<Unit | null>(null);
 
@@ -98,6 +99,7 @@ export default function UnitIndex({ units, filters }: { units: any; filters?: { 
 
  const handleEdit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editUnit) {
  put(route('admin.master.unit.update', editUnit.id), {
  onSuccess: () => {

@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { router, usePage } from '@inertiajs/react';
+import { usePage } from '@inertiajs/react';
 import axios from 'axios';
 import { Bell, Check, Clock, ExternalLink, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/Components/ui/button';
-import { Badge } from '@/Components/ui/badge';
 import {
  DropdownMenu,
  DropdownMenuContent,
@@ -23,7 +22,7 @@ export default function NotificationBell() {
   const currentUser = auth?.admin || auth?.user;
   const prefix = auth?.admin ? 'admin.notifications' : 'notifications';
   const notifySoundEnabled = currentUser?.notify_sound !== false;
-  const notifyInappEnabled = currentUser?.notify_inapp !== false;
+  const _notifyInappEnabled = currentUser?.notify_inapp !== false;
 
   const soundUrl = appConfig?.notification_sound_path
     ? `/system/notification-sound?v=${encodeURIComponent(appConfig.notification_sound_path)}`
@@ -47,6 +46,7 @@ export default function NotificationBell() {
 
   const handleToggleMute = useCallback(() => {
     toggleMute();
+
     if (isMuted) {
       playNotificationSound();
       toast.success('Suara notifikasi diaktifkan', { id: 'unmuted-toast' });
@@ -69,6 +69,7 @@ export default function NotificationBell() {
           axios.get(route(`${prefix}.index`), { params: { per_page: 1 } })
             .then(res => {
               const latest = res.data.notifications?.data?.[0];
+
               if (latest && !latest.read_at) {
                 const title = latest.data.title || latest.data.judul || 'Notifikasi Baru';
                 const body = latest.data.message || latest.data.pesan || 'Anda memiliki notifikasi baru';
@@ -82,9 +83,11 @@ export default function NotificationBell() {
                 
                 notification.onclick = function() {
                   window.focus();
+
                   if (latest.data.url || latest.data.aksi_url) {
                     window.location.href = latest.data.url || latest.data.aksi_url;
                   }
+
                   this.close();
                 };
               }
@@ -102,9 +105,11 @@ export default function NotificationBell() {
 
   useEffect(() => {
     fetchUnreadCount();
+
     const interval = setInterval(() => {
       fetchUnreadCount();
     }, 15000);
+
     return () => clearInterval(interval);
   }, [fetchUnreadCount]);
 
@@ -114,6 +119,7 @@ export default function NotificationBell() {
         params: { per_page: 10 },
         headers: { Accept: 'application/json' }
       });
+
       setNotifications(response.data.notifications?.data || []);
     } catch (error) {
       console.error('Gagal fetch notifications:', error);
@@ -176,10 +182,13 @@ export default function NotificationBell() {
     const diffMinutes = Math.floor(diffMs / 60000);
 
     if (diffMinutes < 1) return 'Baru saja';
+
     if (diffMinutes < 60) return `${diffMinutes} menit lalu`;
     const diffHours = Math.floor(diffMinutes / 60);
+
     if (diffHours < 24) return `${diffHours} jam lalu`;
     const diffDays = Math.floor(diffHours / 24);
+
     return `${diffDays} hari lalu`;
   };
 
@@ -242,6 +251,7 @@ export default function NotificationBell() {
                         if (!notification.read_at) {
                           handleMarkAsRead(notification.id);
                         }
+
                         if (notification.data.aksi_url) {
                           window.location.href = notification.data.aksi_url;
                         }

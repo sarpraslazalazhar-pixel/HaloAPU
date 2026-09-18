@@ -7,19 +7,18 @@ import { DataTable } from '@/Components/DataTable';
 import { StatusBadge } from '@/Components/StatusBadge';
 import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
-import { DateRangePicker } from '@/Components/ui/date-range-picker';
 import { Eye, Folder, Clock, Hourglass, CheckCircle, XCircle, Ban, Printer, Download, Filter, Search } from 'lucide-react';
 import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 
-const STATUS_META: Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }> = {
+const STATUS_META = {
  open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
  on_proses: { label: 'Diproses', bg: 'from-orange-500 to-orange-600', icon: Clock, anim: 'group-hover:-rotate-12 group-hover:scale-110 group-hover:opacity-100' },
  pending: { label: 'Tertunda', bg: 'from-zinc-500 to-zinc-600', icon: Hourglass, anim: 'group-hover:rotate-180 transition-transform duration-500 group-hover:opacity-100' },
  solve: { label: 'Selesai', bg: 'from-green-500 to-green-600', icon: CheckCircle, anim: 'group-hover:scale-125 group-hover:opacity-100' },
  reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
  dibatalkan: { label: 'Dibatalkan', bg: 'from-rose-500 to-rose-600', icon: Ban, anim: 'group-hover:scale-90 group-hover:opacity-100' },
-};
+} satisfies Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }>;
 
 const STATUS_LIST = [
  { value: 'open', label: 'Baru' },
@@ -34,37 +33,9 @@ const STATUS_LIST = [
 
 export default function LaporanTiket({ 
  filters, units, subUnits: initialSubUnits, divisiList, 
- totalTickets, statusCounts, slaStats, slaPieChartData, 
- monthlyTrend, ticketsByUnit, ticketsByStatus, ticketsByLayanan, tickets 
+ totalTickets: _totalTickets, statusCounts, slaStats, slaPieChartData, 
+ monthlyTrend, ticketsByUnit, ticketsByStatus: _ticketsByStatus, ticketsByLayanan, tickets 
 }: any) {
- const getStatusLabel = (status: string) => {
- const map: Record<string, string> = {
- 'open': 'Baru',
- 'on_proses': 'Diproses',
- 'pending': 'Tertunda',
- 'waiting_approval': 'Menunggu Review',
- 'need_revision': 'Butuh Revisi',
- 'solve': 'Selesai',
- 'reject': 'Ditolak',
- 'dibatalkan': 'Dibatalkan',
- };
- return map[status] || status;
- };
-
- const getStatusStyle = (status: string) => {
- const map: Record<string, any> = {
- 'open': { text: 'text-blue-600 ', bg: 'bg-blue-100 ', dot: 'bg-blue-500' },
- 'on_proses': { text: 'text-orange-600 ', bg: 'bg-orange-100 ', dot: 'bg-orange-500' },
- 'pending': { text: 'text-zinc-600 ', bg: 'bg-zinc-100 ', dot: 'bg-zinc-500' },
- 'waiting_approval': { text: 'text-purple-600 ', bg: 'bg-purple-100 ', dot: 'bg-purple-500' },
- 'need_revision': { text: 'text-amber-600 ', bg: 'bg-amber-100 ', dot: 'bg-amber-500' },
- 'solve': { text: 'text-green-600 ', bg: 'bg-green-100 ', dot: 'bg-green-500' },
- 'reject': { text: 'text-red-600 ', bg: 'bg-red-100 ', dot: 'bg-red-500' },
- 'dibatalkan': { text: 'text-rose-600 ', bg: 'bg-rose-100 ', dot: 'bg-rose-500' },
- };
- return map[status] || { text: 'text-slate-600 ', bg: 'bg-slate-100 ', dot: 'bg-slate-500' };
- };
-
  const maxLayanan = ticketsByLayanan?.length > 0 ? Math.max(...ticketsByLayanan.map((t: any) => t.count)) : 1;
 
  const [month, setMonth] = useState(filters?.month || '');
@@ -89,13 +60,21 @@ export default function LaporanTiket({
 
  const applyFilter = () => {
  const params: any = {};
+
  if (month) params.month = month;
+
  if (year) params.year = year;
+
  if (dateFrom) params.date_from = dateFrom;
+
  if (dateTo) params.date_to = dateTo;
+
  if (unitId) params.unit_id = unitId;
+
  if (subUnitId) params.sub_unit_id = subUnitId;
+
  if (status) params.status = status;
+
  if (divisiId) params.divisi_id = divisiId;
  router.get(route('admin.laporan.tiket'), params, { preserveState: true });
  };
@@ -115,7 +94,9 @@ export default function LaporanTiket({
  header: 'SLA',
  render: (t: any) => {
  const sla = t.sla_tracking;
+
  if (!sla) return <span className="text-slate-400">-</span>;
+
  return (
  <SlaBadge
  priority={t.priority || 'low'}
@@ -170,9 +151,7 @@ export default function LaporanTiket({
  ...Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: new Date(0, i).toLocaleString('id', { month: 'long' }) })),
  ];
 
- const years = [
- ...Array.from({ length: 5 }, (_, i) => ({ value: String(new Date().getFullYear() - i), label: String(new Date().getFullYear() - i) })),
- ];
+ const years = Array.from({ length: 5 }, (_, i) => ({ value: String(new Date().getFullYear() - i), label: String(new Date().getFullYear() - i) }));
 
  return (
  <AdminLayout title="Laporan Tiket">
@@ -267,6 +246,7 @@ export default function LaporanTiket({
  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
  {Object.entries(STATUS_META).map(([key, meta]) => {
  const Icon = meta.icon;
+
  return (
  <div key={key} className={`group relative overflow-hidden rounded-xl bg-gradient-to-br ${meta.bg} shadow-md transition-all duration-300 hover:shadow-lg hover:-translate-y-0.5 print:break-inside-avoid print:shadow-none`}>
  <div className="absolute -top-6 -right-6 h-24 w-24 rounded-full bg-white/20 blur-xl pointer-events-none transition-transform duration-500 group-hover:scale-150" />
@@ -393,6 +373,7 @@ export default function LaporanTiket({
  <tbody className="divide-y divide-slate-100 ">
  {ticketsByLayanan?.map((t: any, idx: number) => {
  const percent = (t.count / maxLayanan) * 100;
+
  return (
  <tr key={idx} className="hover:bg-slate-50/50 transition-colors group">
  <td className="py-3 px-4 font-medium">{t.layanan}</td>

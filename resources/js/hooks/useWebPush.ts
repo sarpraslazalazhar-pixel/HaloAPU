@@ -3,8 +3,9 @@ import axios from 'axios';
 
 function urlBase64ToUint8Array(base64String: string) {
  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+
  const base64 = (base64String + padding)
- .replace(/\-/g, '+')
+ .replace(/-/g, '+')
  .replace(/_/g, '/');
 
  const rawData = window.atob(base64);
@@ -13,6 +14,7 @@ function urlBase64ToUint8Array(base64String: string) {
  for (let i = 0; i < rawData.length; ++i) {
  outputArray[i] = rawData.charCodeAt(i);
  }
+
  return outputArray;
 }
 
@@ -34,15 +36,19 @@ export function useWebPush(user: any) {
  }
 
  const existingSubscription = await registration.pushManager.getSubscription();
+
  if (existingSubscription) {
  // Already subscribed
  await axios.post('/push/subscribe', existingSubscription);
+
  return;
  }
 
  const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
  if (!vapidPublicKey) {
  console.error('VITE_VAPID_PUBLIC_KEY is missing');
+
  return;
  }
 
@@ -73,22 +79,27 @@ export function useWebPush(user: any) {
  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
  return false;
  }
+
  try {
  const registration = await navigator.serviceWorker.register('/sw.js');
  const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
  const convertedVapidKey = urlBase64ToUint8Array(vapidPublicKey);
  
  let subscription = await registration.pushManager.getSubscription();
+
  if (!subscription) {
  subscription = await registration.pushManager.subscribe({
  userVisibleOnly: true,
  applicationServerKey: convertedVapidKey
  });
  }
+
  await axios.post('/push/subscribe', subscription);
+
  return true;
  } catch (e) {
  console.error(e);
+
  return false;
  }
  }

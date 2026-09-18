@@ -122,11 +122,13 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  const [editMode, setEditMode] = useState(false);
  const [currentFieldId, setCurrentFieldId] = useState<number | null>(null);
 
- const { data, setData, post, put, delete: destroy, processing, errors, reset } = useForm({
+ const { data, setData, delete: destroy, processing, errors, reset } = useForm({
  label: '',
  tipe_field: 'teks_pendek',
  wajib: false,
+ // SAFETY: opsi represents string array options for select/radio/checkbox fields.
  opsi: [] as string[],
+ // SAFETY: parent_field_id can be empty string initially before numeric selection or empty form state.
  parent_field_id: '' as string | number,
  trigger_value: '',
  opsiString: '' // helper for text area options
@@ -207,6 +209,7 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
 
  // Process options from string
  const currentData = { ...data };
+
  if (tipeDenganOpsi.includes(currentData.tipe_field) && currentData.opsiString) {
  currentData.opsi = currentData.opsiString.split('\n').map(s => s.trim()).filter(s => s !== '');
  } else {

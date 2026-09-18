@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Users, Pencil, Trash2, Plus, Search, UserX, Phone, Smartphone, Unlock } from 'lucide-react';
+import { Users, Pencil, Trash2, Plus, Search, UserX, Smartphone, Unlock } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -85,8 +85,11 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  password: '',
  password_confirmation: '',
  no_wa: '',
+ // SAFETY: divisi_id can be an empty string before selection or a numeric ID when chosen.
  divisi_id: '' as string | number,
+ // SAFETY: org_unit_id can be an empty string before selection or a numeric ID when chosen.
  org_unit_id: '' as string | number,
+ // SAFETY: jabatan_id can be an empty string before selection or a numeric ID when chosen.
  jabatan_id: '' as string | number,
  });
 
@@ -124,6 +127,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
 
  const handleSubmit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editing) {
  put(route('admin.manajemen-user.update', editing.id), {
  onSuccess: () => { setOpen(false); reset(); setEditing(null); },
@@ -397,6 +401,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  {/* Create/Edit Dialog */}
  <Dialog open={open} onOpenChange={(isOpen) => {
  setOpen(isOpen);
+
  if (!isOpen) { setEditing(null); reset(); }
  }}>
  <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">

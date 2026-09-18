@@ -28,7 +28,7 @@ interface ActionConfig {
   nodeBg: string;
 }
 
-const actionConfigMap: Record<string, ActionConfig> = {
+const actionConfigMap = {
   dibuat: {
     label: 'Tiket Dibuat',
     icon: FilePlus,
@@ -101,13 +101,17 @@ const actionConfigMap: Record<string, ActionConfig> = {
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
     nodeBg: 'bg-indigo-500',
   },
-};
+} satisfies Record<string, ActionConfig>;
 
 const getActionConfig = (aksi: string): ActionConfig => {
   const key = (aksi || '').toLowerCase();
-  if (actionConfigMap[key]) {
-    return actionConfigMap[key];
+  // SAFETY: Look up action in actionConfigMap using keyof; fallback provided if key is unknown.
+  const config = actionConfigMap[key as keyof typeof actionConfigMap];
+
+  if (config) {
+    return config;
   }
+
   return {
     label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
     icon: HelpCircle,

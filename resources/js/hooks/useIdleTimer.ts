@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { router } from '@inertiajs/react';
 
 export function useIdleTimer(logoutUrl: string, timeout = 30 * 60 * 1000) { // Default 30 mins
- const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+ const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
  const resetTimer = () => {
  if (timeoutRef.current) {

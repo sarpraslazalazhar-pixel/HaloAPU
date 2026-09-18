@@ -36,11 +36,12 @@ interface Jabatan {
 
 function SortableRow({ item, index, openEdit, handleDelete }: { item: Jabatan, index: number, openEdit: any, handleDelete: any }) {
  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
+
  const style = {
  transform: CSS.Transform.toString(transform),
  transition,
  zIndex: isDragging ? 10 : 1,
- position: 'relative' as 'relative',
+ position: 'relative' as const,
  };
 
  return (
@@ -91,6 +92,7 @@ export default function JabatanIndex({ jabatans, filters }: { jabatans: Jabatan[
 
  const handleEdit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editItem) {
  put(route('admin.master.jabatan.update', editItem.id), {
  onSuccess: () => {
@@ -131,6 +133,7 @@ export default function JabatanIndex({ jabatans, filters }: { jabatans: Jabatan[
 
  const handleDragEnd = (event: DragEndEvent) => {
  const { active, over } = event;
+
  if (active.id !== over?.id) {
  setItems((prev) => {
  const oldIndex = prev.findIndex((i) => i.id === active.id);

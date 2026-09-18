@@ -83,6 +83,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  fallbackAudioRef.current = fallbackAudio;
 
  // Prepare Web Audio API (primary)
+ // SAFETY: webkitAudioContext is the legacy vendor-prefixed AudioContext in Safari/WebKit browsers.
  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
  audioContextRef.current = new AudioContextClass();
  fetch(soundUrl)
@@ -97,6 +98,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
 
  useEffect(() => {
  const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+
  return () => clearInterval(timer);
  }, []);
 
@@ -104,21 +106,25 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  const poll = setInterval(() => {
  router.reload({ only: ['stats', 'recentTickets', 'upcomingBookings', 'dailyChartData'] });
  }, 15000);
+
  return () => clearInterval(poll);
  }, []);
 
  useEffect(() => {
  if (recentTickets && recentTickets.length > 0) {
  const currentLatestId = recentTickets[0].id;
+
  if (prevLatestTicketIdRef.current !== null && currentLatestId > prevLatestTicketIdRef.current) {
  if (hasInteracted) {
  let played = false;
+
  // Try Web Audio API first
  if (audioContextRef.current && audioBufferRef.current) {
  try {
  if (audioContextRef.current.state === 'suspended') {
  audioContextRef.current.resume();
  }
+
  const source = audioContextRef.current.createBufferSource();
  source.buffer = audioBufferRef.current;
  const gainNode = audioContextRef.current.createGain();
@@ -131,6 +137,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  console.error('Web Audio API error, trying HTML Audio fallback:', e);
  }
  }
+
  // Fallback to HTML Audio element
  if (!played && fallbackAudioRef.current) {
  fallbackAudioRef.current.currentTime = 0;
@@ -141,11 +148,14 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  });
  }
  }
+
  if (prevTicketsRef.current.length > 0) {
  const prevIds = new Set(prevTicketsRef.current.map((t: any) => t.id));
+
  const added = new Set(
  recentTickets.map(t => t.id).filter(id => !prevIds.has(id))
  );
+
  if (added.size > 0) {
  recentTickets
  .filter(t => added.has(t.id))
@@ -158,6 +168,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  }
  }
  }
+
  prevLatestTicketIdRef.current = currentLatestId;
  prevTicketsRef.current = recentTickets;
  }
@@ -183,9 +194,11 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  <button
  onClick={() => {
  setHasInteracted(true);
+
  if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
  audioContextRef.current.resume();
  }
+
  // Unlock HTML5 Audio by playing and immediately pausing it
  if (fallbackAudioRef.current) {
  fallbackAudioRef.current.volume = 0; // mute temporarily just in case
@@ -197,6 +210,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  }
  }).catch(e => console.error('Gagal unlock audio:', e));
  }
+
  toast.success('Dashboard dimulai! Notifikasi suara aktif.', { id: 'dashboard-init', duration: 3000 });
  }}
  className="group relative inline-flex items-center justify-center gap-3 px-10 py-5 font-bold text-white text-lg transition-all duration-200 bg-[#00a2e8] rounded-2xl hover:bg-[#0081b8] shadow-lg shadow-blue-200/50 active:scale-[0.98]"

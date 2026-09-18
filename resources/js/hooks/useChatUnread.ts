@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import { useChatSound } from './useChatSound';
 
@@ -34,14 +34,15 @@ export function useChatUnread({
 
   // Sync with Inertia props update (e.g. after page visit)
   useEffect(() => {
-    if (typeof props.unread_chat_count === 'number') {
-      setUnreadCount(props.unread_chat_count);
+    if (props.unread_chat_count !== undefined && Number.isFinite(props.unread_chat_count)) {
+      setUnreadCount(Number(props.unread_chat_count));
     }
   }, [props.unread_chat_count]);
 
   // Update browser document.title dynamically
   useEffect(() => {
     const baseTitle = pageTitle ? `${pageTitle} - ${systemName}` : systemName;
+
     if (unreadCount > 0) {
       document.title = `(${unreadCount}) ${baseTitle}`;
     } else {
@@ -51,21 +52,27 @@ export function useChatUnread({
 
   // Global Echo Realtime Listeners across ALL pages (Dashboard, Tickets, Chat, etc.)
   useEffect(() => {
-    if (!user?.id || !(window as any).Echo) return;
+    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this hook runs.
+    const echo = (window as any).Echo;
+
+    if (!user?.id || !echo) return;
 
     const privateChannelName = isAdmin
       ? `App.Models.Admin.${user.id}`
       : `App.Models.User.${user.id}`;
+
     const publicChannelName = `chat.public_global`;
 
-    const privateChannel = (window as any).Echo.private(privateChannelName);
-    const publicChannel = (window as any).Echo.private(publicChannelName);
+    const privateChannel = echo.private(privateChannelName);
+    const publicChannel = echo.private(publicChannelName);
 
     const handleIncomingMessage = (e: any) => {
       const msg = e.messageData;
+
       if (!msg) return;
 
       const currentUser = userRef.current;
+
       const isSelf =
         msg.sender_id === currentUser?.id &&
         ((isAdminRef.current && msg.sender_type?.includes('Admin')) ||
@@ -75,11 +82,14 @@ export function useChatUnread({
 
       // Check if user is currently looking at this active chat page
       const currentPath = urlRef.current || '';
+
       const isChatPage = isAdminRef.current
         ? currentPath.startsWith('/admin/chat')
         : currentPath.startsWith('/chat');
+
       const params = new URLSearchParams(window.location.search);
       const currentActiveId = params.get('active');
+
       const isViewingThisChat =
         isChatPage &&
         currentActiveId === String(msg.conversation_id) &&
@@ -100,6 +110,7 @@ export function useChatUnread({
           Notification.permission === 'granted'
         ) {
           const senderName = msg.sender_name || 'Bot Pengingat Halo APU';
+
           const snippet =
             msg.body ||
             (msg.ticket
@@ -118,9 +129,11 @@ export function useChatUnread({
 
             notif.onclick = () => {
               window.focus();
+
               const targetUrl = isAdminRef.current
                 ? `/admin/chat?active=${msg.conversation_id}`
                 : `/chat?active=${msg.conversation_id}`;
+
               router.visit(targetUrl);
             };
           } catch (err) {
@@ -143,8 +156,8 @@ export function useChatUnread({
     publicChannel.listen('.ChatMessageRead', handleMessageRead);
 
     return () => {
-      (window as any).Echo.leave(privateChannelName);
-      (window as any).Echo.leave(publicChannelName);
+      echo.leave(privateChannelName);
+      echo.leave(publicChannelName);
     };
   }, [user?.id, isAdmin, playSound, faviconUrl]);
 

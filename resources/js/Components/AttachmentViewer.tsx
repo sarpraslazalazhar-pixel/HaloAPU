@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/Components/ui/dialog';
-import { ZoomIn, ZoomOut, Maximize, FileText, Download, ExternalLink } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize, FileText, Download } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 
 interface AttachmentViewerProps {

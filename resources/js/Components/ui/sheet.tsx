@@ -15,6 +15,7 @@ function SheetTrigger({ asChild, children, ...props }: SheetPrimitive.Trigger.Pr
  if (asChild && React.isValidElement(children)) {
  return <SheetPrimitive.Trigger data-slot="sheet-trigger" render={children} {...props} />
  }
+
  return <SheetPrimitive.Trigger data-slot="sheet-trigger" {...props}>{children}</SheetPrimitive.Trigger>
 }
 

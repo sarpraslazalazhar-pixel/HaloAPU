@@ -39,11 +39,16 @@ export function DataTable<T>({ columns, data, keyExtractor, emptyMessage = 'Tida
  <TableBody>
  {data.map((item) => (
  <TableRow key={keyExtractor(item)}>
- {columns.map((col) => (
- <TableCell key={col.key} className={cn(col.className)}>
- {col.render ? col.render(item) : String((item as any)[col.key] ?? '')}
- </TableCell>
- ))}
+          {columns.map((col) => {
+            // SAFETY: item is generic T; access via col.key fallback when col.render is absent.
+            const cellContent = col.render ? col.render(item) : String((item as any)[col.key] ?? '');
+
+            return (
+              <TableCell key={col.key} className={cn(col.className)}>
+                {cellContent}
+              </TableCell>
+            );
+          })}
  </TableRow>
  ))}
  </TableBody>

@@ -23,7 +23,9 @@ export default function FieldConfigDialog({
  label: '',
  tipe_field: 'teks_pendek',
  wajib: false,
+ // SAFETY: opsi is always a string[] when populated from form fields; the empty array literal needs explicit type to match useForm expectations.
  opsi: [] as string[],
+ // SAFETY: parent_field_id can be a string (from select), number (field id), or null; the union type is required for correct form submission handling.
  parent_field_id: '' as string | number | null,
  trigger_value: '',
  opsiString: '',
@@ -49,11 +51,13 @@ export default function FieldConfigDialog({
  const handleSubmit = (e: React.FormEvent) => {
  e.preventDefault();
  const payload = { ...data };
+
  if (tipeDenganOpsi.includes(payload.tipe_field) && payload.opsiString) {
  payload.opsi = payload.opsiString.split('\n').map(s => s.trim()).filter(s => s !== '');
  } else {
  payload.opsi = [];
  }
+
  payload.parent_field_id = payload.parent_field_id ? Number(payload.parent_field_id) : null;
 
  if (editField) {

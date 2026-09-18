@@ -46,6 +46,7 @@ export default function UnitOrganisasiIndex({ unitOrganisasis, divisis, filters 
 
  const handleEdit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editItem) {
  put(route('admin.master.unit-organisasi.update', editItem.id), {
  onSuccess: () => {

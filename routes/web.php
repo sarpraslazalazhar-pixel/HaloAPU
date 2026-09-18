@@ -21,20 +21,22 @@ Route::get('/', HomeController::class);
 Route::get('/tv', [\App\Http\Controllers\TvDashboardController::class, 'index'])->name('tv.index');
 Route::get('/system/notification-sound', [\App\Http\Controllers\Admin\SystemConfigController::class, 'serveNotificationSound'])->name('system.notification-sound');
 
-// System Optimization for Shared Hosting
-Route::get('/system/optimize', function() {
-    \Illuminate\Support\Facades\Artisan::call('config:cache');
-    \Illuminate\Support\Facades\Artisan::call('route:cache');
-    \Illuminate\Support\Facades\Artisan::call('view:cache');
-    return 'System optimized successfully. <a href="/">Go back to Home</a>';
-});
+// System Optimization for Shared Hosting (Protected: Admin Only)
+Route::middleware('auth:admin')->prefix('system')->group(function () {
+    Route::get('/optimize', function() {
+        \Illuminate\Support\Facades\Artisan::call('config:cache');
+        \Illuminate\Support\Facades\Artisan::call('route:cache');
+        \Illuminate\Support\Facades\Artisan::call('view:cache');
+        return 'System optimized successfully. <a href="/">Go back to Home</a>';
+    });
 
-Route::get('/system/clear', function() {
-    \Illuminate\Support\Facades\Artisan::call('config:clear');
-    \Illuminate\Support\Facades\Artisan::call('route:clear');
-    \Illuminate\Support\Facades\Artisan::call('view:clear');
-    \Illuminate\Support\Facades\Artisan::call('cache:clear');
-    return 'System cache cleared successfully. <a href="/">Go back to Home</a>';
+    Route::get('/clear', function() {
+        \Illuminate\Support\Facades\Artisan::call('config:clear');
+        \Illuminate\Support\Facades\Artisan::call('route:clear');
+        \Illuminate\Support\Facades\Artisan::call('view:clear');
+        \Illuminate\Support\Facades\Artisan::call('cache:clear');
+        return 'System cache cleared successfully. <a href="/">Go back to Home</a>';
+    });
 });
 
 Route::middleware('guest')->group(function () {

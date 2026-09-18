@@ -12,7 +12,9 @@ interface DateRangePickerProps {
 
 export function DateRangePicker({ dateFrom, dateTo, onDateFromChange, onDateToChange }: DateRangePickerProps) {
  const dates = [];
+
  if (dateFrom) dates.push(new Date(dateFrom));
+
  if (dateTo) dates.push(new Date(dateTo));
 
  const handleDateChange = (selectedDates: Date[]) => {
@@ -42,13 +44,13 @@ export function DateRangePicker({ dateFrom, dateTo, onDateFromChange, onDateToCh
  <Flatpickr
  value={dates}
  onChange={handleDateChange}
+ placeholder="Pilih rentang tanggal..."
  options={{
  mode: 'range',
  dateFormat: 'Y-m-d',
  altInput: true,
  altFormat: 'd/m/Y',
  allowInput: false,
- placeholder: 'Pilih rentang tanggal...'
  }}
  className="bg-transparent border-none outline-none text-sm w-full cursor-pointer h-8 placeholder-slate-400"
  />

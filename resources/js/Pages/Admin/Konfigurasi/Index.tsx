@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Head, useForm, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -9,10 +9,11 @@ import { Switch } from '@/Components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/Components/ui/tabs';
 
 const DAYS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const;
-const DAY_LABELS: Record<string, string> = {
+
+const DAY_LABELS = {
  senin: 'Senin', selasa: 'Selasa', rabu: 'Rabu', kamis: 'Kamis',
  jumat: 'Jumat', sabtu: 'Sabtu', minggu: 'Minggu',
-};
+} satisfies Record<string, string>;
 
 export default function KonfigurasiIndex({ configs }: any) {
  const { data, setData, put, processing, errors } = useForm({
@@ -51,11 +52,14 @@ export default function KonfigurasiIndex({ configs }: any) {
 
  const handleFileUpload = (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
  const file = e.target.files?.[0];
+
  if (!file) return;
  const formData = new window.FormData();
  formData.append(field, file);
  let routeName = 'admin.konfigurasi.upload-logo';
+
  if (field === 'banner') routeName = 'admin.konfigurasi.upload-banner';
+
  if (field === 'favicon') routeName = 'admin.konfigurasi.upload-favicon';
  
  router.post(route(routeName), formData, {
@@ -164,6 +168,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  <p className="text-xs text-muted-foreground mb-2">Format: MP3, WAV. Maks 5MB. (Diputar saat ada tiket baru)</p>
  <Input type="file" accept="audio/mp3,audio/wav" onChange={(e) => {
  const file = e.target.files?.[0];
+
  if (!file) return;
  const formData = new window.FormData();
  formData.append('sound', file);

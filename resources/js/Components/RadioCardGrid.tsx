@@ -3,19 +3,23 @@ import { Building2, HeartHandshake, Coins, Building } from 'lucide-react';
 import { DynamicIcon } from '@/Components/DynamicIcon';
 import { motion } from 'framer-motion';
 
-const divisiIcons: Record<string, React.ReactNode> = {
+const divisiIcons = {
   sekretariat: <Building2 className="w-6 h-6 mb-2 relative z-10" />,
   laz: <HeartHandshake className="w-6 h-6 mb-2 relative z-10" />,
   keuangan: <Coins className="w-6 h-6 mb-2 relative z-10" />,
-};
+} satisfies Record<string, React.ReactNode>;
 
 function getIconForOption(opt: any, labelKey: string) {
   if (opt.icon) {
     return <DynamicIcon name={opt.icon} className="w-6 h-6 mb-2 relative z-10" />;
   }
+
   const label = opt[labelKey] || '';
   const key = Object.keys(divisiIcons).find(k => label.toLowerCase().includes(k));
-  return key ? divisiIcons[key] : <Building className="w-6 h-6 mb-2 relative z-10" />;
+  // SAFETY: Look up matched division icon by key using keyof; fallback to default Building icon.
+  const matchedIcon = key ? divisiIcons[key as keyof typeof divisiIcons] : undefined;
+
+  return matchedIcon || <Building className="w-6 h-6 mb-2 relative z-10" />;
 }
 
 interface RadioCardGridProps {

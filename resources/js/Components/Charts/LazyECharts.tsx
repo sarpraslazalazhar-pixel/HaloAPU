@@ -6,7 +6,10 @@ const ReactEChartsCore = lazy(async () => {
         import('@/lib/echarts'),
         import('echarts-for-react/lib/core'),
     ]);
+
+    // SAFETY: Dynamic import of @/lib/echarts may export the ECharts instance as `.default` or directly; the `as any` is required to handle both module formats.
     const echarts = (echartsModule as any)?.default || echartsModule;
+    // SAFETY: echarts-for-react/lib/core may double-wrap its export in `.default.default` depending on the bundler; the `as any` is required to handle both CJS and ESM output.
     const CoreComponent = (coreModule as any)?.default?.default || (coreModule as any)?.default || coreModule;
 
     return {

@@ -9,7 +9,7 @@ import {
   CreditCard, DollarSign, Gift, Truck, CheckCircle, type LucideIcon
 } from 'lucide-react';
 
-const ICON_MAP: Record<string, LucideIcon> = {
+const ICON_MAP = {
   FileText, Wrench, Car, Building, Building2, Laptop, Server, 
   Printer, Wifi, User, Shield, HelpCircle, Phone, Mail, 
   Calendar, Clock, Key, Database, Settings, AlertCircle, 
@@ -17,7 +17,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
   Headphones, Image, Layers, Lock, MapPin, MessageSquare, 
   Monitor, Paperclip, Radio, Tv, Zap, Star, Heart,
   CreditCard, DollarSign, Gift, Truck, CheckCircle
-};
+} satisfies Record<string, LucideIcon>;
 
 interface DynamicIconProps {
   name?: string | null;
@@ -26,14 +26,17 @@ interface DynamicIconProps {
 }
 
 export function DynamicIcon({ name, className = 'w-5 h-5', fallback = 'FileText' }: DynamicIconProps) {
+  // SAFETY: Look up fallback icon in ICON_MAP using keyof; fallback to FileText component if not found.
+  const FallbackComponent = ICON_MAP[fallback as keyof typeof ICON_MAP] ?? FileText;
+
   if (!name) {
-    const FallbackComponent = ICON_MAP[fallback] || FileText;
     return <FallbackComponent className={className} />;
   }
 
   // Normalize name
   const formattedKey = name.charAt(0).toUpperCase() + name.slice(1);
-  const IconComponent = ICON_MAP[name] || ICON_MAP[formattedKey] || ICON_MAP[fallback] || FileText;
+  // SAFETY: Look up icon by exact or capitalized name in ICON_MAP; fallback to FallbackComponent if not found.
+  const IconComponent = ICON_MAP[name as keyof typeof ICON_MAP] ?? ICON_MAP[formattedKey as keyof typeof ICON_MAP] ?? FallbackComponent;
 
   return <IconComponent className={className} />;
 }

@@ -56,6 +56,7 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
  } else if (action === 'done') {
  await axios.patch(route('admin.notifications.done', { id }));
  }
+
  router.reload({ only: ['notifications'] });
  } catch (error) {
  console.error('Gagal memproses:', error);
@@ -69,10 +70,13 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
  const diffMinutes = Math.floor(diffMs / 60000);
 
  if (diffMinutes < 1) return 'Baru saja';
+
  if (diffMinutes < 60) return`${diffMinutes} menit lalu`;
  const diffHours = Math.floor(diffMinutes / 60);
+
  if (diffHours < 24) return`${diffHours} jam lalu`;
  const diffDays = Math.floor(diffHours / 24);
+
  return`${diffDays} hari lalu`;
  };
 
@@ -153,6 +157,7 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
  )}
  <div className="flex-1 cursor-pointer" onClick={() => {
  if (!notification.read_at) handleAction('read', notification.id);
+
  if (notification.data.aksi_url) window.location.href = notification.data.aksi_url;
  }}>
  <div className="flex items-center gap-2 mb-1">

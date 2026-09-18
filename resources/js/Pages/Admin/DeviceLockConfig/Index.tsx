@@ -387,6 +387,7 @@ export default function DeviceLockConfigIndex({ configs, stats, accounts, filter
                       {accounts.map((account, i) => {
                         const key = `${account.account_type}-${account.id}`;
                         const isExpanded = expandedAccount === key;
+
                         return (
                           <React.Fragment key={key}>
                             <tr

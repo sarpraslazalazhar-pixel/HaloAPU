@@ -1,8 +1,9 @@
-import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { Head, useForm, usePage } from '@inertiajs/react';
 import React, { FormEventHandler, useState, useEffect } from 'react';
 
 export default function ResetPassword({ token, email }: { token: string, email: string }) {
  const { appConfig } = usePage<any>().props;
+
  const { data, setData, post, processing, errors, reset } = useForm({
  token: token,
  email: email,

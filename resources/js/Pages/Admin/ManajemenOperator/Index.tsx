@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Shield, Pencil, Trash2, Plus, Search, UserCog, Phone, Unlock, Smartphone } from 'lucide-react';
+import { Shield, Pencil, Trash2, Plus, Search, UserCog, Phone, Unlock } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -83,7 +83,9 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
  role: '',
  name: '',
  no_wa: '',
+ // SAFETY: sub_units stores assigned subunit IDs as an array of numbers.
  sub_units: [] as number[],
+ // SAFETY: units stores assigned unit IDs as an array of numbers.
  units: [] as number[],
  });
 
@@ -112,6 +114,7 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
 
  const handleSubmit = (e: React.FormEvent) => {
  e.preventDefault();
+
  if (editing) {
  put(route('admin.manajemen-operator.update', editing.id), {
  onSuccess: () => { setOpen(false); reset(); setEditing(null); },

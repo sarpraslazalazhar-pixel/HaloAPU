@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Button } from '@/Components/ui/button';
 import { Badge } from '@/Components/ui/badge';
@@ -20,9 +20,6 @@ import {
     RefreshCw,
     Info,
     User,
-    ChevronRight,
-    CornerDownLeft,
-    CheckCheck
 } from 'lucide-react';
 
 interface QuickMetrics {
@@ -134,16 +131,20 @@ function FormattedContent({ text }: { text: string }) {
 
     const renderInline = (str: string): React.ReactNode => {
         const parts = str.split(/(\*\*.*?\*\*|\*.*?\*|`.*?`)/g);
+
         return parts.map((part, idx) => {
             if (part.startsWith('**') && part.endsWith('**')) {
                 return <strong key={idx} className="font-semibold text-zinc-900">{part.slice(2, -2)}</strong>;
             }
+
             if (part.startsWith('*') && part.endsWith('*')) {
                 return <em key={idx} className="italic text-zinc-800">{part.slice(1, -1)}</em>;
             }
+
             if (part.startsWith('`') && part.endsWith('`')) {
                 return <code key={idx} className="bg-zinc-100 text-sky-700 border border-zinc-200 px-1.5 py-0.5 rounded text-xs font-mono">{part.slice(1, -1)}</code>;
             }
+
             return part;
         });
     };
@@ -154,29 +155,36 @@ function FormattedContent({ text }: { text: string }) {
         if (trimmed.startsWith('```')) {
             if (inCodeBlock) {
                 const el = flushCodeBlock(`code-${index}`);
+
                 if (el) elements.push(el);
             } else {
                 inCodeBlock = true;
             }
+
             return;
         }
 
         if (inCodeBlock) {
             codeBlockContent.push(line);
+
             return;
         }
 
         // Table row
         if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
             const cols = trimmed.split('|').slice(1, -1);
+
             if (cols.every(c => /^[:\-\s]+$/.test(c))) {
                 return;
             }
+
             inTable = true;
             tableRows.push(cols);
+
             return;
         } else if (inTable) {
             const el = flushTable(`table-${index}`);
+
             if (el) elements.push(el);
         }
 
@@ -188,8 +196,10 @@ function FormattedContent({ text }: { text: string }) {
                     {renderInline(trimmed.replace(/^###\s+/, ''))}
                 </h4>
             );
+
             return;
         }
+
         if (trimmed.startsWith('## ')) {
             elements.push(
                 <h3 key={`h2-${index}`} className="text-base font-bold text-zinc-900 mt-4 mb-2 border-b border-zinc-200 pb-1.5 flex items-center gap-2">
@@ -197,6 +207,7 @@ function FormattedContent({ text }: { text: string }) {
                     {renderInline(trimmed.replace(/^##\s+/, ''))}
                 </h3>
             );
+
             return;
         }
 
@@ -207,6 +218,7 @@ function FormattedContent({ text }: { text: string }) {
                     {renderInline(trimmed.replace(/^>\s+/, ''))}
                 </blockquote>
             );
+
             return;
         }
 
@@ -217,6 +229,7 @@ function FormattedContent({ text }: { text: string }) {
                     {renderInline(trimmed.replace(/^[-*]\s+/, ''))}
                 </li>
             );
+
             return;
         }
 
@@ -227,18 +240,21 @@ function FormattedContent({ text }: { text: string }) {
                     {renderInline(trimmed.replace(/^\d+\.\s+/, ''))}
                 </li>
             );
+
             return;
         }
 
         // Divider
         if (trimmed === '---' || trimmed === '***') {
             elements.push(<hr key={`hr-${index}`} className="my-3 border-zinc-200" />);
+
             return;
         }
 
         // Empty line
         if (trimmed === '') {
             elements.push(<div key={`empty-${index}`} className="h-1.5"></div>);
+
             return;
         }
 
@@ -252,10 +268,13 @@ function FormattedContent({ text }: { text: string }) {
 
     if (inCodeBlock) {
         const el = flushCodeBlock('code-end');
+
         if (el) elements.push(el);
     }
+
     if (inTable) {
         const el = flushTable('table-end');
+
         if (el) elements.push(el);
     }
 
@@ -285,16 +304,20 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
     useEffect(() => {
         try {
             const saved = localStorage.getItem(STORAGE_KEY);
+
             if (saved) {
                 const parsed = JSON.parse(saved);
+
                 if (Array.isArray(parsed) && parsed.length > 0) {
                     setMessages(parsed);
+
                     return;
                 }
             }
         } catch (e) {
             console.error('Failed to parse chat history from localStorage', e);
         }
+
         setMessages([welcomeMessage]);
     }, []);
 
@@ -324,6 +347,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
 
     const handleSendMessage = async (textToSend?: string) => {
         const query = (textToSend || input).trim();
+
         if (!query || loading) return;
 
         const userMsg: ChatMessage = {
@@ -363,6 +387,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
             setMessages(prev => [...prev, botMsg]);
         } catch (error: any) {
             console.error('Chat error', error);
+
             const errorMsg: ChatMessage = {
                 id: 'err-' + Date.now(),
                 role: 'model',
@@ -370,6 +395,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
                 timestamp: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
                 isFallback: true,
             };
+
             setMessages(prev => [...prev, errorMsg]);
         } finally {
             setLoading(false);
@@ -613,6 +639,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
                             </span>
                             {SUGGESTION_PROMPTS.map((item, idx) => {
                                 const Icon = item.icon;
+
                                 return (
                                     <button
                                         key={idx}

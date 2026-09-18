@@ -53,6 +53,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  const todayDate = new Date();
  todayDate.setMinutes(todayDate.getMinutes() - todayDate.getTimezoneOffset());
  const minDate = todayDate.toISOString().split('T')[0];
+
  return (
  <input
  type="date"
@@ -64,6 +65,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  />
  );
  }
+
  case 'waktu':
  return (
  <input
@@ -78,6 +80,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  const todayDateTime = new Date();
  todayDateTime.setMinutes(todayDateTime.getMinutes() - todayDateTime.getTimezoneOffset());
  const minDateTime = todayDateTime.toISOString().slice(0, 16);
+
  return (
  <input
  type="datetime-local"
@@ -89,6 +92,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  />
  );
  }
+
  case 'dropdown':
  return (
  <select
@@ -108,6 +112,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  <div className="flex flex-wrap justify-center gap-3">
  {(field.opsi || []).map((opt, i) => {
  const isSelected = value === opt;
+
  return (
  <button
  key={i}
@@ -140,6 +145,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  {(field.opsi || []).map((opt, i) => {
  const current = value || [];
  const isSelected = current.includes(opt);
+
  return (
  <button
  key={i}
@@ -148,6 +154,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  const newValue = isSelected
  ? current.filter((v: string) => v !== opt)
  : [...current, opt];
+
  onChange(field.id, newValue);
  }}
  className={`flex-1 basis-[150px] max-w-[220px] p-3 border rounded-lg text-center flex flex-col items-center justify-center gap-1 transition-all font-medium text-sm
@@ -165,6 +172,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
 
  case 'nominal_rp': {
  const displayValue = value ? new Intl.NumberFormat('id-ID').format(Number(value)) : '';
+
  return (
  <div className="relative">
  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Rp</span>
@@ -181,6 +189,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  </div>
  );
  }
+
  case 'upload_gambar':
  case 'upload_file':
  return (
@@ -191,6 +200,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  accept={field.tipe_field === 'upload_gambar' ? 'image/*' : undefined}
  onChange={e => {
  const file = e.target.files?.[0] || null;
+
  if (field.tipe_field === 'upload_gambar' && file && file.type.startsWith('image/')) {
  setSelectedImageFile(file);
  setEditorOpen(true);

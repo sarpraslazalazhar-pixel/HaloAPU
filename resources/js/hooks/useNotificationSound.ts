@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
 
 interface UseNotificationSoundOptions {
@@ -16,6 +16,7 @@ interface UseNotificationSoundReturn {
 
 // Global audio instance so we don't create multiple overlapping players
 let globalAudioInstance: HTMLAudioElement | null = null;
+
 let currentSoundUrl: string = '';
 
 /**
@@ -33,8 +34,10 @@ export function useNotificationSound({
   const [isMuted, setIsMuted] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('notification_sound_muted');
+
       return saved === 'true';
     }
+
     return false;
   });
 

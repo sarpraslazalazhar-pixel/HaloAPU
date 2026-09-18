@@ -26,6 +26,7 @@ export function FileDropzone({ onFilesSelected, accept = '*', multiple = false, 
  const handleDrop = (e: React.DragEvent) => {
  e.preventDefault();
  setIsDragging(false);
+
  if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
  onFilesSelected(e.dataTransfer.files);
  }

@@ -46,6 +46,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
     const next = statusFilter.includes(s)
       ? statusFilter.filter(x => x !== s)
       : [...statusFilter, s];
+
     setStatusFilter(next);
   };
 
@@ -118,6 +119,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
                         {statuses.map(s => {
                           const labels: any = { open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', waiting_approval: 'Menunggu Review', need_revision: 'Butuh Revisi' };
                           const isSelected = statusFilter.includes(s);
+
                           return (
                             <motion.div
                               key={s}

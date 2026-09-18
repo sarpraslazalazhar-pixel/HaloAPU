@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { useForm, router, usePage } from '@inertiajs/react';
+import { useForm, router } from '@inertiajs/react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
@@ -21,6 +21,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  const fileInputRef = useRef<HTMLInputElement>(null);
  const [uploading, setUploading] = useState(false);
  const [imgSrc, setImgSrc] = useState('');
+
  const [crop, setCrop] = useState<Crop>({
  unit: '%',
  width: 100,
@@ -28,10 +29,11 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  x: 0,
  y: 0
  });
+
  const [completedCrop, setCompletedCrop] = useState<PixelCrop | null>(null);
  const imgRef = useRef<HTMLImageElement>(null);
 
- const { data, setData, put, processing, errors, reset } = useForm({
+ const { data, setData, put, processing, errors, reset: _reset } = useForm({
  name: user?.name || user?.username || '',
  username: user?.username || '',
  email: user?.email || '',
@@ -74,11 +76,15 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  const handleAvatarSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
  if (e.target.files && e.target.files.length > 0) {
  const file = e.target.files[0];
+
  if (file.size > 5 * 1024 * 1024) {
  alert('Ukuran foto maksimal 5 MB.');
+
  if (fileInputRef.current) fileInputRef.current.value = '';
+
  return;
  }
+
  const reader = new FileReader();
  reader.addEventListener('load', () =>
  setImgSrc(reader.result?.toString() || '')
@@ -96,6 +102,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
  canvas.width = completedCrop.width;
  canvas.height = completedCrop.height;
  const ctx = canvas.getContext('2d');
+
  if (!ctx) return;
  ctx.drawImage(
  image,
@@ -282,8 +289,10 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
                       onClick={() => {
                         if (!('Notification' in window)) {
                           alert('Browser Anda tidak mendukung notifikasi.');
+
                           return;
                         }
+
                         Notification.requestPermission().then((permission) => {
                           if (permission === 'granted') {
                             alert('Izin notifikasi diberikan!');

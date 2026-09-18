@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  FileText, Download, Eye, Image as ImageIcon, FileCode, 
+  FileText, Download, Eye, Image as ImageIcon,
   FileArchive, ShieldCheck, MessageSquare, Layers, Paperclip 
 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -39,29 +39,37 @@ interface TicketAttachmentListProps {
 
 const formatFileSize = (bytes?: number | null): string => {
   if (!bytes || bytes <= 0) return '';
+
   if (bytes < 1024) return `${bytes} B`;
+
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
 const getFileIcon = (filename: string, mime?: string | null) => {
   const ext = filename?.split('.').pop()?.toLowerCase() || '';
+
   if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg'].includes(ext) || mime?.startsWith('image/')) {
     return <ImageIcon className="h-4 w-4 text-emerald-500 shrink-0" />;
   }
+
   if (['zip', 'rar', '7z', 'tar', 'gz'].includes(ext)) {
     return <FileArchive className="h-4 w-4 text-amber-500 shrink-0" />;
   }
+
   if (ext === 'pdf') {
     return <FileText className="h-4 w-4 text-red-500 shrink-0" />;
   }
+
   if (['doc', 'docx'].includes(ext)) {
     return <FileText className="h-4 w-4 text-blue-500 shrink-0" />;
   }
+
   return <FileText className="h-4 w-4 text-slate-400 shrink-0" />;
 };
 
-const statusNameMap: Record<string, string> = {
+const statusNameMap = {
   open: 'Baru',
   on_proses: 'Diproses',
   pending: 'Tertunda',
@@ -70,7 +78,7 @@ const statusNameMap: Record<string, string> = {
   assign_operator: 'Penugasan Operator',
   revisi: 'Revisi',
   balasan: 'Balasan',
-};
+} satisfies Record<string, string>;
 
 export function TicketAttachmentList({ attachments, downloadRoute, grouped = false }: TicketAttachmentListProps) {
   if (!attachments?.length) return null;
@@ -80,19 +88,23 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
   const renderAttachmentRow = (att: Attachment, showOriginBadge: boolean = true) => {
     const filename = att.original_name || att.file_path?.split('/').pop() || 'Berkas Lampiran';
     const sizeStr = formatFileSize(att.file_size);
+    // SAFETY: Look up status name in statusNameMap using keyof; fallback to raw aksi string if unknown.
+    const actionLabel = (att.log?.aksi ? statusNameMap[att.log.aksi as keyof typeof statusNameMap] : undefined) || att.log?.aksi;
 
     return (
       <div 
         key={att.id} 
         className="flex flex-col sm:flex-row sm:items-center justify-between p-3 border border-slate-200 rounded-lg bg-white hover:bg-slate-50/70 transition-colors gap-3"
       >
-        <div className="flex items-center gap-3 min-w-0 flex-1">
-          {getFileIcon(filename, att.mime_type)}
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="p-2 bg-slate-100 rounded-lg text-slate-600 shrink-0 mt-0.5">
+            {getFileIcon(filename, att.mime_type)}
+          </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-slate-800 truncate" title={filename}>
               {filename}
             </p>
-            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
               {sizeStr && (
                 <span className="text-xs text-slate-400 font-mono">{sizeStr}</span>
               )}
@@ -105,7 +117,7 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
 
               {showOriginBadge && att.log && (
                 <span className="text-[11px] bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded border border-emerald-100 font-medium flex items-center gap-1">
-                  <span>Status: {statusNameMap[att.log.aksi] || att.log.aksi}</span>
+                  <span>Status: {actionLabel}</span>
                   {att.log.admin && (
                     <span className="text-slate-500 font-normal">
                       • {att.log.admin.name || att.log.admin.username}

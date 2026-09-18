@@ -15,8 +15,9 @@ interface StepperProps {
 }
 
 export function Stepper({ steps, activeStep, className }: StepperProps) {
+  // SAFETY: StepItem has a label property, whereas a primitive string evaluates to undefined for .label.
   const normalizedSteps: StepItem[] = steps.map((step) =>
-    typeof step === 'string' ? { label: step } : step
+    (step as StepItem).label !== undefined ? (step as StepItem) : { label: String(step) }
   );
 
   const progressPercentage = (activeStep / (normalizedSteps.length - 1)) * 100;

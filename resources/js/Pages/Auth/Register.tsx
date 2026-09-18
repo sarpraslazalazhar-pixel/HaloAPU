@@ -3,6 +3,7 @@ import React from 'react';
 
 export default function Register() {
  const { appConfig } = usePage<any>().props;
+
  return (
  <>
  <Head title="Daftar Akun - Halo APU" />

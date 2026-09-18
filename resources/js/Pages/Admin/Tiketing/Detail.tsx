@@ -8,36 +8,37 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Download, Eye, Clock, Edit2, MessageSquare, Paperclip, Info } from 'lucide-react';
+import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info } from 'lucide-react';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
 
-
-const validTransitions: Record<string, string[]> = {
+const validTransitions = {
   open: ['on_proses', 'reject', 'pending'],
   on_proses: ['solve', 'pending', 'reject'],
   pending: ['on_proses'],
   need_revision: ['solve', 'pending', 'reject'],
-};
+} satisfies Record<string, string[]>;
 
-const statusLabels: Record<string, string> = {
+const statusLabels = {
   open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', need_revision: 'Butuh Revisi', accepted: 'Diterima User',
-};
+} satisfies Record<string, string>;
 
 export default function TicketDetail({ ticket, formFields, operators }: any) {
+  // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as any;
-  const admin = auth?.admin || auth?.user;
   const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
 
   const [editorOpen, setEditorOpen] = useState(false);
   const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // SAFETY: general_attachments is initialized as an empty array of uploaded File instances.
   const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
   const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
-  const { data: assignData, setData: setAssignData, patch: patchAssign, processing: processingAssign, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
+  const { data: assignData, setData: setAssignData, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
 
-  const transitions = validTransitions[ticket.status] || [];
+  // SAFETY: Look up ticket transitions by status using keyof; fallback to empty array if unknown.
+  const transitions = (ticket?.status ? validTransitions[ticket.status as keyof typeof validTransitions] : undefined) || [];
 
   useEffect(() => {
     setAssignData('assigned_admin_id', ticket.assigned_admin_id || '');
@@ -72,6 +73,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
         preserveScroll: true,
         onSuccess: () => {
           resetStatus();
+
           if (isOperatorChanged) {
             router.patch(route('admin.tiket.assign', ticket.id), {
               assigned_admin_id: selectedAssignedId,
@@ -104,6 +106,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
         },
         onError: () => setIsSubmitting(false),
       });
+
       return;
     }
 
@@ -128,6 +131,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
         },
         onError: () => setIsSubmitting(false),
       });
+
       return;
     }
 
@@ -140,6 +144,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
         preserveScroll: true,
         onFinish: () => setIsSubmitting(false),
       });
+
       return;
     }
 
@@ -149,6 +154,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
  const renderFormValue = (field: any) => {
    if (field.tipe_field === 'upload_gambar' || field.tipe_field === 'upload_file') {
      const fieldAttachments = ticket.attachments?.filter((a: any) => a.field_id == field.id);
+
      return fieldAttachments && fieldAttachments.length > 0 ? (
        <div className="flex flex-col gap-2 mt-1">
          {fieldAttachments.map((attachment: any, idx: number) => (
@@ -163,17 +169,23 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
    }
 
    const value = ticket.form_data?.[field.id];
+
    if (value === undefined || value === null || value === '') return '-';
+
    if (field.tipe_field === 'nominal_rp') {
      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(Number(value) || 0);
    }
-   if (field.tipe_field === 'checkbox' && typeof value === 'boolean') return value ? 'Ya' : 'Tidak';
+
+   if (field.tipe_field === 'checkbox') return value ? 'Ya' : 'Tidak';
+
    if (field.tipe_field === 'multi_pilih' && Array.isArray(value)) return value.join(', ');
    
    const stringValue = String(value);
    const urlRegex = /(https?:\/\/[^\s]+)/g;
+
    if (urlRegex.test(stringValue)) {
      const parts = stringValue.split(urlRegex);
+
      return (
        <>
          {parts.map((part, i) => {
@@ -184,6 +196,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                </a>
              );
            }
+
            return <span key={i}>{part}</span>;
          })}
        </>
@@ -191,12 +204,6 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
    }
    
    return stringValue;
- };
-
- const currentUser = {
-   id: admin?.id,
-   name: admin?.name || admin?.username,
-   type: 'admin' as const,
  };
 
  return (
@@ -285,7 +292,12 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                           >
                             <option value="">Pilih status baru (opsional jika hanya tugaskan operator)</option>
                             {transitions.map((s: string) => (
-                              <option key={s} value={s}>{statusLabels[s] || s}</option>
+                              <option key={s} value={s}>
+                                {
+                                  // SAFETY: Look up human status label by status code using keyof; fallback to raw status code.
+                                  statusLabels[s as keyof typeof statusLabels] || s
+                                }
+                              </option>
                             ))}
                           </select>
                           {errorsStatus.status && <p className="text-red-500 text-sm">{errorsStatus.status}</p>}
@@ -344,14 +356,21 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                                 className="hidden"
                                 onChange={e => {
                                   const files = Array.from(e.target.files || []);
+
                                   if (statusData.general_attachments.length + files.length > 3) {
                                     alert('Maksimal hanya 3 lampiran.');
+
                                     return;
                                   }
+
                                   const validFiles = files.filter(f => {
-                                    if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`); return false; }
+                                    if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`);
+
+ return false; }
+
                                     return true;
                                   });
+
                                   setStatusData('general_attachments', [...statusData.general_attachments, ...validFiles]);
                                   e.target.value = '';
                                 }}
@@ -620,6 +639,7 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
              newFiles[fileToEdit.index] = editedFile;
              setStatusData('general_attachments', newFiles);
            }
+
            setEditorOpen(false);
          }}
        />

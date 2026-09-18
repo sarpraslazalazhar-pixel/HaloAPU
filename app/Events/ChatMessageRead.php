@@ -15,13 +15,15 @@ class ChatMessageRead implements ShouldBroadcastNow
     public int $conversationId;
     public string $userType;
     public int $userId;
+    public int $readCount;
     public string $readAt;
 
-    public function __construct(int $conversationId, string $userType, int $userId)
+    public function __construct(int $conversationId, string $userType, int $userId, int $readCount = 0)
     {
         $this->conversationId = $conversationId;
         $this->userType = $userType;
         $this->userId = $userId;
+        $this->readCount = $readCount;
         $this->readAt = now()->toIso8601String();
     }
 

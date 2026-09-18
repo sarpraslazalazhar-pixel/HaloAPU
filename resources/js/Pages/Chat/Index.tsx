@@ -219,10 +219,17 @@ export default function UserChatIndex({
   const handleSelectConversation = async (id: number) => {
     if (id === activeId && currentConv) return;
 
+    const targetConv = convList.find((c) => c.id === id);
+    const unreadToClear = targetConv?.unread_count || 0;
+
     setActiveId(id);
     setConvList((prev) =>
       prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c))
     );
+
+    if (unreadToClear > 0) {
+      window.dispatchEvent(new CustomEvent('chat:unread-cleared', { detail: { count: unreadToClear } }));
+    }
 
     window.history.pushState({ activeId: id }, '', `/chat?active=${id}`);
 

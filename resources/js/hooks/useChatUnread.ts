@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { router, usePage } from '@inertiajs/react';
+import { z } from 'zod';
 import { useChatSound } from './useChatSound';
+
+const unreadClearedDetailSchema = z.object({
+  count: z.number().positive().optional(),
+});
 
 interface UseChatUnreadOptions {
   user: any;
@@ -74,7 +79,7 @@ export function useChatUnread({
       const currentUser = userRef.current;
 
       const isSelf =
-        msg.sender_id === currentUser?.id &&
+        Number(msg.sender_id) === Number(currentUser?.id) &&
         ((isAdminRef.current && msg.sender_type?.includes('Admin')) ||
           (!isAdminRef.current && msg.sender_type?.includes('User')));
 
@@ -144,8 +149,11 @@ export function useChatUnread({
     };
 
     const handleMessageRead = (e: any) => {
-      if (e.userId === user.id) {
-        setUnreadCount((prev) => Math.max(0, prev - 1));
+      const currentUserId = userRef.current?.id;
+
+      if (Number(e.userId) === Number(currentUserId)) {
+        const decrement = e.readCount && e.readCount > 0 ? e.readCount : 1;
+        setUnreadCount((prev) => Math.max(0, prev - decrement));
       }
     };
 
@@ -160,6 +168,27 @@ export function useChatUnread({
       echo.leave(publicChannelName);
     };
   }, [user?.id, isAdmin, playSound, faviconUrl]);
+
+  // Listen to local custom event when chat messages are marked as read within Chat page
+  useEffect(() => {
+    const handleUnreadCleared = (e: Event) => {
+      if (e instanceof CustomEvent) {
+        const parsed = unreadClearedDetailSchema.safeParse(e.detail);
+
+        if (parsed.success && parsed.data.count !== undefined) {
+          setUnreadCount((prev) => Math.max(0, prev - parsed.data.count));
+
+          return;
+        }
+      }
+
+      router.reload({ only: ['unread_chat_count'] });
+    };
+
+    window.addEventListener('chat:unread-cleared', handleUnreadCleared);
+
+    return () => window.removeEventListener('chat:unread-cleared', handleUnreadCleared);
+  }, []);
 
   return { unreadCount, setUnreadCount };
 }

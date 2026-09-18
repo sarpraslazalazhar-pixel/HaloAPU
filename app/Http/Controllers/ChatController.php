@@ -68,69 +68,16 @@ class ChatController extends Controller
               });
         });
 
-        $conversations = $query->orderByDesc('last_message_at')
+        $rawConversations = $query->orderByDesc('last_message_at')
             ->orderByDesc('updated_at')
-            ->get()
-            ->map(function ($conv) use ($user, $assignedAdminIds) {
-                $unreadCount = Message::where('conversation_id', $conv->id)
-                    ->where('sender_type', '!=', User::class)
-                    ->whereDoesntHave('reads', function ($q) use ($user) {
-                        $q->where('user_type', User::class)->where('user_id', $user->id);
-                    })
-                    ->count();
-
-                $latestMsg = $conv->latestMessage;
-
-                $target = null;
-                if ($conv->type === 'public_global') {
-                    $title = 'Forum Bantuan Halo APU';
-                    $subtitle = 'Grup Publik';
-                    $avatar = null;
-                    $isAssigned = false;
-                } else {
-                    $target = $conv->adminOne;
-                    $title = $target ? ($target->name ?? $target->username) : 'Admin';
-                    $isAssigned = in_array($conv->admin_one_id, $assignedAdminIds);
-                    $subtitle = $isAssigned ? 'Admin (Ditugaskan)' : 'Admin';
-                    $avatar = $target && $target->avatar_path ? '/storage/' . $target->avatar_path : null;
-                }
-
-                $isLastMessageRead = false;
-                if ($latestMsg) {
-                    $isLastMessageRead = $latestMsg->reads()
-                        ->where(function ($rq) use ($latestMsg) {
-                            $rq->where('user_id', '!=', $latestMsg->sender_id)
-                               ->orWhere('user_type', '!=', $latestMsg->sender_type);
-                        })
-                        ->exists();
-                }
-
-                return [
-                    'id' => $conv->id,
-                    'title' => $title,
-                    'subtitle' => $subtitle,
-                    'is_assigned' => $isAssigned,
-                    'user' => [
-                        'id' => $target?->id,
-                        'name' => $target ? ($target->name ?? $target->username) : null,
-                        'avatar' => $avatar,
-                        'last_seen_at' => $target?->last_seen_at ? $target->last_seen_at->toIso8601String() : null,
-                    ],
-                    'last_message' => $latestMsg ? ($latestMsg->body ?? ($latestMsg->attachments->first() ? '[Lampiran]' : '[Tiket]')) : 'Belum ada pesan',
-                    'last_message_at' => $conv->last_message_at ? $conv->last_message_at->toIso8601String() : $conv->updated_at->toIso8601String(),
-                    'last_message_sender_id' => $latestMsg?->sender_id,
-                    'last_message_sender_type' => $latestMsg?->sender_type,
-                    'is_last_message_read' => $isLastMessageRead,
-                    'unread_count' => $unreadCount,
-                ];
-            });
+            ->get();
 
         $activeConversationId = $request->query('active');
 
-        if (!$activeConversationId && $conversations->isNotEmpty()) {
+        if (!$activeConversationId && $rawConversations->isNotEmpty()) {
             // Priority to support chat if no active selected
-            $supportItem = $conversations->where('title', 'Forum Bantuan Halo APU')->first();
-            $activeConversationId = $supportItem ? $supportItem['id'] : $conversations->first()['id'];
+            $supportItem = $rawConversations->where('type', 'public_global')->first();
+            $activeConversationId = $supportItem ? $supportItem->id : $rawConversations->first()->id;
         }
 
         $activeMessages = [];
@@ -168,7 +115,10 @@ class ChatController extends Controller
 
                 // Mark unread messages as read
                 $unreadMessages = Message::where('conversation_id', $activeConv->id)
-                    ->where('sender_type', '!=', User::class)
+                    ->where(function ($sq) use ($user) {
+                        $sq->where('sender_type', '!=', User::class)
+                           ->orWhere('sender_id', '!=', $user->id);
+                    })
                     ->whereDoesntHave('reads', function ($q) use ($user) {
                         $q->where('user_type', User::class)->where('user_id', $user->id);
                     })
@@ -185,7 +135,8 @@ class ChatController extends Controller
                 }
 
                 if ($unreadMessages->isNotEmpty()) {
-                    broadcast(new ChatMessageRead($activeConv->id, User::class, $user->id))->toOthers();
+                    \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
+                    broadcast(new ChatMessageRead($activeConv->id, User::class, $user->id, $unreadMessages->count()));
                 }
 
                 $rawMessages = Message::where('conversation_id', $activeConv->id)
@@ -241,6 +192,63 @@ class ChatController extends Controller
                 });
             }
         }
+
+        $conversations = $rawConversations->map(function ($conv) use ($user, $assignedAdminIds) {
+            $unreadCount = Message::where('conversation_id', $conv->id)
+                ->where(function ($sq) use ($user) {
+                    $sq->where('sender_type', '!=', User::class)
+                       ->orWhere('sender_id', '!=', $user->id);
+                })
+                ->whereDoesntHave('reads', function ($q) use ($user) {
+                    $q->where('user_type', User::class)->where('user_id', $user->id);
+                })
+                ->count();
+
+            $latestMsg = $conv->latestMessage;
+
+            $target = null;
+            if ($conv->type === 'public_global') {
+                $title = 'Forum Bantuan Halo APU';
+                $subtitle = 'Grup Publik';
+                $avatar = null;
+                $isAssigned = false;
+            } else {
+                $target = $conv->adminOne;
+                $title = $target ? ($target->name ?? $target->username) : 'Admin';
+                $isAssigned = in_array($conv->admin_one_id, $assignedAdminIds);
+                $subtitle = $isAssigned ? 'Admin (Ditugaskan)' : 'Admin';
+                $avatar = $target && $target->avatar_path ? '/storage/' . $target->avatar_path : null;
+            }
+
+            $isLastMessageRead = false;
+            if ($latestMsg) {
+                $isLastMessageRead = $latestMsg->reads()
+                    ->where(function ($rq) use ($latestMsg) {
+                        $rq->where('user_id', '!=', $latestMsg->sender_id)
+                           ->orWhere('user_type', '!=', $latestMsg->sender_type);
+                    })
+                    ->exists();
+            }
+
+            return [
+                'id' => $conv->id,
+                'title' => $title,
+                'subtitle' => $subtitle,
+                'is_assigned' => $isAssigned,
+                'user' => [
+                    'id' => $target?->id,
+                    'name' => $target ? ($target->name ?? $target->username) : null,
+                    'avatar' => $avatar,
+                    'last_seen_at' => $target?->last_seen_at ? $target->last_seen_at->toIso8601String() : null,
+                ],
+                'last_message' => $latestMsg ? ($latestMsg->body ?? ($latestMsg->attachments->first() ? '[Lampiran]' : '[Tiket]')) : 'Belum ada pesan',
+                'last_message_at' => $conv->last_message_at ? $conv->last_message_at->toIso8601String() : $conv->updated_at->toIso8601String(),
+                'last_message_sender_id' => $latestMsg?->sender_id,
+                'last_message_sender_type' => $latestMsg?->sender_type,
+                'is_last_message_read' => $isLastMessageRead,
+                'unread_count' => $unreadCount,
+            ];
+        });
 
         return Inertia::render('Chat/Index', [
             'conversations' => $conversations,
@@ -374,7 +382,10 @@ class ChatController extends Controller
         $user = Auth::user();
 
         $unreadMessages = Message::where('conversation_id', $conversation->id)
-            ->where('sender_type', '!=', User::class)
+            ->where(function ($sq) use ($user) {
+                $sq->where('sender_type', '!=', User::class)
+                   ->orWhere('sender_id', '!=', $user->id);
+            })
             ->whereDoesntHave('reads', function ($q) use ($user) {
                 $q->where('user_type', User::class)->where('user_id', $user->id);
             })
@@ -391,7 +402,8 @@ class ChatController extends Controller
         }
 
         if ($unreadMessages->isNotEmpty()) {
-            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id))->toOthers();
+            \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
+            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unreadMessages->count()));
         }
 
         return response()->json(['success' => true]);
@@ -421,7 +433,10 @@ class ChatController extends Controller
 
         // Mark as read
         $unreadMessages = Message::where('conversation_id', $conversation->id)
-            ->where('sender_type', '!=', User::class)
+            ->where(function ($sq) use ($user) {
+                $sq->where('sender_type', '!=', User::class)
+                   ->orWhere('sender_id', '!=', $user->id);
+            })
             ->whereDoesntHave('reads', function ($q) use ($user) {
                 $q->where('user_type', User::class)->where('user_id', $user->id);
             })
@@ -438,7 +453,8 @@ class ChatController extends Controller
         }
 
         if ($unreadMessages->isNotEmpty()) {
-            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id))->toOthers();
+            \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
+            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unreadMessages->count()));
         }
 
         if ($conversation->type === 'public_global') {

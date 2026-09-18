@@ -70,22 +70,24 @@ class HandleInertiaRequests extends Middleware
 
     protected function getUnreadChatCount(Request $request): int
     {
-        $admin = $request->user('admin');
-        if ($admin) {
-            return (int) \Illuminate\Support\Facades\Cache::remember(
-                "unread_chat_admin_{$admin->id}",
-                30,
-                fn () => $this->calculateUnreadChatCountForAdmin($admin)
-            );
-        }
-
-        $user = $request->user('web');
-        if ($user) {
-            return (int) \Illuminate\Support\Facades\Cache::remember(
-                "unread_chat_user_{$user->id}",
-                30,
-                fn () => $this->calculateUnreadChatCountForUser($user)
-            );
+        if ($request->is('admin*')) {
+            $admin = $request->user('admin') ?? $request->user('web');
+            if ($admin instanceof Admin) {
+                return (int) \Illuminate\Support\Facades\Cache::remember(
+                    "unread_chat_admin_{$admin->id}",
+                    30,
+                    fn () => $this->calculateUnreadChatCountForAdmin($admin)
+                );
+            }
+        } else {
+            $user = $request->user('web') ?? $request->user('admin');
+            if ($user instanceof User) {
+                return (int) \Illuminate\Support\Facades\Cache::remember(
+                    "unread_chat_user_{$user->id}",
+                    30,
+                    fn () => $this->calculateUnreadChatCountForUser($user)
+                );
+            }
         }
 
         return 0;
@@ -123,7 +125,10 @@ class HandleInertiaRequests extends Middleware
             $q->where('type', 'public_global')
               ->orWhere('user_id', $user->id);
         })
-        ->where('sender_type', '!=', \App\Models\User::class)
+        ->where(function ($sq) use ($user) {
+            $sq->where('sender_type', '!=', \App\Models\User::class)
+               ->orWhere('sender_id', '!=', $user->id);
+        })
         ->whereDoesntHave('reads', function ($rq) use ($user) {
             $rq->where('user_type', \App\Models\User::class)->where('user_id', $user->id);
         })

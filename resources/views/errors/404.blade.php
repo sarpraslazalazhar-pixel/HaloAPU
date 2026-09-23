@@ -1,317 +1,463 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>404 — Halaman Tidak Ditemukan | Halo APU</title>
+  @php
+      $favicon = \App\Models\SystemConfig::getValue('favicon_path');
+      $logo = \App\Models\SystemConfig::getValue('logo_path');
+      $imagePath = $favicon ? asset('storage/' . $favicon) : ($logo ? asset('storage/' . $logo) : asset('favicon.ico'));
+  @endphp
+  @if($favicon)
+    <link rel="icon" href="{{ asset('storage/' . $favicon) }}" />
+  @else
+    <link rel="icon" href="{{ asset('favicon.ico') }}" />
+  @endif
+
   <style>
     /* ==========================================================
-       1. DESIGN TOKENS
+       1. TOKENS & RESET (CERAH + AKSEN BIRU)
        ========================================================== */
     :root {
-      --color-navy: #14213D;
-      --color-navy-deep: #0C1730;
-      --color-blue: #18ACE8;
-      --color-blue-soft: #5FCBF2;
-      --color-orange: #F6921E;
-      --color-white: #FFFFFF;
-      --color-ink: #1B2951;
-      --color-muted: #9FB4D6;
-      --color-desc: #5A6B8C;
-      --color-border: #DCE4F2;
-      --color-hover-bg: #F3F7FC;
-
-      --font-base: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-
-      --radius-lg: 42px;
-      --radius-lg-mobile: 32px;
-      --radius-md: 12px;
-
-      --shadow-card: 0 30px 60px -20px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.06);
-      --shadow-tail: 6px 6px 14px -8px rgba(0, 0, 0, 0.35);
-      --shadow-mark: 0 10px 18px rgba(24, 172, 232, 0.35);
-      --shadow-btn-primary: 0 12px 24px -10px rgba(24, 172, 232, 0.55);
-
-      --ease-standard: cubic-bezier(.2, .8, .2, 1);
+      --bg-base: #f0f7ff;
+      --bg-card: rgba(255, 255, 255, 0.94);
+      --border-card: rgba(186, 230, 253, 0.85);
+      --primary: #0284c7;
+      --primary-hover: #0369a1;
+      --primary-light: #0ea5e9;
+      --accent: #f59e0b;
+      --text-main: #0f172a;
+      --text-muted: #475569;
+      --text-subtle: #64748b;
+      --font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
 
-    /* ==========================================================
-       2. RESET & BASE
-       ========================================================== */
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
 
-    html, body {
-      height: 100%;
-    }
-
     body {
+      min-height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
       padding: 24px;
-      overflow: hidden;
+      font-family: var(--font-family);
+      color: var(--text-main);
+      background-color: var(--bg-base);
+      background-image:
+        radial-gradient(at 15% 15%, rgba(56, 189, 248, 0.35) 0px, transparent 55%),
+        radial-gradient(at 85% 15%, rgba(14, 165, 233, 0.25) 0px, transparent 50%),
+        radial-gradient(at 50% 85%, rgba(224, 242, 254, 0.85) 0px, transparent 65%),
+        radial-gradient(at 90% 90%, rgba(245, 158, 11, 0.12) 0px, transparent 45%);
+      overflow-x: hidden;
+      overflow-y: auto;
       position: relative;
-      font-family: var(--font-base);
-      color: var(--color-white);
-      background: radial-gradient(circle at 20% 15%, #1c2f57 0%, var(--color-navy) 45%, var(--color-navy-deep) 100%);
     }
 
-    a, button {
-      font-family: inherit;
-    }
-
-    /* ==========================================================
-       3. BACKGROUND EFFECTS (dotted grid + ambient glows)
-       ========================================================== */
+    /* Ambient decorative soft dots */
     body::before {
-      content: ";
-      position: absolute;
+      content: "";
+      position: fixed;
       inset: 0;
-      pointer-events: none;
-      background-image: radial-gradient(rgba(255, 255, 255, 0.06) 1.4px, transparent 1.4px);
+      background-image: radial-gradient(rgba(2, 132, 199, 0.12) 1.2px, transparent 1.2px);
       background-size: 28px 28px;
-      mask-image: radial-gradient(circle at 50% 40%, black 0%, transparent 75%);
-    }
-
-    .glow {
-      position: absolute;
-      top: -160px;
-      right: -160px;
-      width: 560px;
-      height: 560px;
-      border-radius: 50%;
+      mask-image: radial-gradient(circle at 50% 50%, black 30%, transparent 85%);
       pointer-events: none;
-      background: radial-gradient(circle, rgba(24, 172, 232, 0.35) 0%, rgba(24, 172, 232, 0) 70%);
-    }
-
-    .glow--secondary {
-      top: auto;
-      right: auto;
-      bottom: -220px;
-      left: -180px;
-      width: 480px;
-      height: 480px;
-      background: radial-gradient(circle, rgba(246, 146, 30, 0.22) 0%, rgba(246, 146, 30, 0) 70%);
+      z-index: 1;
     }
 
     /* ==========================================================
-       4. LAYOUT SHELL
+       2. CARD SHELL (BRIGHT GLASSMORPHISM)
        ========================================================== */
-    .scene {
+    .card-wrapper {
       position: relative;
       z-index: 2;
       width: 100%;
-      max-width: 620px;
-      text-align: center;
+      max-width: 860px;
+      border-radius: 28px;
+      background: var(--bg-card);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1.5px solid var(--border-card);
+      box-shadow:
+        0 24px 60px -15px rgba(2, 132, 199, 0.15),
+        0 8px 24px -6px rgba(15, 23, 42, 0.05),
+        0 0 0 1px rgba(255, 255, 255, 0.9);
+      overflow: hidden;
+      animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
 
-    /* ==========================================================
-       5. SIGNATURE ELEMENT — speech-bubble card
-       ========================================================== */
-    .bubble {
-      position: relative;
-      padding: 56px 48px 68px;
-      border-radius: var(--radius-lg);
-      color: var(--color-ink);
-      background: linear-gradient(160deg, #ffffff 0%, #f4f9fd 100%);
-      box-shadow: var(--shadow-card);
-      animation: rise 0.7s var(--ease-standard) both;
-    }
-
-    .bubble::after {
-      content: ";
-      position: absolute;
-      left: 64px;
-      bottom: -26px;
-      width: 46px;
-      height: 46px;
-      background: #f4f9fd;
-      border-radius: 0 0 0 28px;
-      transform: rotate(45deg);
-      box-shadow: var(--shadow-tail);
-    }
-
-    .mark {
-      display: block;
-      width: 84px;
-      height: 84px;
-      margin: 0 auto 22px;
-      filter: drop-shadow(var(--shadow-mark));
-      animation: bob 3.2s ease-in-out infinite;
-    }
-
-    /* ==========================================================
-       6. TYPOGRAPHY
-       ========================================================== */
-    .eyebrow {
-      display: inline-flex;
+    .card-body {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 40px;
+      padding: 48px;
       align-items: center;
-      gap: 8px;
-      margin-bottom: 22px;
+    }
+
+    /* ==========================================================
+       3. MEME SHOWCASE SECTION (LEFT COLUMN)
+       ========================================================== */
+    .meme-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .meme-frame {
+      position: relative;
+      width: 100%;
+      max-width: 290px;
+      border-radius: 22px;
+      overflow: hidden;
+      background: #ffffff;
+      border: 2px solid #e0f2fe;
+      box-shadow:
+        0 16px 36px -8px rgba(2, 132, 199, 0.22),
+        0 4px 12px rgba(15, 23, 42, 0.04);
+      transform: translateY(0);
+      transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.4s ease, border-color 0.3s ease;
+      animation: float 4s ease-in-out infinite;
+    }
+
+    .meme-frame:hover {
+      transform: translateY(-4px) scale(1.02);
+      box-shadow:
+        0 24px 44px -8px rgba(2, 132, 199, 0.3),
+        0 6px 18px rgba(2, 132, 199, 0.15);
+      border-color: #bae6fd;
+    }
+
+    .meme-img {
+      width: 100%;
+      height: 270px;
+      object-fit: cover;
+      display: block;
+      transition: transform 0.5s ease;
+    }
+
+    .meme-frame:hover .meme-img {
+      transform: scale(1.04);
+    }
+
+    .meme-tag {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(8px);
+      border: 1.5px solid #bae6fd;
       padding: 6px 14px;
       border-radius: 999px;
       font-size: 12px;
       font-weight: 700;
-      letter-spacing: 0.14em;
-      text-transform: uppercase;
-      color: var(--color-blue);
-      background: rgba(24, 172, 232, 0.1);
+      color: #0369a1;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.16);
     }
 
-    .eyebrow::before {
-      content: ";
-      width: 6px;
-      height: 6px;
+    .meme-tag-dot {
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
-      background: var(--color-orange);
-    }
-
-    .code {
-      margin-bottom: 6px;
-      font-size: clamp(64px, 14vw, 96px);
-      font-weight: 800;
-      line-height: 1;
-      letter-spacing: -0.03em;
-      color: transparent;
-      background: linear-gradient(135deg, var(--color-ink) 0%, var(--color-blue) 65%, var(--color-orange) 100%);
-      background-clip: text;
-      -webkit-background-clip: text;
-    }
-
-    h1 {
-      margin-bottom: 12px;
-      font-size: clamp(20px, 3.4vw, 26px);
-      font-weight: 700;
-      color: var(--color-ink);
-    }
-
-    .desc {
-      max-width: 420px;
-      margin: 0 auto 32px;
-      font-size: 15px;
-      line-height: 1.65;
-      color: var(--color-desc);
-    }
-
-    .hint {
-      margin-top: 44px;
-      font-size: 13px;
-      color: var(--color-muted);
-    }
-
-    .hint b {
-      font-weight: 600;
-      color: var(--color-blue-soft);
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
     }
 
     /* ==========================================================
-       7. ACTIONS / BUTTONS
+       4. CONTENT SECTION (RIGHT COLUMN)
+       ========================================================== */
+    .content-col {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      text-align: left;
+    }
+
+    .badge-bar {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      align-self: flex-start;
+      background: #e0f2fe;
+      border: 1px solid #bae6fd;
+      padding: 6px 14px;
+      border-radius: 999px;
+    }
+
+    .badge-logo {
+      width: 18px;
+      height: 18px;
+      border-radius: 4px;
+      object-fit: contain;
+    }
+
+    .badge-text {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #0284c7;
+    }
+
+    .error-code {
+      font-size: clamp(60px, 10vw, 88px);
+      font-weight: 900;
+      line-height: 0.95;
+      letter-spacing: -0.04em;
+      background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 45%, #38bdf8 75%, #f59e0b 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-top: 4px;
+      filter: drop-shadow(0 4px 12px rgba(2, 132, 199, 0.18));
+    }
+
+    h1 {
+      font-size: clamp(22px, 3.2vw, 28px);
+      font-weight: 800;
+      color: var(--text-main);
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+
+    .description {
+      font-size: 15px;
+      line-height: 1.65;
+      color: var(--text-muted);
+      max-width: 440px;
+    }
+
+    /* ==========================================================
+       5. BUTTON ACTIONS
        ========================================================== */
     .actions {
       display: flex;
       flex-wrap: wrap;
-      justify-content: center;
       gap: 12px;
+      margin-top: 10px;
     }
 
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
-      appearance: none;
-      cursor: pointer;
-      border: none;
-      border-radius: var(--radius-md);
-      padding: 13px 26px;
+      padding: 12px 22px;
+      border-radius: 12px;
       font-size: 14px;
-      font-weight: 700;
+      font-weight: 600;
       text-decoration: none;
-      transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: inherit;
     }
 
-    .btn:hover {
+    .btn-primary {
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: #ffffff;
+      border: none;
+      box-shadow: 0 8px 20px -4px rgba(2, 132, 199, 0.45);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+      box-shadow: 0 12px 24px -4px rgba(2, 132, 199, 0.55);
+      color: #ffffff;
+    }
+
+    .btn-secondary {
+      background: #ffffff;
+      color: #334155;
+      border: 1.5px solid #cbd5e1;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+    }
+
+    .btn-secondary:hover {
+      background: #f0f9ff;
+      border-color: #38bdf8;
+      color: #0284c7;
       transform: translateY(-2px);
     }
 
-    .btn:focus-visible {
-      outline: 3px solid var(--color-blue-soft);
-      outline-offset: 2px;
+    .btn svg {
+      width: 16px;
+      height: 16px;
+      stroke-width: 2.2;
     }
 
-    .btn--primary {
-      color: #fff;
-      background: linear-gradient(135deg, var(--color-blue) 0%, #0f8fc7 100%);
-      box-shadow: var(--shadow-btn-primary);
+    /* Helper info text */
+    .helper-text {
+      font-size: 13px;
+      color: var(--text-subtle);
+      margin-top: 4px;
     }
 
-    .btn--ghost {
-      color: var(--color-ink);
-      background: transparent;
-      border: 1.5px solid var(--color-border);
+    .helper-text a {
+      color: #0284c7;
+      font-weight: 600;
+      text-decoration: none;
     }
 
-    .btn--ghost:hover {
-      background: var(--color-hover-bg);
+    .helper-text a:hover {
+      text-decoration: underline;
     }
 
     /* ==========================================================
-       8. MOTION
+       6. KEYFRAMES
        ========================================================== */
-    @keyframes rise {
-      from { opacity: 0; transform: translateY(18px) scale(0.98); }
-      to   { opacity: 1; transform: translateY(0) scale(1); }
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.98);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
-    @keyframes bob {
-      0%, 100% { transform: translateY(0); }
-      50%      { transform: translateY(-8px); }
+    @keyframes float {
+      0%, 100% {
+        transform: translateY(0);
+      }
+      50% {
+        transform: translateY(-8px);
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .bubble, .mark {
+      .card-wrapper, .meme-frame {
         animation: none;
+      }
+      .btn:hover, .meme-frame:hover {
+        transform: none;
       }
     }
 
     /* ==========================================================
-       9. RESPONSIVE
+       7. RESPONSIVE (MOBILE & TABLET)
        ========================================================== */
-    @media (max-width: 480px) {
-      .bubble {
-        padding: 44px 26px 58px;
-        border-radius: var(--radius-lg-mobile);
+    @media (max-width: 768px) {
+      .card-body {
+        grid-template-columns: 1fr;
+        padding: 36px 24px;
+        gap: 30px;
+        text-align: center;
+      }
+
+      .meme-col {
+        order: -1;
+      }
+
+      .meme-frame {
+        max-width: 230px;
+      }
+
+      .meme-img {
+        height: 220px;
+      }
+
+      .content-col {
+        align-items: center;
+        text-align: center;
+      }
+
+      .badge-bar {
+        align-self: center;
+      }
+
+      .description {
+        max-width: 100%;
+      }
+
+      .actions {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .btn {
+        flex: 1 1 auto;
+        min-width: 150px;
+      }
+    }
+
+    @media (max-width: 440px) {
+      .actions {
+        flex-direction: column;
+      }
+
+      .btn {
+        width: 100%;
       }
     }
   </style>
 </head>
 <body>
 
-  <div class="glow"></div>
-  <div class="glow glow--secondary"></div>
+  <main class="card-wrapper">
+    <div class="card-body">
 
-  <main class="scene">
-    <div class="bubble">
-      @php
-          $favicon = \App\Models\SystemConfig::getValue('favicon_path');
-          $logo = \App\Models\SystemConfig::getValue('logo_path');
-          $imagePath = $favicon ? asset('storage/' . $favicon) : ($logo ? asset('storage/' . $logo) : asset('favicon.ico'));
-      @endphp
-      <img class="mark" src="{{ $imagePath }}" alt="Logo">
-      <div class="eyebrow">HALO APU</div>
-      <div class="code">404</div>
-      <h1>Halaman yang kamu cari tidak ketemu</h1>
-      <p class="desc">Sepertinya tautan ini sudah dipindahkan, dihapus, atau memang belum pernah ada. Coba periksa kembali alamatnya, atau kembali ke beranda untuk melanjutkan.</p>
-      
-      <div class="actions">
-        <a href="/" class="btn btn--primary">Kembali ke Beranda</a>
-        <a href="javascript:history.back()" class="btn btn--ghost">Halaman Sebelumnya</a>
+      <!-- Left Column: Cat Meme Hero Card -->
+      <div class="meme-col">
+        <div class="meme-frame">
+          <img class="meme-img" src="{{ asset('catmeme.webp') }}" alt="Kucing bingung 404">
+          <div class="meme-tag">
+            <span class="meme-tag-dot"></span>
+            <span>404: Kok kosong?</span>
+          </div>
+        </div>
       </div>
+
+      <!-- Right Column: Content & Actions -->
+      <div class="content-col">
+        <div class="badge-bar">
+          <img class="badge-logo" src="{{ $imagePath }}" alt="Logo">
+          <span class="badge-text">Halo APU Helpdesk</span>
+        </div>
+
+        <div class="error-code">404</div>
+
+        <h1>Waduh, Nyasar Sampai Sini?</h1>
+
+        <p class="description">
+          Halaman yang kamu tuju sepertinya sudah dipindahkan, dihapus, atau tautan yang dimasukkan keliru. Jangan khawatir, yuk balik ke tempat yang benar.
+        </p>
+
+        <div class="actions">
+          <a href="/" class="btn btn-primary">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              <polyline points="9 22 9 12 15 12 15 22"/>
+            </svg>
+            Kembali ke Beranda
+          </a>
+
+          <a href="javascript:history.back()" class="btn btn-secondary">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m12 19-7-7 7-7"/>
+              <path d="M19 12H5"/>
+            </svg>
+            Halaman Sebelumnya
+          </a>
+        </div>
+
+        <p class="helper-text">
+          Butuh bantuan operasional? Kunjungi <a href="/tiket/buat">Buat Tiket Baru</a>.
+        </p>
+      </div>
+
     </div>
   </main>
+
 </body>
 </html>

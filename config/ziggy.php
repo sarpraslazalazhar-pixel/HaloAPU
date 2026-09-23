@@ -6,6 +6,8 @@ return [
         'horizon.*',
         'ignition.*',
         'telescope.*',
-        'system.*',
+        'system.optimize',
+        'system.clear',
+        'admin.system.*',
     ],
 ];

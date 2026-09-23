@@ -219,27 +219,26 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
        </h1>
      </div>
 
-     <Tabs defaultValue="informasi" className="w-full space-y-6">
-       <TabsList className="grid grid-cols-4 w-full max-w-lg bg-zinc-100 p-1 rounded-xl mb-6">
-         <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg">
-           <Info className="h-3.5 w-3.5" />
-           <span>Informasi</span>
-         </TabsTrigger>
-         <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg">
-           <Clock className="h-3.5 w-3.5" />
-           <span>Jejak Tiket</span>
-         </TabsTrigger>
-         <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg">
-           <Paperclip className="h-3.5 w-3.5" />
-           <span>Lampiran</span>
-         </TabsTrigger>
+     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+       <div className="lg:col-span-2 space-y-6">
+         <Tabs defaultValue="informasi" className="w-full space-y-6">
+           <TabsList className="grid grid-cols-3 w-full max-w-md bg-zinc-100 p-1 rounded-xl mb-6">
+             <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg">
+               <Info className="h-3.5 w-3.5" />
+               <span>Informasi</span>
+             </TabsTrigger>
+             <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg">
+               <Clock className="h-3.5 w-3.5" />
+               <span>Jejak Tiket</span>
+             </TabsTrigger>
+             <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg">
+               <Paperclip className="h-3.5 w-3.5" />
+               <span>Lampiran</span>
+             </TabsTrigger>
+           </TabsList>
 
-       </TabsList>
-
-       {/* TAB 1: INFORMASI */}
-       <TabsContent value="informasi">
-         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-           <div className="lg:col-span-2 space-y-6">
+           {/* TAB 1: INFORMASI */}
+           <TabsContent value="informasi" className="space-y-6 mt-0">
              <Card>
                <CardHeader><CardTitle>Data Pengaju</CardTitle></CardHeader>
                <CardContent className="grid grid-cols-2 gap-4">
@@ -267,9 +266,39 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                  ))}
                </CardContent>
              </Card>
-           </div>
+           </TabsContent>
 
-           <div className="space-y-6">
+           {/* TAB 2: TIMELINE */}
+           <TabsContent value="timeline" className="space-y-6 mt-0">
+             <Card>
+               <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
+               <CardContent>
+                 {ticket.logs?.length > 0 ? (
+                   <TicketTimeline logs={ticket.logs} downloadRoute="admin.tiket.download" />
+                 ) : (
+                   <p className="text-xs text-slate-500">Belum ada aktivitas timeline.</p>
+                 )}
+               </CardContent>
+             </Card>
+           </TabsContent>
+
+           {/* TAB 3: LAMPIRAN */}
+           <TabsContent value="lampiran" className="space-y-6 mt-0">
+             <Card>
+               <CardHeader><CardTitle className="flex items-center gap-2"><Paperclip className="w-5 h-5" /> Daftar Lampiran Tiket</CardTitle></CardHeader>
+               <CardContent>
+                 {ticket.attachments?.length > 0 ? (
+                   <TicketAttachmentList attachments={ticket.attachments} downloadRoute="admin.tiket.download" grouped={true} />
+                 ) : (
+                   <p className="text-xs text-slate-500">Tidak ada lampiran file pada tiket ini.</p>
+                 )}
+               </CardContent>
+             </Card>
+           </TabsContent>
+         </Tabs>
+       </div>
+
+       <div className="space-y-6">
               <Card>
                 <CardHeader>
                   <CardTitle>Aksi Tiket</CardTitle>
@@ -593,40 +622,8 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                  </CardContent>
                </Card>
              )}
-           </div>
-         </div>
-       </TabsContent>
-
-       {/* TAB 2: TIMELINE */}
-       <TabsContent value="timeline">
-         <Card>
-           <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
-           <CardContent>
-             {ticket.logs?.length > 0 ? (
-               <TicketTimeline logs={ticket.logs} downloadRoute="admin.tiket.download" />
-             ) : (
-               <p className="text-xs text-slate-500">Belum ada aktivitas timeline.</p>
-             )}
-           </CardContent>
-         </Card>
-       </TabsContent>
-
-        {/* TAB 3: LAMPIRAN */}
-        <TabsContent value="lampiran">
-          <Card>
-            <CardHeader><CardTitle className="flex items-center gap-2"><Paperclip className="w-5 h-5" /> Daftar Lampiran Tiket</CardTitle></CardHeader>
-            <CardContent>
-              {ticket.attachments?.length > 0 ? (
-                <TicketAttachmentList attachments={ticket.attachments} downloadRoute="admin.tiket.download" grouped={true} />
-              ) : (
-                <p className="text-xs text-slate-500">Tidak ada lampiran file pada tiket ini.</p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-
-     </Tabs>
+       </div>
+     </div>
      
      {fileToEdit && (
        <ImageEditorModal

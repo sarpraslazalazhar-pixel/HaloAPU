@@ -38,8 +38,15 @@ class SecurityHeaders
         // Restrict browser features (camera, microphone, geolocation)
         $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
 
-        // Prevent search engines from indexing internal helpdesk data
-        $response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        // Prevent search engines from indexing internal helpdesk data (allow public login/home)
+        if (!$request->is('login') && !$request->is('/') && !$request->is('images/*')) {
+            $response->headers->set('X-Robots-Tag', 'noindex, nofollow, noarchive');
+        }
+
+        // Allow aggressive browser caching for hashed build assets and images (saves shared hosting CPU/bandwidth)
+        if ($request->is('build/*') || $request->is('images/*') || $request->is('storage/*')) {
+            $response->headers->set('Cache-Control', 'public, max-age=31536000, immutable');
+        }
 
         // HSTS — Force HTTPS for 1 year (only in production with HTTPS)
         if ($request->secure() || config('app.env') === 'production') {

@@ -14,7 +14,8 @@
       "Bash(flutter pub *)",
       "Bash(flutter analyze *)",
       "Bash(dart fix *)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "PowerShell(php artisan route:list --columns=method,uri,name | Measure-Object -Line)"
     ]
   }
 }

@@ -20,38 +20,6 @@ export default defineConfig({
     },
     build: {
         cssCodeSplit: true,
-        chunkSizeWarningLimit: 600,
-        rollupOptions: {
-            output: {
-                manualChunks(id) {
-                    if (!id.includes('node_modules')) return;
-
-                    // 1. Core React runtime
-                    if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) {
-                        return 'vendor-react';
-                    }
-
-                    // 2. Inertia core
-                    if (/[\\/]node_modules[\\/]@inertiajs[\\/]/.test(id)) {
-                        return 'vendor-inertia';
-                    }
-
-                    // 3. ECharts & ZRender
-                    if (id.includes('echarts') || id.includes('zrender')) {
-                        return 'vendor-echarts';
-                    }
-
-                    // 4. UI Primitives
-                    if (id.includes('@radix-ui') || id.includes('@base-ui')) {
-                        return 'vendor-radix';
-                    }
-
-                    // 5. Heavy Document Processors
-                    if (id.includes('mammoth') || id.includes('docx')) {
-                        return 'vendor-docs';
-                    }
-                },
-            },
-        },
+        chunkSizeWarningLimit: 1500,
     },
 });

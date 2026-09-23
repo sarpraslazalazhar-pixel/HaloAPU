@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Inertia\Middleware;
 use App\Models\User;
 use App\Models\Admin;
+use Illuminate\Support\Facades\Cache;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -51,11 +52,15 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $webUser,
                 'admin' => $adminUser,
-                'is_super_admin' => $adminUser ? $adminUser->hasRole(['superadmin', 'Super Admin']) : false,
-                'permissions' => $request->user('admin') 
-                    ? ($request->user('admin')->hasRole(['superadmin', 'Super Admin']) 
-                        ? \Spatie\Permission\Models\Permission::pluck('name') 
-                        : $request->user('admin')->getAllPermissions()->pluck('name')) 
+                'is_super_admin' => fn () => $adminUser ? $adminUser->hasRole(['superadmin', 'Super Admin']) : false,
+                'permissions' => fn () => $adminUser
+                    ? Cache::remember(
+                        "admin_perms_{$adminUser->id}",
+                        300,
+                        fn () => $adminUser->hasRole(['superadmin', 'Super Admin'])
+                            ? \Spatie\Permission\Models\Permission::pluck('name')->toArray()
+                            : $adminUser->getAllPermissions()->pluck('name')->toArray()
+                    )
                     : [],
             ],
             'flash' => [

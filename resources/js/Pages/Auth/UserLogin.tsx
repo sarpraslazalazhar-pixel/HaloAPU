@@ -1,6 +1,5 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import React, { FormEventHandler, useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
 
 export default function UserLogin() {
@@ -39,48 +38,25 @@ export default function UserLogin() {
   return (
     <>
       <Head title="Login - Halo APU" />
-      <style>
-        {`
-        .login-wrapper {
-          background-image: url('${appConfig?.banner_path ? `/storage/${appConfig.banner_path}` : '/images/bg-login.png'}');
-          background-size: cover;
-          background-position: center;
-          min-height: 100vh;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
-        }
-        .pattern-overlay {
-          position: absolute;
-          top: 0;
-          left: 0;
-          bottom: 0;
-          width: 33%;
-          background: linear-gradient(90deg, rgba(0, 136, 204, 0.7) 0%, rgba(0, 136, 204, 0.4) 50%, transparent 100%);
-          pointer-events: none;
-        }
-      `}
-      </style>
 
-      <main className="login-wrapper p-4 md:p-8 font-sans text-gray-800">
+      <main
+        className="min-h-screen bg-cover bg-center flex items-center justify-center relative p-4 md:p-8 font-sans text-gray-800"
+        style={{
+          backgroundImage: `url('${appConfig?.banner_path ? `/storage/${appConfig.banner_path}` : '/images/bg-login.webp'}')`
+        }}
+      >
         <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
-        <div className="pattern-overlay hidden md:block"></div>
+        <div className="absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-[rgba(0,136,204,0.7)] via-[rgba(0,136,204,0.4)] to-transparent pointer-events-none hidden md:block" />
         <div className="container mx-auto flex flex-col md:flex-row items-center justify-center gap-8 lg:gap-24 relative z-10">
 
           {/* Login Card */}
-          <motion.section
-            initial={{ opacity: 0, scale: 0.94, y: 15 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            transition={{ type: "spring", stiffness: 350, damping: 25 }}
-            className="bg-white p-8 md:p-10 rounded-2xl shadow-2xl w-full max-w-md"
-          >
+          <section className="bg-white p-8 md:p-10 rounded-2xl shadow-2xl w-full max-w-md animate-[page-in_0.35s_ease-out]">
             {/* Logo and Heading */}
             <div className="flex flex-col items-center mb-8">
               {appConfig?.logo_path ? (
-                <img src={`/storage/${appConfig.logo_path}`} alt="Halo APU Logo" className="w-full max-w-[240px] h-24 object-contain" />
+                <img src={`/storage/${appConfig.logo_path}`} alt="Halo APU Logo" width={240} height={96} loading="eager" fetchPriority="high" className="w-full max-w-[240px] h-24 object-contain" />
               ) : (
-                <img src="https://lh3.googleusercontent.com/aida-public/AB6AXuABorF6Z-kfxPybny-hrgcEUGX2NFFouw0fb6XNnNaWEfuQ_j6gmBM-c-x0soYLgS4uVHRXJ36GRTVi018M0sAdUUa2HxzK6uWkIutYFaTLmGZgKeg97B59xTodfUcGqFBK1SmjJUOzbEUhu4n3_bVQHjN8_DLeV4xxFP1WkjWxPzfwZ_RoU6lcFJnU2zyiRaf24p94qwTx3cm0Ut1QL9sqx6JSumjmndGHLKl1MLW2FaLUDjeSe1ot3WzpJysK9M2bxEKktm91J333" alt="Halo APU Logo" className="w-full max-w-[240px] object-contain" />
+                <img src="/images/logo.png" alt="Halo APU Logo" width={240} height={96} loading="eager" fetchPriority="high" className="w-full max-w-[240px] h-24 object-contain" />
               )}
             </div>
 
@@ -101,6 +77,7 @@ export default function UserLogin() {
                     className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-[#0088cc] focus:border-[#0088cc] text-sm"
                     id="username"
                     name="username"
+                    autoComplete="username"
                     placeholder="Username/email"
                     required
                     type="text"
@@ -128,6 +105,7 @@ export default function UserLogin() {
                     className="block w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-[#0088cc] focus:border-[#0088cc] text-sm"
                     id="password"
                     name="password"
+                    autoComplete="current-password"
                     placeholder="password"
                     required
                     type={showPassword ? 'text' : 'password'}
@@ -137,6 +115,7 @@ export default function UserLogin() {
                   <button
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none"
                     type="button"
+                    aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,14 +147,12 @@ export default function UserLogin() {
                   />
                   <label className="text-xs text-gray-600 font-medium cursor-pointer" htmlFor="remember">Ingat saya</label>
                 </div>
-                <Link className="text-xs font-medium text-[#0088cc] hover:underline" href="/lupa-password">Lupa password?</Link>
+                <Link className="text-xs font-medium text-[#006da3] hover:underline py-1.5 px-1 inline-block" href="/lupa-password">Lupa password?</Link>
               </div>
 
               {/* Submit Button */}
-              <motion.button
-                whileTap={{ scale: 0.96 }}
-                transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                className="w-full bg-[#0088cc] hover:bg-[#0077b3] text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition duration-200 mt-2 disabled:opacity-70"
+              <button
+                className="w-full bg-[#0088cc] hover:bg-[#0077b3] active:scale-[0.98] text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition duration-200 mt-2 disabled:opacity-70"
                 type="submit"
                 disabled={processing}
               >
@@ -183,29 +160,24 @@ export default function UserLogin() {
                   <path d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"></path>
                 </svg>
                 {processing ? 'Memproses...' : 'Masuk'}
-              </motion.button>
+              </button>
 
               {/* Register Prompt */}
               <div className="mt-6 text-center text-xs text-gray-500">
-                Belum punya akun? <Link href="/register" className="font-semibold text-[#0088cc]">Hubungi Admin</Link>
+                Belum punya akun? <Link href="/register" className="font-semibold text-[#006da3] py-1 px-1 inline-block">Hubungi Admin</Link>
               </div>
             </form>
-          </motion.section>
+          </section>
 
           {/* HeroText */}
-          <motion.section
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 25, delay: 0.1 }}
-            className="hidden md:flex flex-col text-right max-w-lg text-white"
-          >
-            <h4 className="text-3xl font-bold mb-6 text-[#0088cc] drop-shadow-sm">PLATFORM LAYANAN TERPADU</h4>
+          <section className="hidden md:flex flex-col text-right max-w-lg text-white animate-[page-in_0.45s_ease-out]">
+            <h1 className="text-3xl font-bold mb-6 text-[#0088cc] drop-shadow-sm">PLATFORM LAYANAN TERPADU</h1>
             <div className="italic text-gray-700 space-y-4">
               <p className="text-xl">
                 Karena pelayanan terbaik kepada sesama amil dan nadzir adalah kunci utama mempercepat dan menyempurnakan pelayanan terbaik kita kepada umat.
               </p>
             </div>
-          </motion.section>
+          </section>
         </div>
 
         {/* Footer */}

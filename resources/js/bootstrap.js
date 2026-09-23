@@ -19,31 +19,36 @@ window.axios.interceptors.response.use(
   }
 );
 
-import Echo from 'laravel-echo';
-import Pusher from 'pusher-js';
-
-const PusherClass = Pusher?.default || Pusher;
-
-window.Pusher = PusherClass;
-
 const pusherKey = import.meta.env.VITE_PUSHER_APP_KEY;
 
 if (pusherKey) {
-  try {
-    window.Echo = new Echo({
-      broadcaster: 'pusher',
-      key: pusherKey,
-      cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER ?? 'mt1',
-      wsHost: import.meta.env.VITE_PUSHER_HOST ? import.meta.env.VITE_PUSHER_HOST : `ws-${import.meta.env.VITE_PUSHER_APP_CLUSTER ?? 'mt1'}.pusher.com`,
-      wsPort: import.meta.env.VITE_PUSHER_PORT ?? 80,
-      wssPort: import.meta.env.VITE_PUSHER_PORT ?? 443,
-      forceTLS: (import.meta.env.VITE_PUSHER_SCHEME ?? 'https') === 'https',
-      enabledTransports: ['ws', 'wss'],
+  // Lazy load realtime modules asynchronously to prevent blocking FCP / TBT on initial render
+  Promise.all([import('laravel-echo'), import('pusher-js')])
+    .then(([echoModule, pusherModule]) => {
+      const Echo = echoModule.default;
+      const Pusher = pusherModule.default || pusherModule;
+      window.Pusher = Pusher;
+
+      try {
+        window.Echo = new Echo({
+          broadcaster: 'pusher',
+          key: pusherKey,
+          cluster: import.meta.env.VITE_PUSHER_APP_CLUSTER ?? 'mt1',
+          wsHost: import.meta.env.VITE_PUSHER_HOST ? import.meta.env.VITE_PUSHER_HOST : `ws-${import.meta.env.VITE_PUSHER_APP_CLUSTER ?? 'mt1'}.pusher.com`,
+          wsPort: import.meta.env.VITE_PUSHER_PORT ?? 80,
+          wssPort: import.meta.env.VITE_PUSHER_PORT ?? 443,
+          forceTLS: (import.meta.env.VITE_PUSHER_SCHEME ?? 'https') === 'https',
+          enabledTransports: ['ws', 'wss'],
+        });
+      } catch (e) {
+        console.warn('Echo initialization skipped / failed:', e);
+        window.Echo = null;
+      }
+    })
+    .catch((err) => {
+      console.warn('Failed to load realtime echo/pusher modules:', err);
+      window.Echo = null;
     });
-  } catch (e) {
-    console.warn('Echo initialization skipped / failed:', e);
-    window.Echo = null;
-  }
 } else {
   window.Echo = null;
 }

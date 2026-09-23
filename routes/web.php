@@ -137,10 +137,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::put('/profil', [\App\Http\Controllers\Admin\ProfileController::class, 'update'])->name('profil.update');
         Route::post('/profil/avatar', [\App\Http\Controllers\Admin\ProfileController::class, 'uploadAvatar'])->name('profil.upload-avatar');
 
-        // CSAT Admin
+        // CSAT & Laporan Admin
         Route::middleware('permission:akses-laporan')->group(function () {
             Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');
             Route::get('/laporan/tiket', [\App\Http\Controllers\Admin\LaporanTiketController::class, 'index'])->name('laporan.tiket');
+            Route::get('/laporan/kinerja-operator', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'index'])->name('laporan.operator');
+            Route::get('/laporan/kinerja-operator/{admin}/ulasan', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'ulasan'])->name('laporan.operator.ulasan');
+            Route::get('/laporan/kinerja-operator/export', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'export'])->name('laporan.operator.export');
         });
 
         // Monitor Admin

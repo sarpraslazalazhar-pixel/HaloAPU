@@ -24,6 +24,7 @@ import {
  Smartphone,
  Bot,
  ExternalLink,
+ UserCheck,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -132,6 +133,7 @@ const adminNavItems: NavItem[] = [
   { type: 'header', label: 'LAPORAN', permissionGroup: 'akses-laporan' },
   { type: 'link', label: 'CSAT', icon: Star, route: '/admin/csat', permissionGroup: 'akses-laporan' },
   { type: 'link', label: 'Tiket', icon: Ticket, route: '/admin/laporan/tiket', permissionGroup: 'akses-laporan' },
+  { type: 'link', label: 'Kinerja Operator', icon: UserCheck, route: '/admin/laporan/kinerja-operator', permissionGroup: 'akses-laporan' },
 
   { type: 'header', label: 'MANAJEMEN AKUN', permissionGroup: 'akses-manajemen-akun' },
   { type: 'link', label: 'Manajemen Peran', icon: Shield, route: '/admin/manajemen-peran', permissionGroup: 'akses-manajemen-akun' },

@@ -15,7 +15,12 @@
       "Bash(flutter analyze *)",
       "Bash(dart fix *)",
       "Bash(git checkout *)",
-      "PowerShell(php artisan route:list --columns=method,uri,name | Measure-Object -Line)"
+      "PowerShell(php artisan route:list --columns=method,uri,name | Measure-Object -Line)",
+      "Read(//c/Users/IT Dev/.claude/**)",
+      "Read(//c/Users/IT Dev/.claude/plugins/marketplaces/claude-plugins-official/.claude-plugin/**)",
+      "Read(//c/Users/IT Dev/.claude/plugins/**)",
+      "mcp__exa__web_search_exa",
+      "mcp__exa__web_fetch_exa"
     ]
   }
 }

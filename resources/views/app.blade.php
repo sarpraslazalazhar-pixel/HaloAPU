@@ -51,11 +51,9 @@
             }
         })();
     </script>
+    @routes
     @viteReactRefresh
     @vite(['resources/js/app.tsx'])
-    @unless(request()->is('login') || request()->is('/'))
-    @routes
-    @endunless
     @inertiaHead
 </head>
 <body class="font-sans antialiased bg-background text-foreground">

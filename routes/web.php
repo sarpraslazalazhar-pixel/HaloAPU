@@ -57,6 +57,9 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // Tickets Wizard
+    Route::get('/tiket', function () {
+        return redirect()->route('tiket.create');
+    });
     Route::get('/tiket/buat', [\App\Http\Controllers\User\TicketWizardController::class, 'create'])->name('tiket.create');
     Route::post('/tiket', [\App\Http\Controllers\User\TicketWizardController::class, 'store'])->name('tiket.store');
 

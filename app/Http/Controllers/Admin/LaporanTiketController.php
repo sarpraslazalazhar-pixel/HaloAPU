@@ -35,8 +35,13 @@ class LaporanTiketController extends Controller
         // Base Query with Filters
         $baseQuery = Ticket::query();
 
-        if ($dateFrom && $dateTo) {
-            $baseQuery->whereBetween('tickets.created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59']);
+        if ($dateFrom || $dateTo) {
+            if ($dateFrom) {
+                $baseQuery->where('tickets.created_at', '>=', $dateFrom . ' 00:00:00');
+            }
+            if ($dateTo) {
+                $baseQuery->where('tickets.created_at', '<=', $dateTo . ' 23:59:59');
+            }
         } else {
             if ($year) $baseQuery->whereYear('tickets.created_at', $year);
             if ($month) $baseQuery->whereMonth('tickets.created_at', $month);

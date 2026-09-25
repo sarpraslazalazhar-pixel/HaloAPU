@@ -10,6 +10,7 @@ import { Pagination } from '@/Components/Pagination';
 import { Eye, Folder, Clock, Hourglass, CheckCircle, XCircle, Ban, Printer, Download, Filter, Search } from 'lucide-react';
 import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
+import { DateRangePicker } from '@/Components/ui/date-range-picker';
 
 const STATUS_META = {
  open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
@@ -198,11 +199,7 @@ export default function LaporanTiket({
  </div>
  <div className="space-y-1.5 md:col-span-2">
  <label className="text-xs font-semibold">Rentang Tanggal (Opsional)</label>
- <div className="flex items-center gap-2">
- <input type="date" className="w-full rounded-md border-input bg-background text-sm h-9" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
- <span>-</span>
- <input type="date" className="w-full rounded-md border-input bg-background text-sm h-9" value={dateTo} onChange={e => setDateTo(e.target.value)} />
- </div>
+ <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
  </div>
  <div className="space-y-1.5">
  <label className="text-xs font-semibold">Unit Layanan</label>

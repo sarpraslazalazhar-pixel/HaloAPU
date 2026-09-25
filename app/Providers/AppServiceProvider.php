@@ -47,7 +47,7 @@ class AppServiceProvider extends ServiceProvider
 
         // Authorization Gate for Laravel Pulse
         \Illuminate\Support\Facades\Gate::define('viewPulse', function ($user = null) {
-            if ($this->app->environment('local')) {
+            if ($this->app->environment('local', 'development')) {
                 return true;
             }
 

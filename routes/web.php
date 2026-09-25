@@ -278,8 +278,24 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // HaloAPU AI (Admin)
         Route::get('/ai', [\App\Http\Controllers\Admin\AiBotController::class, 'index'])->name('ai-bot.index');
         Route::post('/ai/chat', [\App\Http\Controllers\Admin\AiBotController::class, 'chat'])->name('ai-bot.chat');
+
+        // Laravel Pulse Redirect (Admin)
+        Route::get('/pulse', function () {
+            return redirect()->route('pulse');
+        })->name('pulse');
     });
 });
+
+// Laravel Pulse Dashboard
+Route::middleware(['web', 'auth:admin'])->get('/pulse', function () {
+    if (!app()->environment('local', 'development')) {
+        $admin = auth('admin')->user();
+        if (!$admin || !method_exists($admin, 'hasRole') || !$admin->hasRole(['superadmin', 'Super Admin'])) {
+            return redirect()->route('admin.dashboard')->with('error', 'Akses ditolak: Hanya Super Admin yang dapat mengakses Laravel Pulse.');
+        }
+    }
+    return view('pulse::dashboard');
+})->name('pulse');
 
 // Redirect URL lama /ai-bot-haloapu ke /admin/ai (redirect only, no public chat endpoint)
 Route::get('/ai-bot-haloapu', function () {

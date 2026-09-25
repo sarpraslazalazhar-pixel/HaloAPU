@@ -25,6 +25,7 @@ import {
  Bot,
  ExternalLink,
  UserCheck,
+ Activity,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -66,6 +67,8 @@ interface NavSubItem {
  icon?: any;
  route: string;
  permissionGroup?: string;
+ superAdminOnly?: boolean;
+ isExternal?: boolean;
 }
 
 interface NavItem {
@@ -127,6 +130,7 @@ const adminNavItems: NavItem[] = [
       { label: 'Reminder', icon: Bell, route: '/admin/reminder-config', permissionGroup: 'akses-konfigurasi' },
       { label: 'Lock Device', icon: Smartphone, route: '/admin/device-lock-config', permissionGroup: 'akses-konfigurasi' },
       { label: 'Sistem', icon: Settings, route: '/admin/konfigurasi', permissionGroup: 'akses-konfigurasi' },
+      { label: 'Pulse Monitor', icon: Activity, route: '/admin/pulse', isExternal: true, superAdminOnly: true },
     ]
   },
 
@@ -186,9 +190,10 @@ function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: 
 }
 
 function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { item: NavItem; isCollapsed: boolean; url: string; permissions?: string[]; isSuperAdmin?: boolean }) {
-  const visibleChildren = item.children?.filter(child =>
-    isSuperAdmin || !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup))
-  ) || [];
+  const visibleChildren = item.children?.filter(child => {
+    if (child.superAdminOnly && !isSuperAdmin) return false;
+    return isSuperAdmin || !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup));
+  }) || [];
 
   if (visibleChildren.length === 0) return null;
 
@@ -244,7 +249,29 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
                 const active = isRouteActive(url, child.route);
                 const ChildIcon = child.icon || Icon;
 
-                return (
+                const linkContent = (
+                  <>
+                    <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
+                    <span className="truncate">{child.label}</span>
+                    {child.isExternal && <ExternalLink className="ml-auto h-3 w-3 opacity-60" />}
+                  </>
+                );
+
+                return child.isExternal ? (
+                  <a
+                    key={idx}
+                    href={child.route}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setPopoverOpen(false)}
+                    className={`flex items-center gap-2.5 px-2.5 py-2 text-xs font-medium rounded-lg cursor-pointer transition-colors w-full outline-none ${active
+                      ? 'bg-sky-500/15 text-sky-600 font-semibold'
+                      : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground hover:bg-muted/50'
+                    }`}
+                  >
+                    {linkContent}
+                  </a>
+                ) : (
                   <Link
                     key={idx}
                     href={child.route}
@@ -254,8 +281,7 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
                       : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground hover:bg-muted/50'
                     }`}
                   >
-                    <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
-                    <span className="truncate">{child.label}</span>
+                    {linkContent}
                   </Link>
                 );
               })}
@@ -296,22 +322,43 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
               const active = isRouteActive(url, child.route);
               const ChildIcon = child.icon;
 
+              const linkContent = (
+                <>
+                  {ChildIcon ? (
+                    <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
+                  ) : (
+                    <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? 'bg-sky-500' : 'bg-muted-foreground/40'}`} />
+                  )}
+                  <span className="truncate">{child.label}</span>
+                  {child.isExternal && <ExternalLink className="ml-auto h-3 w-3 opacity-60" />}
+                </>
+              );
+
               return (
                 <motion.div key={idx} variants={navItemHover} initial="rest" whileHover="hover">
-                  <Link
-                    href={child.route}
-                    className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 ${active
-                      ? 'bg-sky-500/15 text-sky-600 font-semibold shadow-xs'
-                      : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
-                    }`}
-                  >
-                    {ChildIcon ? (
-                      <ChildIcon className={`h-3.5 w-3.5 shrink-0 ${active ? 'text-sky-500' : ''}`} />
-                    ) : (
-                      <span className={`h-1.5 w-1.5 rounded-full shrink-0 ${active ? 'bg-sky-500' : 'bg-muted-foreground/40'}`} />
-                    )}
-                    <span className="truncate">{child.label}</span>
-                  </Link>
+                  {child.isExternal ? (
+                    <a
+                      href={child.route}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 ${active
+                        ? 'bg-sky-500/15 text-sky-600 font-semibold shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                      }`}
+                    >
+                      {linkContent}
+                    </a>
+                  ) : (
+                    <Link
+                      href={child.route}
+                      className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium transition-all duration-150 ${active
+                        ? 'bg-sky-500/15 text-sky-600 font-semibold shadow-xs'
+                        : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground'
+                      }`}
+                    >
+                      {linkContent}
+                    </Link>
+                  )}
                 </motion.div>
               );
             })}

@@ -46,7 +46,7 @@ class TicketWizardController extends Controller
             'form_data' => 'required|array',
             'attachments' => 'nullable|array',
             'attachments.*' => 'nullable|array|max:3',
-            'attachments.*.*' => 'file|max:3072', // max 3MB per file
+            'attachments.*.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx', // max 3MB per file
             'general_attachments' => 'nullable|array|max:3',
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
@@ -204,9 +204,9 @@ class TicketWizardController extends Controller
                     $endDT = \Carbon\Carbon::parse($endFieldVal);
                 }
 
-                // Cek bentrok aset
+                // Cek bentrok aset (hanya abaikan jika ditolak, dibatalkan, atau sudah selesai)
                 $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)
-                    ->whereNotIn('status', ['reject', 'dibatalkan', 'solve', 'selesai'])
+                    ->whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
                     ->where('tanggal_mulai', '<', $endDT)
                     ->where('tanggal_selesai', '>', $startDT)
                     ->exists();

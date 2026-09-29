@@ -6,6 +6,9 @@ use App\Models\SystemConfig;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Notifications\Events\NotificationSent;
+use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Cache;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -19,6 +22,14 @@ class AppServiceProvider extends ServiceProvider
         if ($this->app->environment('production')) {
             \URL::forceScheme('https');
         }
+
+        Event::listen(NotificationSent::class, function ($event) {
+            if ($event->notifiable) {
+                $userType = get_class($event->notifiable);
+                $userId = $event->notifiable->id;
+                Cache::forget("unread_notif_{$userType}_{$userId}");
+            }
+        });
 
         try {
             $tz = SystemConfig::getValue('app_timezone');

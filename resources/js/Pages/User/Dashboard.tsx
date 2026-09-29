@@ -7,17 +7,17 @@ import { FolderOpen, Clock, CheckCircle2, XCircle, PlusCircle, History, Star, Mo
 import { motion, type Variants } from 'framer-motion';
 
 const containerVariants: Variants = {
-  hidden: { opacity: 0 },
+  hidden: { opacity: 1 },
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.08,
+      staggerChildren: 0.05,
     },
   },
 };
 
 const itemVariants: Variants = {
-  hidden: { opacity: 0, y: 15 },
+  hidden: { opacity: 1, y: 0 },
   visible: {
     opacity: 1,
     y: 0,
@@ -89,10 +89,10 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
                 <div className="absolute -bottom-4 -left-4 h-16 w-16 rounded-full bg-white/5 blur-lg pointer-events-none" />
                 <div className="relative flex items-start justify-between">
                   <div className="space-y-1">
-                    <p className="text-sm font-medium text-white/80">{card.label}</p>
-                    <p className="text-3xl font-bold">{card.count}</p>
+                    <p className="text-sm font-semibold text-white drop-shadow-xs">{card.label}</p>
+                    <p className="text-3xl font-extrabold text-white drop-shadow-xs">{card.count}</p>
                   </div>
-                  <Icon className={`h-8 w-8 text-white opacity-70 transition-all duration-300 ${card.anim}`} />
+                  <Icon className={`h-8 w-8 text-white opacity-80 transition-all duration-300 ${card.anim}`} />
                 </div>
               </motion.div>
             );
@@ -109,7 +109,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
               const Icon = action.icon;
 
               return (
-                <Link key={action.label} href={action.href}>
+                <Link key={action.label} href={action.href} aria-label={`${action.label}: ${action.desc}`}>
                   <motion.div
                     whileHover={{ y: -3, scale: 1.02 }}
                     whileTap={{ scale: 0.97 }}
@@ -122,8 +122,8 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
                             <Icon className="h-5 w-5" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-foreground">{action.label}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">{action.desc}</p>
+                            <p className="text-sm font-semibold text-foreground">{action.label}</p>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{action.desc}</p>
                           </div>
                           <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-all duration-200 group-hover:text-primary group-hover:translate-x-0.5 mt-1" />
                         </div>

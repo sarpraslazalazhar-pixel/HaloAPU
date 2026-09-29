@@ -54,14 +54,14 @@ export function BottomNav({ items, className }: BottomNavProps) {
 
  if (item.onClick) {
  return (
- <button key={item.label} type="button" onClick={item.onClick} className="flex-1">
+ <button key={item.label} type="button" onClick={item.onClick} aria-label={item.label} className="flex-1">
  {content}
  </button>
  );
  }
 
  return (
- <Link key={item.label} href={item.route!} className="flex-1">
+ <Link key={item.label} href={item.route!} aria-label={item.label} className="flex-1">
  {content}
  </Link>
  );

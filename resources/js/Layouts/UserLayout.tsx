@@ -20,7 +20,7 @@ import {
  DropdownMenuTrigger,
 } from "@/Components/ui/dropdown-menu";
 
-import ProfileModal from '@/Components/ProfileModal';
+const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 import NotificationBell from '@/Components/NotificationBell';
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
@@ -167,7 +167,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-5 lg:h-[60px]">
  <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
  {appConfig?.logo_path && (
- <img id="displayBannerImg" src={`/storage/${appConfig.logo_path}`} alt="Banner" style={{ height: '55px', width: 'auto', objectFit: 'contain', display: 'inline-block' }} />
+ <img id="displayBannerImg" src={`/storage/${appConfig.logo_path}`} alt="Banner" width={180} height={55} loading="eager" decoding="async" style={{ height: '55px', width: 'auto', objectFit: 'contain', display: 'inline-block' }} />
  )}
  </Link>
  </div>
@@ -189,7 +189,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  <div className="flex items-center gap-2.5">
  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10 overflow-hidden">
  {user?.avatar_path ? (
- <img src={`/storage/${user.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+ <img src={`/storage/${user.avatar_path}`} alt="Avatar" width={28} height={28} loading="lazy" decoding="async" className="h-full w-full object-cover" />
  ) : (
  <User className="h-3.5 w-3.5 text-primary" />
  )}
@@ -238,9 +238,9 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  
  <DropdownMenu>
  <DropdownMenuTrigger asChild>
- <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 border overflow-hidden">
+ <Button variant="ghost" size="icon" aria-label="Menu Profil Pengguna" className="rounded-full h-8 w-8 border overflow-hidden">
  {user?.avatar_path ? (
- <img src={`/storage/${user.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+ <img src={`/storage/${user.avatar_path}`} alt="Avatar" width={32} height={32} loading="lazy" decoding="async" className="h-full w-full object-cover" />
  ) : (
  <User className="h-4 w-4" />
  )}
@@ -269,7 +269,11 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  </DropdownMenuContent>
  </DropdownMenu>
 
- <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={user} isAdmin={false} />
+ {profileOpen && (
+   <React.Suspense fallback={null}>
+     <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={user} isAdmin={false} />
+   </React.Suspense>
+ )}
  </header>
         <main className="flex-1 overflow-y-auto flex flex-col">
           <PageTransition className="mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">

@@ -32,7 +32,25 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const [editorOpen, setEditorOpen] = useState(false);
  const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'reply' | 'rev'} | null>(null);
  const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
- const canCancel = ticket.status === 'open';
+ const isBooking = Boolean(ticket.booking);
+ const bookingServiceTitle = (() => {
+   const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
+   if (/^peminjaman\s+/i.test(rawName)) {
+     return rawName;
+   }
+   if (/^penggunaan\s+/i.test(rawName)) {
+     return rawName.replace(/^penggunaan\s+/i, 'Peminjaman ');
+   }
+   return `Peminjaman ${rawName}`;
+ })();
+ const isBookingPast = Boolean(
+   isBooking &&
+   ticket.booking?.tanggal_selesai &&
+   new Date(ticket.booking.tanggal_selesai) <= new Date()
+ );
+ const bookingNotStarted = isBooking && ticket.booking?.tanggal_mulai && new Date(ticket.booking.tanggal_mulai) > new Date();
+ const bookingActive = isBooking && !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking?.status) && !isBookingPast;
+ const canCancel = !isBookingPast && (ticket.status === 'open' || (bookingNotStarted && bookingActive)) && ticket.status !== 'dibatalkan' && ticket.status !== 'reject';
 
  const handleCancel = () => {
    router.patch(route('tiket.batal', ticket.id));
@@ -124,8 +142,8 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
        <ConfirmDialog
          open={showConfirm}
          onOpenChange={setShowConfirm}
-         title="Batalkan Tiket?"
-         message="Tiket yang dibatalkan tidak bisa dikembalikan lagi. Yakin ingin membatalkan?"
+         title={isBooking ? `Batalkan ${bookingServiceTitle}?` : "Batalkan Tiket?"}
+         message={isBooking ? `${bookingServiceTitle} ini akan dibatalkan dan akan langsung dibebaskan di Live Monitor. Yakin ingin membatalkan?` : "Tiket yang dibatalkan tidak bisa dikembalikan lagi. Yakin ingin membatalkan?"}
          confirmText="Ya, Batalkan"
          cancelText="Tidak"
          onConfirm={handleCancel}

@@ -35,6 +35,14 @@ class TicketHistoryController extends Controller
         if ($request->has('date_to') && $request->date_to) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('tickets.id', 'like', "%{$search}%")
+                  ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"))
+                  ->orWhereHas('unit', fn ($u) => $u->where('nama_unit', 'like', "%{$search}%"));
+            });
+        }
 
         $tickets = $query->orderByDesc('created_at')
             ->paginate(10)
@@ -42,7 +50,7 @@ class TicketHistoryController extends Controller
 
         return Inertia::render('User/Tiket/Riwayat', [
             'tickets' => $tickets,
-            'filters' => $request->only('status', 'date_from', 'date_to'),
+            'filters' => $request->only('status', 'date_from', 'date_to', 'search'),
             'statuses' => ['open', 'on_proses', 'pending', 'solve', 'reject', 'dibatalkan', 'waiting_approval', 'need_revision'],
         ]);
     }
@@ -93,6 +101,7 @@ class TicketHistoryController extends Controller
             'orgDivisi',
             'orgUnit',
             'jabatan',
+            'booking',
             'attachments.field',
             'attachments.log',
             'attachments.log.admin',
@@ -123,8 +132,21 @@ class TicketHistoryController extends Controller
         if ($ticket->user_id !== auth()->id()) {
             abort(403);
         }
-        if ($ticket->status !== 'open') {
-            return redirect()->back()->with('error', 'Hanya tiket dengan status Open yang bisa dibatalkan.');
+
+        $isBooking = $ticket->booking !== null;
+        if ($isBooking && $ticket->booking->tanggal_selesai && now()->gte($ticket->booking->tanggal_selesai)) {
+            return redirect()->back()->with('error', 'Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+        }
+
+        $canCancelBooking = false;
+        if ($isBooking) {
+            // Bisa dibatalkan jika belum mulai atau belum lewat tanggal_selesai
+            $canCancelBooking = now()->lt($ticket->booking->tanggal_mulai)
+                && !in_array($ticket->booking->status, ['dibatalkan', 'reject', 'selesai']);
+        }
+
+        if ($ticket->status !== 'open' && !$canCancelBooking) {
+            return redirect()->back()->with('error', 'Hanya tiket berstatus Open atau peminjaman yang belum dimulai yang bisa dibatalkan.');
         }
 
         $ticket->update(['status' => 'dibatalkan']);
@@ -137,10 +159,25 @@ class TicketHistoryController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => null,
             'aksi' => 'dibatalkan',
-            'catatan' => 'Tiket dibatalkan oleh ' . auth()->user()->username,
+            'catatan' => 'Tiket/peminjaman dibatalkan oleh user ' . auth()->user()->username,
         ]);
 
-        return redirect()->route('tiket.riwayat')->with('success', 'Tiket berhasil dibatalkan.');
+        // Notifikasi ke Admin unit terkait
+        try {
+            $ticket->load('subUnit.unit.admins');
+            $admins = $ticket->subUnit?->unit?->admins ?? collect();
+            foreach ($admins as $admin) {
+                $admin->notify(new \App\Notifications\BrowserNotification(
+                    "Peminjaman Dibatalkan",
+                    "User " . (auth()->user()->name ?? auth()->user()->username) . " membatalkan tiket/booking #{$ticket->formatted_id}",
+                    "/admin/tiketing/{$ticket->id}"
+                ));
+            }
+        } catch (\Exception $e) {
+            \Log::error("Gagal kirim notif batal user: " . $e->getMessage());
+        }
+
+        return redirect()->route('tiket.riwayat')->with('success', 'Tiket dan jadwal peminjaman berhasil dibatalkan. Aset kini tersedia kembali.');
     }
 
     public function reply(Request $request, Ticket $ticket)

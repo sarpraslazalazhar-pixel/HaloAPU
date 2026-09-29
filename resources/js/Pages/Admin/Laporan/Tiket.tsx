@@ -7,7 +7,7 @@ import { DataTable } from '@/Components/DataTable';
 import { StatusBadge } from '@/Components/StatusBadge';
 import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
-import { Eye, Folder, Clock, Hourglass, CheckCircle, XCircle, Ban, Printer, Download, Filter, Search } from 'lucide-react';
+import { Eye, Folder, Clock, Hourglass, CheckCircle, XCircle, Ban, Printer, Download, Filter, Search, X } from 'lucide-react';
 import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
@@ -32,10 +32,10 @@ const STATUS_LIST = [
  { value: 'dibatalkan', label: 'Dibatalkan' },
 ];
 
-export default function LaporanTiket({ 
- filters, units, subUnits: initialSubUnits, divisiList, 
- totalTickets: _totalTickets, statusCounts, slaStats, slaPieChartData, 
- monthlyTrend, ticketsByUnit, ticketsByStatus: _ticketsByStatus, ticketsByLayanan, tickets 
+export default function LaporanTiket({
+ filters, units, subUnits: initialSubUnits, divisiList,
+ totalTickets: _totalTickets, statusCounts, slaStats, slaPieChartData,
+ monthlyTrend, ticketsByUnit, ticketsByStatus: _ticketsByStatus, ticketsByLayanan, tickets
 }: any) {
  const maxLayanan = ticketsByLayanan?.length > 0 ? Math.max(...ticketsByLayanan.map((t: any) => t.count)) : 1;
 
@@ -49,6 +49,8 @@ export default function LaporanTiket({
  const [divisiId, setDivisiId] = useState(filters?.divisi_id || '');
  const [subUnits, setSubUnits] = useState<any[]>(initialSubUnits || []);
  const [showFilter, setShowFilter] = useState(false);
+ const [exporting, setExporting] = useState(false);
+ const [search, setSearch] = useState(filters?.search || '');
 
  useEffect(() => {
  if (unitId && (!initialSubUnits || initialSubUnits.length === 0)) {
@@ -77,6 +79,8 @@ export default function LaporanTiket({
  if (status) params.status = status;
 
  if (divisiId) params.divisi_id = divisiId;
+
+ if (search) params.search = search;
  router.get(route('admin.laporan.tiket'), params, { preserveState: true });
  };
 
@@ -85,8 +89,65 @@ export default function LaporanTiket({
  };
 
  const handleExportExcel = () => {
- // Implementasi Export Excel bisa memanggil URL backend yang mereturn response CSV/Excel
- alert('Fitur Export Excel akan diproses oleh server berdasarkan filter aktif.');
+   setExporting(true);
+   const params = new URLSearchParams();
+   if (year) params.set('year', year);
+   if (month) params.set('month', month);
+   if (dateFrom) params.set('date_from', dateFrom);
+   if (dateTo) params.set('date_to', dateTo);
+   if (unitId) params.set('unit_id', unitId);
+   if (subUnitId) params.set('sub_unit_id', subUnitId);
+   if (status) params.set('status', status);
+   if (divisiId) params.set('divisi_id', divisiId);
+   if (search) params.set('search', search);
+   const qs = params.toString();
+   const url = `/admin/laporan/tiket/export` + (qs ? '?' + qs : '');
+   window.location.href = url;
+   setTimeout(() => { setExporting(false); }, 5000);
+ };
+
+ const handleExportPdf = async () => {
+   setExporting(true);
+   try {
+     const params = new URLSearchParams();
+     if (year) params.set('year', year);
+     if (month) params.set('month', month);
+     if (dateFrom) params.set('date_from', dateFrom);
+     if (dateTo) params.set('date_to', dateTo);
+     if (unitId) params.set('unit_id', unitId);
+     if (subUnitId) params.set('sub_unit_id', subUnitId);
+     if (status) params.set('status', status);
+     if (divisiId) params.set('divisi_id', divisiId);
+     if (search) params.set('search', search);
+     const qs = params.toString();
+     const url = `/admin/laporan/tiket/export-pdf` + (qs ? '?' + qs : '');
+     const response = await fetch(url);
+
+     if (!response.ok) {
+       const data = await response.json();
+       if (data.error) {
+         alert(data.error);
+       } else {
+         alert('Terjadi kesalahan saat membuat PDF');
+       }
+       setExporting(false);
+       return;
+     }
+
+     const blob = await response.blob();
+     const downloadUrl = window.URL.createObjectURL(blob);
+     const link = document.createElement('a');
+     link.href = downloadUrl;
+     link.download = `laporan-tiket-${new Date().getTime()}.pdf`;
+     document.body.appendChild(link);
+     link.click();
+     window.URL.revokeObjectURL(downloadUrl);
+     document.body.removeChild(link);
+   } catch (error) {
+     alert('Gagal mengunduh PDF: ' + (error instanceof Error ? error.message : 'Unknown error'));
+   } finally {
+     setExporting(false);
+   }
  };
 
  const columns = [
@@ -172,11 +233,11 @@ export default function LaporanTiket({
  <Filter className="w-4 h-4 mr-2" />
  {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
  </Button>
- <Button variant="outline" onClick={handlePrint}>
- <Printer className="w-4 h-4 mr-2" /> Export PDF
+ <Button variant="outline" onClick={handleExportPdf} disabled={exporting}>
+ <Printer className="w-4 h-4 mr-2" /> {exporting ? 'Membuat PDF...' : 'Export PDF'}
  </Button>
- <Button variant="default" onClick={handleExportExcel}>
- <Download className="w-4 h-4 mr-2" /> Export Excel
+ <Button variant="default" onClick={handleExportExcel} disabled={exporting}>
+ <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-bounce' : ''}`} /> {exporting ? 'Mengunduh...' : 'Export Excel'}
  </Button>
  </div>
  </div>
@@ -230,6 +291,22 @@ export default function LaporanTiket({
  </select>
  </div>
  <div className="col-span-full flex justify-end mt-2 gap-2">
+ <div className="relative flex-1 max-w-sm mr-auto">
+ <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+ <input
+ type="text"
+ value={search}
+ onChange={e => setSearch(e.target.value)}
+ onKeyDown={e => e.key === 'Enter' && applyFilter()}
+ placeholder="Cari ID tiket, pengaju, layanan..."
+ className="w-full rounded-md border border-input bg-background pl-9 pr-8 text-sm h-9"
+ />
+ {search && (
+ <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+ <X className="h-4 w-4" />
+ </button>
+ )}
+ </div>
  <Button variant="outline" size="sm" onClick={() => router.get(route('admin.laporan.tiket'))}>Reset</Button>
  <Button variant="default" size="sm" onClick={applyFilter}>
  <Search className="w-4 h-4 mr-2" /> Terapkan Filter

@@ -124,11 +124,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
     Route::get('/', function () {
         return auth('admin')->check()
             ? redirect()->route('admin.dashboard')
-            : redirect()->route('admin.login');
+            : redirect()->route('login');
     });
 
     Route::middleware('guest:admin')->group(function () {
-        Route::get('login', [AdminLoginController::class, 'showLoginForm'])->name('login');
+        Route::get('login', function () {
+            return redirect()->route('login');
+        })->name('login');
         Route::post('login', [AdminLoginController::class, 'login'])->middleware('throttle:5,1');
     });
 
@@ -143,6 +145,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // CSAT & Laporan Admin
         Route::middleware('permission:akses-laporan')->group(function () {
             Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');
+            Route::get('/laporan/tiket/export-pdf', [\App\Http\Controllers\Admin\LaporanTiketController::class, 'exportPdf'])->name('laporan.tiket.export-pdf');
+            Route::get('/laporan/tiket/export', [\App\Http\Controllers\Admin\LaporanTiketController::class, 'export'])->name('laporan.tiket.export');
             Route::get('/laporan/tiket', [\App\Http\Controllers\Admin\LaporanTiketController::class, 'index'])->name('laporan.tiket');
             Route::get('/laporan/kinerja-operator', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'index'])->name('laporan.operator');
             Route::get('/laporan/kinerja-operator/{admin}/ulasan', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'ulasan'])->name('laporan.operator.ulasan');
@@ -263,6 +267,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/assign', [\App\Http\Controllers\Admin\TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [\App\Http\Controllers\Admin\TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [\App\Http\Controllers\Admin\TicketController::class, 'updatePriority'])->name('priority');
+            Route::patch('/{ticket}/cancel-booking', [\App\Http\Controllers\Admin\TicketController::class, 'cancelBooking'])->name('cancel-booking');
         });
 
         // Chat Admin

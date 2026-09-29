@@ -15,7 +15,7 @@
 /auth.json
 /node_modules
 /public/build
-/public/fonts-manifest.dev.json
+/public/fonts-manifest.json
 /public/hot
 /public/storage
 /storage/*.key
@@ -25,3 +25,23 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
+/setup.php
+/bun.lock
+Mobile App Flutter/
+Doc/.obsidian/
+Doc/tmp_out.zip
+
+# Debug & AI artifacts
+.agents/
+.claude/
+*.cjs
+check_*.php
+test_*.php
+fix_*.php
+remove_*.cjs
+ORIGINAL_REQUEST.md
+PROJECT.md
+opencode.json
+skills-lock.json
+
+

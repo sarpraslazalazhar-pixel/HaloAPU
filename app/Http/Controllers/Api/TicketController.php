@@ -900,7 +900,12 @@ class TicketController extends Controller
 
         // Hapus prefix storage/ atau public/ jika ada
         $cleanPath = preg_replace('/^(storage\/|public\/|\/)+/', '', $path);
-        
+
+        // Path traversal protection
+        if (str_contains($cleanPath, '..') || str_contains($cleanPath, '\\')) {
+            return response()->json(['message' => 'Path file tidak valid'], 400);
+        }
+
         $headers = [
             'Access-Control-Allow-Origin' => '*',
             'Access-Control-Allow-Methods' => 'GET, OPTIONS',

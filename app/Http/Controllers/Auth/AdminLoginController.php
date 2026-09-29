@@ -11,7 +11,7 @@ class AdminLoginController extends Controller
 {
     public function showLoginForm()
     {
-        return Inertia::render('Auth/AdminLogin');
+        return redirect()->route('login');
     }
 
     public function login(Request $request)
@@ -38,6 +38,6 @@ class AdminLoginController extends Controller
         Auth::guard('admin')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        return redirect()->route('admin.login');
+        return redirect()->route('login');
     }
 }

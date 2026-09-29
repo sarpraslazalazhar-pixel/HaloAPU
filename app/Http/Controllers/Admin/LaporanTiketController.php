@@ -2,72 +2,46 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\LaporanTiketExport;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
 use App\Models\Ticket;
 use App\Models\TicketSlaTracking;
 use App\Models\Unit;
 use App\Models\SubUnit;
 use App\Models\OrgDivisi;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+use Maatwebsite\Excel\Facades\Excel;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Facades\File;
 
 class LaporanTiketController extends Controller
 {
+    /**
+     * Ambil filter params dari request — satu titik kebenaran.
+     */
+    private function filterParams(Request $request): array
+    {
+        return $request->only([
+            'year', 'month', 'date_from', 'date_to',
+            'unit_id', 'sub_unit_id', 'status', 'divisi_id', 'search',
+        ]);
+    }
+
     public function index(Request $request)
     {
-        // Filters
-        $year = $request->input('year', date('Y'));
-        $month = $request->input('month');
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
-        $unitId = $request->input('unit_id');
-        $subUnitId = $request->input('sub_unit_id');
-        $status = $request->input('status');
-        $divisiId = $request->input('divisi_id');
+        $filters = $this->filterParams($request);
+        $filters['year'] = $filters['year'] ?? date('Y');
 
         // References for Dropdowns
         $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
-        $subUnits = $unitId ? SubUnit::where('unit_id', $unitId)->orderBy('nama_layanan')->get() : [];
+        $subUnits = !empty($filters['unit_id']) ? SubUnit::where('unit_id', $filters['unit_id'])->orderBy('nama_layanan')->get() : [];
         $divisiList = OrgDivisi::orderBy('nama_divisi')->get();
 
-        // Base Query with Filters
-        $baseQuery = Ticket::query();
-
-        if ($dateFrom || $dateTo) {
-            if ($dateFrom) {
-                $baseQuery->where('tickets.created_at', '>=', $dateFrom . ' 00:00:00');
-            }
-            if ($dateTo) {
-                $baseQuery->where('tickets.created_at', '<=', $dateTo . ' 23:59:59');
-            }
-        } else {
-            if ($year) $baseQuery->whereYear('tickets.created_at', $year);
-            if ($month) $baseQuery->whereMonth('tickets.created_at', $month);
-        }
-
-        if ($unitId) {
-            $baseQuery->whereHas('subUnit', function ($q) use ($unitId) {
-                $q->where('unit_id', $unitId);
-            });
-        }
-        if ($subUnitId) {
-            $baseQuery->where('tickets.sub_unit_id', $subUnitId);
-        }
-        if ($status) {
-            // handle array of status or single string
-            if (is_array($status)) {
-                $baseQuery->whereIn('tickets.status', $status);
-            } else {
-                $baseQuery->where('tickets.status', $status);
-            }
-        }
-        if ($divisiId) {
-            $baseQuery->whereHas('user', function ($q) use ($divisiId) {
-                $q->where('divisi_id', $divisiId);
-            });
-        }
+        // Base Query with shared scope
+        $baseQuery = Ticket::query()->laporanFilter($filters);
 
         // 1. Status Counts
         $statusAggregates = (clone $baseQuery)->selectRaw('
@@ -128,7 +102,7 @@ class LaporanTiketController extends Controller
             'totalAll' => $totalSlaAll,
         ];
 
-        // 3. ECharts Data: Trend Bulanan (Based on filters, grouped by month)
+        // 3. ECharts Data: Trend Bulanan
         $monthlyRaw = (clone $baseQuery)->selectRaw('MONTH(tickets.created_at) as bulan, COUNT(*) as total')
             ->groupBy('bulan')
             ->get();
@@ -139,35 +113,31 @@ class LaporanTiketController extends Controller
             ];
         });
 
-        // 4. ECharts Data: Distribusi Tiket per Unit/Sub-Unit
+        // 4. ECharts Data: Distribusi Tiket per Unit
         $ticketsByUnitRaw = (clone $baseQuery)->selectRaw('sub_units.unit_id, units.nama_unit, COUNT(tickets.id) as total')
             ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
             ->join('units', 'sub_units.unit_id', '=', 'units.id')
             ->groupBy('sub_units.unit_id', 'units.nama_unit')
             ->get();
-        
-        $ticketsByUnit = $ticketsByUnitRaw->map(function($item) {
-            return [
-                'name' => $item->nama_unit,
-                'value' => $item->total,
-            ];
-        });
 
-        // 5. ECharts Data: Top 5 Divisi Pengaju
+        $ticketsByUnit = $ticketsByUnitRaw->map(fn ($item) => [
+            'name' => $item->nama_unit,
+            'value' => $item->total,
+        ]);
+
+        // 5. Top Divisi
         $topDivisiData = (clone $baseQuery)->selectRaw('org_divisi.nama_divisi, COUNT(tickets.id) as total')
             ->join('users', 'tickets.user_id', '=', 'users.id')
             ->join('org_divisi', 'users.divisi_id', '=', 'org_divisi.id')
             ->groupBy('users.divisi_id', 'org_divisi.nama_divisi')
             ->orderByDesc('total')
             ->limit(5)
-            ->get()->map(function($item) {
-                return [
-                    'name' => $item->nama_divisi ?? 'Unknown',
-                    'value' => $item->total
-                ];
-            });
+            ->get()->map(fn ($item) => [
+                'name' => $item->nama_divisi ?? 'Unknown',
+                'value' => $item->total
+            ]);
 
-        // 5b. List Tiket By Status & By Layanan (Old Cards)
+        // Tiket per status & layanan
         $ticketsByStatus = (clone $baseQuery)->selectRaw('status, count(*) as count')
             ->groupBy('status')
             ->get();
@@ -178,23 +148,14 @@ class LaporanTiketController extends Controller
             ->orderByDesc('count')
             ->get();
 
-        // 6. Paginated Tickets Data
+        // 6. Paginated Tickets
         $tickets = (clone $baseQuery)->with(['user.divisi', 'subUnit.unit', 'slaTracking'])
             ->latest('tickets.created_at')
             ->paginate(15)
             ->withQueryString();
 
         return Inertia::render('Admin/Laporan/Tiket', [
-            'filters' => [
-                'year' => $year,
-                'month' => $month,
-                'date_from' => $dateFrom,
-                'date_to' => $dateTo,
-                'unit_id' => $unitId,
-                'sub_unit_id' => $subUnitId,
-                'status' => $status,
-                'divisi_id' => $divisiId,
-            ],
+            'filters' => $filters,
             'units' => $units,
             'subUnits' => $subUnits,
             'divisiList' => $divisiList,
@@ -209,5 +170,152 @@ class LaporanTiketController extends Controller
             'ticketsByLayanan' => $ticketsByLayanan,
             'tickets' => $tickets,
         ]);
+    }
+
+    public function export(Request $request)
+    {
+        $filters = $this->filterParams($request);
+        $filters['year'] = $filters['year'] ?? date('Y');
+
+        $admin = auth('admin')->user();
+        $filename = 'laporan-tiket-' . date('Ymd-His') . '.xlsx';
+
+        return Excel::download(new LaporanTiketExport($filters, $admin), $filename);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        ini_set('memory_limit', '256M');
+        ini_set('max_execution_time', 300);
+
+        $filters = $this->filterParams($request);
+        $filters['year'] = $filters['year'] ?? date('Y');
+        $admin = auth('admin')->user();
+
+        // Build query with same filters as index()
+        $query = Ticket::query()->laporanFilter($filters);
+
+        // Check limit
+        $total = (clone $query)->count();
+        if ($total > 1000) {
+            return response()->json([
+                'error' => 'Data terlalu banyak untuk PDF (' . $total . ' tiket). Persempit filter atau gunakan Export Excel.'
+            ], 422);
+        }
+
+        // Get ticket data with eager load
+        $tickets = (clone $query)
+            ->with(['user.divisi', 'subUnit.unit', 'slaTracking'])
+            ->latest('tickets.created_at')
+            ->get();
+
+        // Status counts
+        $statusAggregates = (clone $query)->selectRaw('
+            COUNT(*) as total_tickets,
+            SUM(CASE WHEN status = "open" THEN 1 ELSE 0 END) as open_count,
+            SUM(CASE WHEN status = "on_proses" THEN 1 ELSE 0 END) as on_proses_count,
+            SUM(CASE WHEN status = "pending" THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN status IN ("solve", "selesai") THEN 1 ELSE 0 END) as solve_count,
+            SUM(CASE WHEN status = "reject" THEN 1 ELSE 0 END) as reject_count,
+            SUM(CASE WHEN status = "dibatalkan" THEN 1 ELSE 0 END) as dibatalkan_count
+        ')->first();
+
+        $statusCounts = [
+            'open' => (int) ($statusAggregates->open_count ?? 0),
+            'on_proses' => (int) ($statusAggregates->on_proses_count ?? 0),
+            'pending' => (int) ($statusAggregates->pending_count ?? 0),
+            'solve' => (int) ($statusAggregates->solve_count ?? 0),
+            'reject' => (int) ($statusAggregates->reject_count ?? 0),
+            'dibatalkan' => (int) ($statusAggregates->dibatalkan_count ?? 0),
+        ];
+
+        // SLA stats
+        $slaQuery = (clone $query)
+            ->join('ticket_sla_tracking', 'tickets.id', '=', 'ticket_sla_tracking.ticket_id')
+            ->selectRaw('
+                COUNT(*) as total_all,
+                SUM(CASE WHEN resolved_at IS NOT NULL THEN 1 ELSE 0 END) as total_resolved,
+                SUM(CASE WHEN responded_at IS NOT NULL THEN 1 ELSE 0 END) as total_responded,
+                SUM(CASE WHEN is_response_breached = 1 THEN 1 ELSE 0 END) as response_breach,
+                SUM(CASE WHEN is_resolution_breached = 1 THEN 1 ELSE 0 END) as resolution_breach
+            ')->first();
+
+        $totalSlaAll = (int) ($slaQuery->total_all ?? 0);
+        $totalResolved = (int) ($slaQuery->total_resolved ?? 0);
+        $totalResponded = (int) ($slaQuery->total_responded ?? 0);
+        $responseBreach = (int) ($slaQuery->response_breach ?? 0);
+        $resolutionBreach = (int) ($slaQuery->resolution_breach ?? 0);
+
+        $responseCompliance = $totalResponded > 0
+            ? round((($totalResponded - $responseBreach) / $totalResponded) * 100, 1)
+            : ($totalSlaAll > 0 ? 0 : 100);
+
+        $resolutionCompliance = $totalResolved > 0
+            ? round((($totalResolved - $resolutionBreach) / $totalResolved) * 100, 1)
+            : ($totalSlaAll > 0 ? 0 : 100);
+
+        $slaStats = [
+            'responseCompliance' => $responseCompliance,
+            'resolutionCompliance' => $resolutionCompliance,
+        ];
+
+        // Build filter display string
+        $filterParts = [];
+        if (!empty($filters['unit_id'])) {
+            $unit = Unit::find($filters['unit_id']);
+            if ($unit) $filterParts[] = "Unit = {$unit->nama_unit}";
+        }
+        if (!empty($filters['status'])) {
+            $statusLabel = is_array($filters['status']) ? implode(', ', $filters['status']) : $filters['status'];
+            $filterParts[] = "Status = {$statusLabel}";
+        }
+        if (!empty($filters['date_from']) || !empty($filters['date_to'])) {
+            $dateStr = ($filters['date_from'] ?? '*') . ' - ' . ($filters['date_to'] ?? '*');
+            $filterParts[] = "Tanggal = {$dateStr}";
+        }
+        if (!empty($filters['search'])) {
+            $filterParts[] = "Kata kunci = {$filters['search']}";
+        }
+        $filterPrint = implode(' | ', $filterParts) ?: null;
+
+        // Build period display string
+        $year = $filters['year'] ?? date('Y');
+        $periodePrint = null;
+        if (!empty($filters['date_from']) || !empty($filters['date_to'])) {
+            $from = $filters['date_from'] ? \Carbon\Carbon::createFromFormat('Y-m-d', $filters['date_from'])->format('d M Y') : '01 Jan ' . $year;
+            $to = $filters['date_to'] ? \Carbon\Carbon::createFromFormat('Y-m-d', $filters['date_to'])->format('d M Y') : '31 Dec ' . $year;
+            $periodePrint = "{$from} - {$to}";
+        }
+
+        // Get logo as base64
+        $logo = null;
+        try {
+            $logoPath = public_path('storage/logo.png');
+            if (File::exists($logoPath)) {
+                $logoData = file_get_contents($logoPath);
+                $logo = 'data:image/png;base64,' . base64_encode($logoData);
+            }
+        } catch (\Exception $e) {
+            // Ignore logo error, PDF will render without it
+        }
+
+        // Generate PDF
+        $pdf = Pdf::loadView('exports.laporan-tiket-pdf', [
+            'tickets' => $tickets,
+            'totalTickets' => $total,
+            'statusCounts' => $statusCounts,
+            'slaStats' => $slaStats,
+            'filterPrint' => $filterPrint,
+            'periodePrint' => $periodePrint,
+            'logo' => $logo,
+            'userName' => $admin->name ?? $admin->username,
+        ])->setOption([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled' => false,
+            'defaultFont' => 'DejaVu Sans',
+        ]);
+
+        $filename = 'laporan-tiket-' . date('Ymd-His') . '.pdf';
+        return $pdf->download($filename);
     }
 }

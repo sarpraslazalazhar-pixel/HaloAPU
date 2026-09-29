@@ -41,6 +41,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
   const [statusFilter, setStatusFilter] = useState<string[]>(filters?.status || []);
   const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
   const [dateTo, setDateTo] = useState(filters?.date_to || '');
+  const [search, setSearch] = useState(filters?.search || '');
 
   const toggleStatus = (s: string) => {
     const next = statusFilter.includes(s)
@@ -56,6 +57,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
         status: statusFilter.length > 0 ? statusFilter : undefined,
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
+        search: search || undefined,
       },
       only: ['tickets', 'filters'],
     });
@@ -65,8 +67,9 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
     setStatusFilter([]);
     setDateFrom('');
     setDateTo('');
+    setSearch('');
     router.reload({
-      data: { status: undefined, date_from: undefined, date_to: undefined },
+      data: { status: undefined, date_from: undefined, date_to: undefined, search: undefined },
       only: ['tickets', 'filters'],
     });
   };
@@ -91,6 +94,24 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
               </motion.div>
             </Link>
           </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative w-full max-w-md mb-4">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && applyFilter()}
+            placeholder="Cari ID tiket, layanan..."
+            className="w-full rounded-md border border-input bg-transparent pl-9 pr-8 py-2 text-sm"
+          />
+          {search && (
+            <button onClick={() => { setSearch(''); router.reload({ data: { status: statusFilter.length > 0 ? statusFilter : undefined, date_from: dateFrom || undefined, date_to: dateTo || undefined }, only: ['tickets', 'filters'] }); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
 
         <AnimatePresence>

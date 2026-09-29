@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Shield, Pencil, Trash2, Plus, Search, UserCog, Phone, Unlock } from 'lucide-react';
+import { Shield, Pencil, Trash2, Plus, Search, UserCog, Phone, Unlock, Eye, EyeOff, Sparkles } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -69,11 +69,24 @@ interface Props {
  };
 }
 
+function generateRandomPassword(): string {
+ const letters = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ';
+ const digits = '23456789';
+ const symbols = '!@#$%&*';
+ let pwd = '';
+ for (let i = 0; i < 6; i++) pwd += letters[Math.floor(Math.random() * letters.length)];
+ for (let i = 0; i < 3; i++) pwd += digits[Math.floor(Math.random() * digits.length)];
+ for (let i = 0; i < 2; i++) pwd += symbols[Math.floor(Math.random() * symbols.length)];
+ return pwd.split('').sort(() => Math.random() - 0.5).join('');
+}
+
 export default function ManajemenOperatorIndex({ admins, roles, subUnits, units, filters }: Props) {
  const [open, setOpen] = useState(false);
  const [editing, setEditing] = useState<Admin | null>(null);
  const [search, setSearch] = useState(filters?.search || '');
  const [roleFilter, setRoleFilter] = useState(filters?.role || '');
+ const [showPassword, setShowPassword] = useState(false);
+ const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
 
  const { data, setData, post, put, processing, errors, reset } = useForm({
  username: '',
@@ -89,15 +102,30 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
  units: [] as number[],
  });
 
+ const handleGeneratePassword = () => {
+ const newPwd = generateRandomPassword();
+ setData((prev) => ({
+ ...prev,
+ password: newPwd,
+ password_confirmation: newPwd,
+ }));
+ setShowPassword(true);
+ setShowPasswordConfirmation(true);
+ };
+
  const openCreate = () => {
  setEditing(null);
  reset();
+ setShowPassword(false);
+ setShowPasswordConfirmation(false);
  setData('role', roles.length > 0 ? roles[0].name : '');
  setOpen(true);
  };
 
  const openEdit = (admin: Admin) => {
  setEditing(admin);
+ setShowPassword(false);
+ setShowPasswordConfirmation(false);
  setData({
  username: admin.username,
  email: admin.email,
@@ -452,23 +480,61 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
  </div>
 
  <div className="grid gap-2 border-t pt-4 mt-2">
+ <div className="flex items-center justify-between">
  <Label htmlFor="password">{editing ? 'Password Baru (opsional)' : 'Password'}</Label>
+ <button
+ type="button"
+ onClick={handleGeneratePassword}
+ className="text-xs text-[#0088cc] hover:text-[#0077b3] font-medium flex items-center gap-1 focus:outline-none cursor-pointer"
+ >
+ <Sparkles className="w-3.5 h-3.5" />
+ Auto Generate
+ </button>
+ </div>
+ <div className="relative">
  <Input
  id="password"
- type="password"
+ type={showPassword ? 'text' : 'password'}
  value={data.password}
  onChange={(e) => setData('password', e.target.value)}
+ placeholder={editing ? '••••••••' : 'Min. 8 karakter'}
+ autoComplete="new-password"
+ className="pr-10"
  />
+ <button
+ type="button"
+ onClick={() => setShowPassword(!showPassword)}
+ className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer"
+ tabIndex={-1}
+ title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+ >
+ {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+ </button>
+ </div>
  {errors.password && <span className="text-sm text-red-500">{errors.password}</span>}
  </div>
  <div className="grid gap-2">
  <Label htmlFor="password_confirmation">Konfirmasi Password</Label>
+ <div className="relative">
  <Input
  id="password_confirmation"
- type="password"
+ type={showPasswordConfirmation ? 'text' : 'password'}
  value={data.password_confirmation}
  onChange={(e) => setData('password_confirmation', e.target.value)}
+ placeholder="Ulangi password"
+ autoComplete="new-password"
+ className="pr-10"
  />
+ <button
+ type="button"
+ onClick={() => setShowPasswordConfirmation(!showPasswordConfirmation)}
+ className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer"
+ tabIndex={-1}
+ title={showPasswordConfirmation ? 'Sembunyikan password' : 'Lihat password'}
+ >
+ {showPasswordConfirmation ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+ </button>
+ </div>
  </div>
  <DialogFooter>
  <motion.div whileTap={{ scale: 0.95 }}>

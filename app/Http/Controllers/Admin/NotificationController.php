@@ -16,12 +16,21 @@ class NotificationController extends Controller
     }
 
     /**
-     * Ambil jumlah notifikasi yang belum dibaca.
+     * Ambil jumlah notifikasi yang belum dibaca (Cached 15 detik untuk mereduksi beban DB).
      */
     public function unreadCount(Request $request): JsonResponse
     {
         $user = $this->getNotifiableUser($request);
-        $count = $user ? $user->unreadNotifications()->count() : 0;
+        $count = 0;
+        if ($user) {
+            $userType = get_class($user);
+            $userId = $user->id;
+            $count = (int) \Illuminate\Support\Facades\Cache::remember(
+                "unread_notif_{$userType}_{$userId}",
+                300,
+                fn () => $user->unreadNotifications()->count()
+            );
+        }
 
         return response()->json([
             'unread_count' => $count,
@@ -78,6 +87,13 @@ class NotificationController extends Controller
         ]);
     }
 
+    protected function clearUnreadCountCache($user): void
+    {
+        if ($user) {
+            \Illuminate\Support\Facades\Cache::forget("unread_notif_" . get_class($user) . "_{$user->id}");
+        }
+    }
+
     /**
      * Tandai satu notifikasi sebagai sudah dibaca.
      */
@@ -87,6 +103,7 @@ class NotificationController extends Controller
         if ($user) {
             $notification = $user->notifications()->findOrFail($id);
             $notification->markAsRead();
+            $this->clearUnreadCountCache($user);
         }
 
         return response()->json(['success' => true]);
@@ -114,6 +131,8 @@ class NotificationController extends Controller
                 'read_at' => now(),
             ]);
 
+            $this->clearUnreadCountCache($user);
+
             return response()->json([
                 'success' => true,
                 'snoozed_until' => $data['snoozed_until'],
@@ -139,6 +158,8 @@ class NotificationController extends Controller
                 'data' => $data,
                 'read_at' => $notification->read_at ?? now(),
             ]);
+
+            $this->clearUnreadCountCache($user);
         }
 
         return response()->json(['success' => true]);
@@ -152,6 +173,7 @@ class NotificationController extends Controller
         $user = $this->getNotifiableUser($request);
         if ($user) {
             $user->unreadNotifications->markAsRead();
+            $this->clearUnreadCountCache($user);
         }
 
         return response()->json(['success' => true]);

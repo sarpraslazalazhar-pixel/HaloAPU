@@ -2,36 +2,29 @@ import { useEffect, useRef } from 'react';
 import { router } from '@inertiajs/react';
 
 export function useIdleTimer(logoutUrl: string, timeout = 30 * 60 * 1000) { // Default 30 mins
- const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActiveRef = useRef<number>(Date.now());
 
- const resetTimer = () => {
- if (timeoutRef.current) {
- clearTimeout(timeoutRef.current);
- }
- 
- timeoutRef.current = setTimeout(() => {
- // Log out user
- router.post(logoutUrl);
- }, timeout);
- };
+  useEffect(() => {
+    const handleActivity = () => {
+      lastActiveRef.current = Date.now();
+    };
 
- useEffect(() => {
- const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
- 
- const handleEvent = () => resetTimer();
+    const interval = setInterval(() => {
+      if (Date.now() - lastActiveRef.current >= timeout) {
+        router.post(logoutUrl);
+      }
+    }, 15000); // Check idle every 15s instead of resetting timers on every mouse event
 
- // Initial setup
- resetTimer();
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    events.forEach((event) => {
+      window.addEventListener(event, handleActivity, { passive: true });
+    });
 
- events.forEach((event) => {
- document.addEventListener(event, handleEvent);
- });
-
- return () => {
- if (timeoutRef.current) clearTimeout(timeoutRef.current);
- events.forEach((event) => {
- document.removeEventListener(event, handleEvent);
- });
- };
- }, [logoutUrl, timeout]);
+    return () => {
+      clearInterval(interval);
+      events.forEach((event) => {
+        window.removeEventListener(event, handleActivity);
+      });
+    };
+  }, [logoutUrl, timeout]);
 }

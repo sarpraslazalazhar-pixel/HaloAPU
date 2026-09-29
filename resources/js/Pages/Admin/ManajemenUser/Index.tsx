@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Users, Pencil, Trash2, Plus, Search, UserX, Smartphone, Unlock } from 'lucide-react';
+import { Users, Pencil, Trash2, Plus, Search, UserX, Smartphone, Unlock, Eye, EyeOff, Sparkles } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -71,12 +71,25 @@ interface Props {
  jabatanList: Jabatan[];
 }
 
+function generateRandomPassword(): string {
+ const letters = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ';
+ const digits = '23456789';
+ const symbols = '!@#$%&*';
+ let pwd = '';
+ for (let i = 0; i < 6; i++) pwd += letters[Math.floor(Math.random() * letters.length)];
+ for (let i = 0; i < 3; i++) pwd += digits[Math.floor(Math.random() * digits.length)];
+ for (let i = 0; i < 2; i++) pwd += symbols[Math.floor(Math.random() * symbols.length)];
+ return pwd.split('').sort(() => Math.random() - 0.5).join('');
+}
+
 export default function ManajemenUserIndex({ users, filters, divisiList, unitOrgList, jabatanList }: Props) {
  const [open, setOpen] = useState(false);
  const [editing, setEditing] = useState<UserData | null>(null);
  const [search, setSearch] = useState(filters?.search || '');
  const [divisiFilter, setDivisiFilter] = useState(filters?.divisi_id || '');
  const [unitOrgFilter, setUnitOrgFilter] = useState(filters?.org_unit_id || '');
+ const [showPassword, setShowPassword] = useState(false);
+ const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
 
  const { data, setData, post, put, processing, errors, reset } = useForm({
  name: '',
@@ -93,6 +106,17 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  jabatan_id: '' as string | number,
  });
 
+ const handleGeneratePassword = () => {
+ const newPwd = generateRandomPassword();
+ setData((prev) => ({
+ ...prev,
+ password: newPwd,
+ password_confirmation: newPwd,
+ }));
+ setShowPassword(true);
+ setShowPasswordConfirmation(true);
+ };
+
  // Filter unit organisasi berdasarkan divisi yang dipilih di form
  const filteredUnitOrgList = data.divisi_id
  ? unitOrgList?.filter((u) => String(u.divisi_id) === String(data.divisi_id))
@@ -106,11 +130,15 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  const openCreate = () => {
  setEditing(null);
  reset();
+ setShowPassword(false);
+ setShowPasswordConfirmation(false);
  setOpen(true);
  };
 
  const openEdit = (user: UserData) => {
  setEditing(user);
+ setShowPassword(false);
+ setShowPasswordConfirmation(false);
  setData({
  name: user.name || '',
  username: user.username,
@@ -464,31 +492,65 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
 
  {/* Password */}
  <div>
+ <div className="flex items-center justify-between mb-1">
  <Label htmlFor="password">
  Password {editing ? <span className="text-muted-foreground font-normal">(kosongkan jika tidak diubah)</span> : <span className="text-destructive">*</span>}
  </Label>
+ <button
+ type="button"
+ onClick={handleGeneratePassword}
+ className="text-xs text-[#0088cc] hover:text-[#0077b3] font-medium flex items-center gap-1 focus:outline-none cursor-pointer"
+ >
+ <Sparkles className="w-3.5 h-3.5" />
+ Auto Generate
+ </button>
+ </div>
+ <div className="relative">
  <Input
  id="password"
- type="password"
+ type={showPassword ? 'text' : 'password'}
  value={data.password}
  onChange={(e) => setData('password', e.target.value)}
  placeholder={editing ? '••••••••' : 'Min. 8 karakter'}
  autoComplete="new-password"
+ className="pr-10"
  />
+ <button
+ type="button"
+ onClick={() => setShowPassword(!showPassword)}
+ className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer"
+ tabIndex={-1}
+ title={showPassword ? 'Sembunyikan password' : 'Lihat password'}
+ >
+ {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+ </button>
+ </div>
  {errors.password && <p className="text-xs text-destructive mt-1">{errors.password}</p>}
  </div>
 
  {/* Konfirmasi Password */}
  <div>
- <Label htmlFor="password_confirmation">Konfirmasi Password</Label>
+ <Label htmlFor="password_confirmation" className="mb-1 block">Konfirmasi Password</Label>
+ <div className="relative">
  <Input
  id="password_confirmation"
- type="password"
+ type={showPasswordConfirmation ? 'text' : 'password'}
  value={data.password_confirmation}
  onChange={(e) => setData('password_confirmation', e.target.value)}
  placeholder="Ulangi password"
  autoComplete="new-password"
+ className="pr-10"
  />
+ <button
+ type="button"
+ onClick={() => setShowPasswordConfirmation(!showPasswordConfirmation)}
+ className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 focus:outline-none cursor-pointer"
+ tabIndex={-1}
+ title={showPasswordConfirmation ? 'Sembunyikan password' : 'Lihat password'}
+ >
+ {showPasswordConfirmation ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+ </button>
+ </div>
  </div>
 
  {/* Divisi */}

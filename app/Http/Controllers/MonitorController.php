@@ -23,7 +23,7 @@ class MonitorController extends Controller
         $oneHourLater = $now->copy()->addHour();
 
         // Ambil semua booking yang relevan (selesai dalam 1 jam terakhir atau di masa depan)
-        $query = RoomVehicleBooking::whereIn('status', ['open', 'on_proses'])
+        $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->where('tanggal_selesai', '>=', $oneHourAgo)
             ->with(['ticket.user:id,username,name']);
 
@@ -33,14 +33,19 @@ class MonitorController extends Controller
 
         $bookings = $query->get();
 
-        // Ambil daftar aset dari konfigurasi SubUnit
+        // Ambil daftar aset dari konfigurasi SubUnit (Eager load FormField untuk eliminasi N+1)
         $monitoredSubUnits = \App\Models\SubUnit::where('is_monitored', true)->get();
+        $fieldIds = $monitoredSubUnits->pluck('monitor_asset_field_id')->filter()->unique();
+        $formFields = $fieldIds->isNotEmpty()
+            ? \App\Models\FormField::whereIn('id', $fieldIds)->get()->keyBy('id')
+            : collect();
+
         $configuredAssets = collect();
         foreach ($monitoredSubUnits as $su) {
             $hasOptions = false;
-            if ($su->monitor_asset_field_id) {
-                $field = \App\Models\FormField::find($su->monitor_asset_field_id);
-                if ($field && is_array($field->opsi)) {
+            if ($su->monitor_asset_field_id && isset($formFields[$su->monitor_asset_field_id])) {
+                $field = $formFields[$su->monitor_asset_field_id];
+                if (is_array($field->opsi)) {
                     foreach ($field->opsi as $opsiItem) {
                         $assetName = is_array($opsiItem) ? ($opsiItem['label'] ?? json_encode($opsiItem)) : $opsiItem;
                         $configuredAssets->push((object)[
@@ -101,7 +106,8 @@ class MonitorController extends Controller
 
             if ($activeBooking) {
                 $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->user?->username ?? '-';
-                $statusLabel = $activeBooking->status === 'on_proses' ? 'Sedang Dipakai' : 'Menunggu Persetujuan';
+                $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve']);
+                $statusLabel = $isApproved ? 'Sedang Dipakai' : 'Menunggu Persetujuan';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
@@ -165,7 +171,7 @@ class MonitorController extends Controller
      */
     protected function getCalendarData()
     {
-        $bookings = RoomVehicleBooking::whereIn('status', ['open', 'on_proses'])
+        $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
             ->with(['ticket.user:id,username'])
             ->orderBy('tanggal_mulai')

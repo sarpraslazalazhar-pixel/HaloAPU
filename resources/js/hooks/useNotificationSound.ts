@@ -48,7 +48,7 @@ export function useNotificationSound({
     if (typeof window !== 'undefined' && soundUrl) {
       if (!globalAudioInstance || currentSoundUrl !== soundUrl) {
         globalAudioInstance = new Audio(soundUrl);
-        globalAudioInstance.preload = 'auto';
+        globalAudioInstance.preload = 'none';
         globalAudioInstance.volume = 1.0;
         currentSoundUrl = soundUrl;
       }

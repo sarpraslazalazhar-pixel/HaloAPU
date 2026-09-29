@@ -14,14 +14,30 @@ class TvDashboardController extends Controller
 {
     public function index(Request $request)
     {
-        $today = Carbon::today();
+        // Require valid API token (or other auth mechanism) to view TV Dashboard
+        $token = $request->query('token');
+        $validToken = \App\Models\SystemConfig::getValue('tv_dashboard_token', 'HaloAPU-TV-Token-Secret'); // Use config, fallback to default secret
 
-        // Statistik Hari Ini
+        if (!$token || $token !== $validToken) {
+            return abort(403, 'Akses TV Dashboard Ditolak. Token tidak valid.');
+        }
+
+        $today = Carbon::today();
+        $todayStr = $today->toDateString();
+
+        // Statistik Hari Ini (Gabung dalam 1 agregasi SQL)
+        $statRow = Ticket::selectRaw("
+            SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
+            SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as menunggu,
+            SUM(CASE WHEN status = 'on_proses' THEN 1 ELSE 0 END) as diproses,
+            SUM(CASE WHEN DATE(updated_at) = ? AND status IN ('solve', 'close') THEN 1 ELSE 0 END) as selesai
+        ", [$todayStr, $todayStr])->first();
+
         $stats = [
-            'total_hari_ini' => Ticket::whereDate('created_at', $today)->count(),
-            'menunggu' => Ticket::where('status', 'open')->count(),
-            'diproses' => Ticket::where('status', 'on_proses')->count(),
-            'selesai' => Ticket::whereDate('updated_at', $today)->whereIn('status', ['solve', 'close'])->count(),
+            'total_hari_ini' => (int) ($statRow->total_hari_ini ?? 0),
+            'menunggu' => (int) ($statRow->menunggu ?? 0),
+            'diproses' => (int) ($statRow->diproses ?? 0),
+            'selesai' => (int) ($statRow->selesai ?? 0),
         ];
 
         // Tiket Terbaru (Live Feed)
@@ -54,10 +70,16 @@ class TvDashboardController extends Controller
             $dates->push(now()->subDays($i)->format('Y-m-d'));
         }
 
-        $dailyChartData = $dates->map(function ($dateStr) use ($dailyRaw, $unitNames) {
+        // Optimasi O(1) hash map: [$date][$unit_id] => total
+        $dailyLookup = [];
+        foreach ($dailyRaw as $r) {
+            $dailyLookup[$r->date][$r->unit_id] = (int) $r->total;
+        }
+
+        $dailyChartData = $dates->map(function ($dateStr) use ($dailyLookup, $unitNames) {
             $row = ['date' => $dateStr];
             foreach ($unitNames as $id => $name) {
-                $row[$name] = $dailyRaw->firstWhere(fn($r) => $r->date === $dateStr && $r->unit_id === $id)?->total ?? 0;
+                $row[$name] = $dailyLookup[$dateStr][$id] ?? 0;
             }
             return $row;
         });

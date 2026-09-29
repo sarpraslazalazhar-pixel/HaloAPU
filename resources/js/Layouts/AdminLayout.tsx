@@ -48,7 +48,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { accordionVariants, navItemHover } from '@/lib/animationConfig';
 import PageTransition from '@/Components/PageTransition';
 import NotificationBell from '@/Components/NotificationBell';
-import ProfileModal from '@/Components/ProfileModal';
+const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
@@ -524,7 +524,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
             </div>
           ) : (
             logoUrl ? (
-              <img id="displayBannerImg" src={logoUrl} alt="Banner Logo" className="h-10 max-w-[180px] object-contain transition-all" />
+              <img id="displayBannerImg" src={logoUrl} alt="Banner Logo" width={180} height={40} loading="eager" decoding="async" className="h-10 max-w-[180px] object-contain transition-all" />
             ) : (
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-sky-500" />
@@ -709,9 +709,9 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
 
  <DropdownMenu>
  <DropdownMenuTrigger asChild>
- <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 border overflow-hidden">
+ <Button variant="ghost" size="icon" aria-label="Menu Pengguna Admin" className="rounded-full h-8 w-8 border overflow-hidden">
  {admin?.avatar_path ? (
- <img src={`/storage/${admin.avatar_path}`} alt="Avatar" className="h-full w-full object-cover" />
+ <img src={`/storage/${admin.avatar_path}`} alt="Avatar" width={32} height={32} loading="lazy" decoding="async" className="h-full w-full object-cover" />
  ) : (
  <User className="h-4 w-4" />
  )}
@@ -740,7 +740,11 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
  </DropdownMenuContent>
  </DropdownMenu>
 
- <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={admin} isAdmin={true} />
+ {profileOpen && (
+   <React.Suspense fallback={null}>
+     <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={admin} isAdmin={true} />
+   </React.Suspense>
+ )}
  </header>
         <main className="flex-1 overflow-y-auto flex flex-col">
           <PageTransition className="mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">

@@ -1,11 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { router, usePage } from '@inertiajs/react';
-import { z } from 'zod';
 import { useChatSound } from './useChatSound';
-
-const unreadClearedDetailSchema = z.object({
-  count: z.number().positive().optional(),
-});
 
 interface UseChatUnreadOptions {
   user: any;
@@ -173,11 +168,9 @@ export function useChatUnread({
   useEffect(() => {
     const handleUnreadCleared = (e: Event) => {
       if (e instanceof CustomEvent) {
-        const parsed = unreadClearedDetailSchema.safeParse(e.detail);
-
-        if (parsed.success && parsed.data.count !== undefined) {
-          setUnreadCount((prev) => Math.max(0, prev - parsed.data.count));
-
+        const count = Number(e.detail?.count);
+        if (Number.isFinite(count) && count > 0) {
+          setUnreadCount((prev) => Math.max(0, prev - count));
           return;
         }
       }

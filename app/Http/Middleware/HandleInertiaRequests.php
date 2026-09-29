@@ -67,6 +67,8 @@ class HandleInertiaRequests extends Middleware
                 'message' => fn () => $request->session()->get('message'),
                 'success' => fn () => $request->session()->get('success'),
                 'error' => fn () => $request->session()->get('error'),
+                'role_selection_required' => fn () => $request->session()->get('role_selection_required'),
+                'available_roles' => fn () => $request->session()->get('available_roles'),
             ],
             'appConfig' => fn () => \App\Models\SystemConfig::getAppConfig(),
             'unread_chat_count' => fn () => $this->getUnreadChatCount($request),
@@ -80,7 +82,7 @@ class HandleInertiaRequests extends Middleware
             if ($admin instanceof Admin) {
                 return (int) \Illuminate\Support\Facades\Cache::remember(
                     "unread_chat_admin_{$admin->id}",
-                    30,
+                    60,
                     fn () => $this->calculateUnreadChatCountForAdmin($admin)
                 );
             }
@@ -89,7 +91,7 @@ class HandleInertiaRequests extends Middleware
             if ($user instanceof User) {
                 return (int) \Illuminate\Support\Facades\Cache::remember(
                     "unread_chat_user_{$user->id}",
-                    30,
+                    60,
                     fn () => $this->calculateUnreadChatCountForUser($user)
                 );
             }

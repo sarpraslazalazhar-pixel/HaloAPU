@@ -35,7 +35,8 @@ class TicketController extends Controller
             }
         }
 
-        $activeStatuses = ['open', 'on_proses', 'pending', 'need_revision', 'solve'];
+        // Tiket selesai (solve/reject/dibatalkan) tidak tampil di daftar Tiketing utama, melainkan di Laporan Tiket
+        $activeStatuses = ['open', 'on_proses', 'pending', 'need_revision'];
 
         if ($request->filled('unit_id')) {
             $query->where('unit_id', $request->unit_id);
@@ -45,8 +46,7 @@ class TicketController extends Controller
         }
         if ($request->filled('status')) {
             $statuses = is_array($request->status) ? $request->status : [$request->status];
-            $allowedStatuses = array_values(array_intersect($statuses, $activeStatuses));
-            $query->whereIn('status', $allowedStatuses);
+            $query->whereIn('status', $statuses);
         } else {
             $query->whereIn('status', $activeStatuses);
         }
@@ -62,15 +62,33 @@ class TicketController extends Controller
         if ($request->filled('org_unit_id')) {
             $query->where('org_unit_id', $request->org_unit_id);
         }
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('tickets.id', 'like', "%{$search}%")
+                  ->orWhereHas('user', fn ($u) => $u->where('username', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
+                  ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"));
+            });
+        }
 
         $tickets = $query->latest()->paginate(10)->withQueryString();
 
+        $units = \Illuminate\Support\Facades\Cache::remember('master_units_filter', 300, function () {
+            return Unit::where('aktif', true)->select('id', 'nama_unit')->orderBy('nama_unit')->get();
+        });
+        $divisiList = \Illuminate\Support\Facades\Cache::remember('master_divisi_filter', 300, function () {
+            return OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
+        });
+        $orgUnitList = \Illuminate\Support\Facades\Cache::remember('master_org_unit_filter', 300, function () {
+            return OrgUnit::select('id', 'nama_unit_organisasi')->orderBy('nama_unit_organisasi')->get();
+        });
+
         return Inertia::render('Admin/Tiketing/Index', [
             'tickets' => $tickets,
-            'filters' => $request->only(['unit_id', 'sub_unit_id', 'status', 'date_from', 'date_to', 'divisi_id', 'org_unit_id']),
-            'units' => Unit::where('aktif', true)->orderBy('nama_unit')->get(),
-            'divisiList' => OrgDivisi::orderBy('nama_divisi')->get(),
-            'orgUnitList' => OrgUnit::orderBy('nama_unit_organisasi')->get(),
+            'filters' => $request->only(['unit_id', 'sub_unit_id', 'status', 'date_from', 'date_to', 'divisi_id', 'org_unit_id', 'search']),
+            'units' => $units,
+            'divisiList' => $divisiList,
+            'orgUnitList' => $orgUnitList,
         ]);
     }
 
@@ -93,6 +111,7 @@ class TicketController extends Controller
             'user', 'user.divisi', 'user.orgUnit', 'user.jabatan',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
             'attachments.field', 'attachments.log', 'attachments.log.admin', 'slaTracking',
+            'booking',
             'logs' => fn($q) => $q->latest('timestamp'),
             'logs.admin',
             'logs.attachments',
@@ -182,16 +201,6 @@ class TicketController extends Controller
             }
         }
 
-        if ($newStatus === 'on_proses' && $ticket->booking) {
-            if ($sla && !$sla->resolved_at) {
-                $resolvedAt = now();
-                $sla->update([
-                    'resolved_at' => $resolvedAt,
-                    'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
-                ]);
-            }
-        }
-
         if ($newStatus === 'solve') {
             if ($sla && !$sla->resolved_at) {
                 $resolvedAt = now();
@@ -207,7 +216,11 @@ class TicketController extends Controller
         $ticket->update(['status' => $newStatus]);
 
         if ($ticket->booking) {
-            $ticket->booking->update(['status' => $newStatus]);
+            if ($newStatus === 'reject') {
+                $ticket->booking->update(['status' => 'reject']);
+            } elseif (in_array($newStatus, ['solve', 'on_proses'])) {
+                $ticket->booking->update(['status' => 'disetujui']);
+            }
         }
 
         $log = TicketLog::create([
@@ -362,5 +375,64 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Operator berhasil ditugaskan.');
+    }
+
+    public function cancelBooking(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
+            if ($admin->hasRole('Operator')) {
+                if ($ticket->assigned_admin_id !== $admin->id) {
+                    abort(403, 'Anda tidak berhak membatalkan booking tiket ini.');
+                }
+            } else {
+                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
+                    abort(403, 'Anda tidak berhak membatalkan booking tiket ini.');
+                }
+            }
+        }
+
+        if (!$ticket->booking) {
+            return redirect()->back()->with('error', 'Tidak ada data booking untuk tiket ini.');
+        }
+
+        if ($ticket->booking->tanggal_selesai && \Carbon\Carbon::parse($ticket->booking->tanggal_selesai)->isPast()) {
+            return redirect()->back()->with('error', 'Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+        }
+
+        $rawService = $ticket->subUnit?->nama_layanan ?? $ticket->booking?->tipe ?? 'Aset';
+        $layananTitle = preg_match('/^peminjaman\s+/i', $rawService)
+            ? $rawService
+            : (preg_match('/^penggunaan\s+/i', $rawService)
+                ? preg_replace('/^penggunaan\s+/i', 'Peminjaman ', $rawService)
+                : "Peminjaman {$rawService}");
+
+        $ticket->booking->update(['status' => 'dibatalkan']);
+        $ticket->update(['status' => 'dibatalkan']);
+
+        $alasan = $request->input('catatan') ?: "{$layananTitle} dibatalkan oleh Admin dan aset telah dibebaskan.";
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $admin->id,
+            'aksi' => 'dibatalkan',
+            'catatan' => $alasan,
+        ]);
+
+        try {
+            $ticket->load('user');
+            if ($ticket->user) {
+                $ticket->user->notify(new \App\Notifications\TicketStatusUpdatedNotification($ticket, $alasan));
+                $ticket->user->notify(new \App\Notifications\BrowserNotification(
+                    "Peminjaman Dibatalkan",
+                    "{$layananTitle} tiket #{$ticket->formatted_id} telah dibatalkan oleh Admin. Kini tersedia kembali di Live Monitor.",
+                    "/tiket/{$ticket->id}"
+                ));
+            }
+        } catch (\Exception $e) {
+            \Log::error("Gagal kirim notif cancel booking admin: " . $e->getMessage());
+        }
+
+        return redirect()->back()->with('success', 'Booking berhasil dibatalkan. Aset seketika tersedia kembali di Live Monitor.');
     }
 }

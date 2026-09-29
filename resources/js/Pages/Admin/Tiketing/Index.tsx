@@ -7,7 +7,7 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { Eye, Filter } from 'lucide-react';
+import { Eye, Filter, Search, X } from 'lucide-react';
 import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
@@ -15,7 +15,7 @@ const STATUS_LIST = [
   { value: 'on_proses', label: 'Diproses' },
   { value: 'pending', label: 'Tertunda' },
   { value: 'need_revision', label: 'Butuh Revisi' },
-  { value: 'solve', label: 'Menunggu Review' },
+  { value: 'solve', label: 'Selesai' },
 ];
 
 interface Ticket {
@@ -47,6 +47,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [divisiId, setDivisiId] = useState(filters?.divisi_id || '');
  const [orgUnitId, setOrgUnitId] = useState(filters?.org_unit_id || '');
  const [subUnits, setSubUnits] = useState<any[]>([]);
+ const [search, setSearch] = useState(filters?.search || '');
 
  useEffect(() => {
  if (unitId) {
@@ -76,6 +77,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  if (divisiId) params.divisi_id = divisiId;
 
  if (orgUnitId) params.org_unit_id = orgUnitId;
+
+ if (search) params.search = search;
  router.get(route('admin.tiket.index'), params, { });
  };
 
@@ -148,7 +151,23 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  <AdminLayout title="Daftar Tiket">
  <Head title="Daftar Tiket" />
 
- <div className="flex justify-end mb-4">
+ <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+ <div className="relative w-full sm:max-w-sm">
+ <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+ <input
+ type="text"
+ value={search}
+ onChange={e => setSearch(e.target.value)}
+ onKeyDown={e => e.key === 'Enter' && applyFilter()}
+ placeholder="Cari ID tiket, pengaju, layanan..."
+ className="w-full rounded-md border border-input bg-transparent pl-9 pr-8 py-2 text-sm"
+ />
+ {search && (
+ <button onClick={() => { setSearch(''); const p: any = {}; if (unitId) p.unit_id = unitId; if (subUnitId) p.sub_unit_id = subUnitId; if (selectedStatuses.length > 0) p.status = selectedStatuses; if (dateFrom) p.date_from = dateFrom; if (dateTo) p.date_to = dateTo; if (divisiId) p.divisi_id = divisiId; if (orgUnitId) p.org_unit_id = orgUnitId; router.get(route('admin.tiket.index'), p, {}); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+ <X className="h-4 w-4" />
+ </button>
+ )}
+ </div>
  <Button onClick={() => setShowFilter(!showFilter)} variant="outline" className="flex items-center gap-2">
  <Filter className="w-4 h-4" />
  {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}

@@ -11,6 +11,7 @@ import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info } from 'lucide-react';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
+import { ConfirmDialog } from '@/Components/ConfirmDialog';
 
 const validTransitions = {
   open: ['on_proses', 'reject', 'pending'],
@@ -31,6 +32,27 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
   const [editorOpen, setEditorOpen] = useState(false);
   const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showCancelBookingConfirm, setShowCancelBookingConfirm] = useState(false);
+
+  const bookingServiceTitle = (() => {
+    const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
+    if (/^peminjaman\s+/i.test(rawName)) {
+      return rawName;
+    }
+    if (/^penggunaan\s+/i.test(rawName)) {
+      return rawName.replace(/^penggunaan\s+/i, 'Peminjaman ');
+    }
+    return `Peminjaman ${rawName}`;
+  })();
+
+  const isBookingPast = Boolean(
+    ticket.booking?.tanggal_selesai && new Date(ticket.booking.tanggal_selesai) <= new Date()
+  );
+  const canCancelBooking = Boolean(
+    ticket.booking &&
+    !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking.status) &&
+    !isBookingPast
+  );
 
   // SAFETY: general_attachments is initialized as an empty array of uploaded File instances.
   const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
@@ -52,6 +74,13 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
     e.preventDefault();
     patchPriority(route('admin.tiket.priority', ticket.id), {
       preserveScroll: true,
+    });
+  };
+
+  const handleCancelBooking = () => {
+    router.patch(route('admin.tiket.cancel-booking', ticket.id), {}, {
+      preserveScroll: true,
+      onSuccess: () => setShowCancelBookingConfirm(false),
     });
   };
 
@@ -299,6 +328,61 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
        </div>
 
        <div className="space-y-6">
+              {ticket.booking && (
+                <Card className="border-blue-200 bg-blue-50/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-blue-600" /> {bookingServiceTitle}
+                      </span>
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-bold uppercase ${
+                        ['dibatalkan', 'reject'].includes(ticket.booking.status) ? 'bg-red-100 text-red-700' :
+                        ticket.booking.status === 'selesai' ? 'bg-slate-100 text-slate-700' :
+                        'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {ticket.booking.status}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div>
+                      <span className="text-xs text-slate-500">Aset:</span>
+                      <p className="font-semibold text-slate-800">{ticket.booking.nama_aset} ({ticket.booking.tipe})</p>
+                    </div>
+                    <div>
+                      <span className="text-xs text-slate-500">Jadwal Penggunaan:</span>
+                      <p className="text-xs font-medium text-slate-700">
+                        {formatDateId(ticket.booking.tanggal_mulai)} s/d {formatDateId(ticket.booking.tanggal_selesai)}
+                      </p>
+                    </div>
+
+                    {canCancelBooking && (
+                      <div className="pt-2 border-t border-blue-100">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="w-full text-xs flex items-center justify-center gap-1.5"
+                          onClick={() => setShowCancelBookingConfirm(true)}
+                        >
+                          <XCircle className="w-3.5 h-3.5" /> Batalkan {bookingServiceTitle}
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              <ConfirmDialog
+                open={showCancelBookingConfirm}
+                onOpenChange={setShowCancelBookingConfirm}
+                title={`Batalkan ${bookingServiceTitle}?`}
+                message={`${bookingServiceTitle} ini akan dibatalkan seketika dan aset akan langsung berstatus 'Tersedia' di Live Monitor. Yakin ingin membatalkan?`}
+                confirmText="Ya, Batalkan Booking"
+                cancelText="Tutup"
+                onConfirm={handleCancelBooking}
+              />
+
               <Card>
                 <CardHeader>
                   <CardTitle>Aksi Tiket</CardTitle>

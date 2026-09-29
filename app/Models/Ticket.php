@@ -9,6 +9,54 @@ class Ticket extends Model
     public $incrementing = false;
     protected $keyType = 'integer';
 
+    /**
+     * Scope filter laporan tiket — dipakai bersama oleh LaporanTiketController@index dan export.
+     */
+    public function scopeLaporanFilter($query, array $filters): void
+    {
+        $year     = $filters['year'] ?? null;
+        $month    = $filters['month'] ?? null;
+        $dateFrom = $filters['date_from'] ?? null;
+        $dateTo   = $filters['date_to'] ?? null;
+        $unitId   = $filters['unit_id'] ?? null;
+        $subUnitId = $filters['sub_unit_id'] ?? null;
+        $status   = $filters['status'] ?? null;
+        $divisiId = $filters['divisi_id'] ?? null;
+        $search   = $filters['search'] ?? null;
+
+        if ($dateFrom || $dateTo) {
+            if ($dateFrom) $query->where('tickets.created_at', '>=', $dateFrom . ' 00:00:00');
+            if ($dateTo)   $query->where('tickets.created_at', '<=', $dateTo . ' 23:59:59');
+        } else {
+            if ($year)  $query->whereYear('tickets.created_at', $year);
+            if ($month) $query->whereMonth('tickets.created_at', $month);
+        }
+
+        if ($unitId) {
+            $query->whereHas('subUnit', fn ($q) => $q->where('unit_id', $unitId));
+        }
+        if ($subUnitId) {
+            $query->where('tickets.sub_unit_id', $subUnitId);
+        }
+        if ($status) {
+            if (is_array($status)) {
+                $query->whereIn('tickets.status', $status);
+            } else {
+                $query->where('tickets.status', $status);
+            }
+        }
+        if ($divisiId) {
+            $query->whereHas('user', fn ($q) => $q->where('divisi_id', $divisiId));
+        }
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('tickets.id', 'like', "%{$search}%")
+                  ->orWhereHas('user', fn ($u) => $u->where('username', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
+                  ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"));
+            });
+        }
+    }
+
     protected static function boot()
     {
         parent::boot();

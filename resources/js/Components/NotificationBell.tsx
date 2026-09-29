@@ -107,10 +107,23 @@ export default function NotificationBell() {
     fetchUnreadCount();
 
     const interval = setInterval(() => {
-      fetchUnreadCount();
+      if (!document.hidden) {
+        fetchUnreadCount();
+      }
     }, 15000);
 
-    return () => clearInterval(interval);
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchUnreadCount();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [fetchUnreadCount]);
 
   const fetchRecentNotifications = useCallback(async () => {
@@ -133,12 +146,10 @@ export default function NotificationBell() {
   }, [isOpen, fetchRecentNotifications]);
 
   useEffect(() => {
-    fetchUnreadCount();
-    
     if ('Notification' in window && Notification.permission !== 'granted' && Notification.permission !== 'denied') {
       Notification.requestPermission();
     }
-  }, [fetchUnreadCount]);
+  }, []);
 
   const handleMarkAsRead = async (id: string) => {
     try {
@@ -194,13 +205,13 @@ export default function NotificationBell() {
 
   return (
     <div className="flex items-center gap-1">
-      <Button variant="ghost" size="icon" onClick={handleToggleMute} title={isMuted ? 'Aktifkan suara' : 'Matikan suara'}>
+      <Button variant="ghost" size="icon" onClick={handleToggleMute} aria-label={isMuted ? 'Aktifkan suara notifikasi' : 'Matikan suara notifikasi'} title={isMuted ? 'Aktifkan suara' : 'Matikan suara'}>
         {isMuted ? <VolumeX className="h-4 w-4 text-muted-foreground" /> : <Volume2 className="h-4 w-4" />}
       </Button>
 
       <div className="relative">
         <motion.div whileTap={{ scale: 0.92 }} whileHover={{ scale: 1.05 }}>
-          <Button variant="ghost" size="icon" className="relative" onClick={() => setIsOpen(!isOpen)}>
+          <Button variant="ghost" size="icon" aria-label="Buka daftar notifikasi" className="relative" onClick={() => setIsOpen(!isOpen)}>
             <Bell className="h-5 w-5" />
             {unreadCount > 0 && (
               <motion.span

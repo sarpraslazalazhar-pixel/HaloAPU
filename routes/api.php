@@ -12,10 +12,10 @@ use App\Http\Controllers\Api\MonitorApiController;
 
 Route::post('/login', [AuthController::class, 'login']);
 
-// Proxy to serve attachments with CORS headers for Flutter Web
-Route::get('/attachments/serve', [TicketController::class, 'serveAttachment']);
-
 Route::middleware('auth:sanctum')->group(function () {
+    // Proxy to serve attachments with CORS headers for Flutter Web
+    Route::get('/attachments/serve', [TicketController::class, 'serveAttachment']);
+
     // Auth & Profile
     Route::get('/user', [AuthController::class, 'profile']);
     Route::put('/user', [AuthController::class, 'updateProfile']);

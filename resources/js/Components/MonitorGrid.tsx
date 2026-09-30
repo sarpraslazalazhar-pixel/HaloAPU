@@ -81,10 +81,24 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setView('grid')}>
+            <Button
+              size="sm"
+              onClick={() => setView('grid')}
+              className={view === 'grid'
+                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs font-semibold'
+                : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
+              }
+            >
               <Grid3X3 className="h-4 w-4 mr-1" /> Grid
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setView('calendar')}>
+            <Button
+              size="sm"
+              onClick={() => setView('calendar')}
+              className={view === 'calendar'
+                ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs font-semibold'
+                : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
+              }
+            >
               <CalendarDays className="h-4 w-4 mr-1" /> Kalender
             </Button>
             <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">
@@ -160,10 +174,24 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setView('grid')}>
+          <Button
+            size="sm"
+            onClick={() => setView('grid')}
+            className={view === 'grid'
+              ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs font-semibold'
+              : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
+            }
+          >
             <Grid3X3 className="h-4 w-4 mr-1" /> Grid
           </Button>
-          <Button variant="outline" size="sm" onClick={() => setView('calendar')}>
+          <Button
+            size="sm"
+            onClick={() => setView('calendar')}
+            className={view === 'calendar'
+              ? 'bg-amber-500 hover:bg-amber-600 text-white shadow-xs font-semibold'
+              : 'bg-white hover:bg-gray-100 text-gray-700 border border-gray-200'
+            }
+          >
             <CalendarDays className="h-4 w-4 mr-1" /> Kalender
           </Button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground ml-2">

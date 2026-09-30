@@ -21,6 +21,17 @@ Route::get('/', HomeController::class);
 Route::get('/tv', [\App\Http\Controllers\TvDashboardController::class, 'index'])->name('tv.index');
 Route::get('/system/notification-sound', [\App\Http\Controllers\Admin\SystemConfigController::class, 'serveNotificationSound'])->name('system.notification-sound');
 
+// Storage fallback when public/storage symlink is missing on Windows
+Route::get('/storage/{path}', function ($path) {
+    $filePath = storage_path('app/public/' . $path);
+    if (!file_exists($filePath) || is_dir($filePath)) {
+        abort(404);
+    }
+    return response()->file($filePath, [
+        'Cache-Control' => 'public, max-age=86400',
+    ]);
+})->where('path', '.*')->name('storage.local');
+
 // System Optimization for Shared Hosting (Protected: Admin Only)
 Route::middleware('auth:admin')->prefix('system')->group(function () {
     Route::get('/optimize', function() {

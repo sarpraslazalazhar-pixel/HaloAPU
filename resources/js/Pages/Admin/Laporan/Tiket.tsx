@@ -53,13 +53,10 @@ export default function LaporanTiket({
  const [search, setSearch] = useState(filters?.search || '');
 
  useEffect(() => {
- if (unitId && (!initialSubUnits || initialSubUnits.length === 0)) {
+ if (unitId && (!subUnits || subUnits.length === 0)) {
  fetch(`/api/sub-units/${unitId}`).then(r => r.json()).then(setSubUnits);
- } else if (!unitId) {
- setSubUnits([]);
- setSubUnitId('');
  }
- }, [unitId, initialSubUnits]);
+ }, []);
 
  const applyFilter = () => {
  const params: any = {};
@@ -264,7 +261,13 @@ export default function LaporanTiket({
  </div>
  <div className="space-y-1.5">
  <label className="text-xs font-semibold">Unit Layanan</label>
- <select className="w-full rounded-md border-input bg-background text-sm h-9" value={unitId} onChange={e => setUnitId(e.target.value)}>
+ <select className="w-full rounded-md border-input bg-background text-sm h-9" value={unitId} onChange={e => {
+ const val = e.target.value;
+ setUnitId(val);
+ setSubUnitId('');
+ setSubUnits([]);
+ if (val) fetch(`/api/sub-units/${val}`).then(r => r.json()).then(setSubUnits);
+ }}>
  <option value="">Semua Unit</option>
  {units?.map((u: any) => <option key={u.id} value={u.id}>{u.nama_unit}</option>)}
  </select>

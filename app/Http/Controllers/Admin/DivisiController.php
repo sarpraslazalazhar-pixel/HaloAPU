@@ -13,7 +13,7 @@ class DivisiController extends Controller
     {
         $query = OrgDivisi::withCount('orgUnits');
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $query->where('nama_divisi', 'like', '%' . $request->search . '%');
         }
 

@@ -5,6 +5,8 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { FolderOpen, Clock, CheckCircle2, XCircle, PlusCircle, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
 import { motion, type Variants } from 'framer-motion';
+import { formatTicketId } from '@/lib/utils';
+import { StatusBadge } from '@/Components/StatusBadge';
 
 const containerVariants: Variants = {
   hidden: { opacity: 1 },
@@ -154,12 +156,12 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
                     <Card className="hover:shadow-md transition-shadow">
                       <CardContent className="p-4">
                         <div className="flex justify-between items-start mb-2">
-                          <span className="text-xs font-semibold px-2 py-1 bg-primary/10 text-primary rounded-md">{tiket.ticket_number}</span>
+                          <span className="text-xs font-semibold px-2 py-1 bg-primary/10 text-primary rounded-md font-mono">{formatTicketId(tiket.id)}</span>
                           <span className="text-xs text-muted-foreground">{new Date(tiket.created_at).toLocaleDateString('id-ID')}</span>
                         </div>
                         <h3 className="font-medium text-sm line-clamp-2">{tiket.sub_unit?.nama_layanan || 'Layanan Umum'}</h3>
                         <div className="mt-4 flex items-center justify-between">
-                          <span className="text-xs font-medium text-muted-foreground">{tiket.status}</span>
+                          <StatusBadge status={tiket.status} />
                           <ArrowRight className="w-4 h-4 text-muted-foreground" />
                         </div>
                       </CardContent>

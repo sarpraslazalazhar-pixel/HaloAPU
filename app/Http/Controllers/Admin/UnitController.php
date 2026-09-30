@@ -13,7 +13,7 @@ class UnitController extends Controller
     {
         $query = Unit::withCount('subUnits');
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $query->where('nama_unit', 'like', '%' . $request->search . '%');
         }
 

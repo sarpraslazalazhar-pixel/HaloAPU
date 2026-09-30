@@ -19,6 +19,16 @@ class SubUnit extends Model
         'is_revision_enabled' => 'boolean',
     ];
 
+    protected static function booted()
+    {
+        static::saved(function ($subUnit) {
+            \Illuminate\Support\Facades\Cache::forget("sub_units_{$subUnit->unit_id}");
+        });
+        static::deleted(function ($subUnit) {
+            \Illuminate\Support\Facades\Cache::forget("sub_units_{$subUnit->unit_id}");
+        });
+    }
+
     public function unit()
     {
         return $this->belongsTo(Unit::class);

@@ -177,7 +177,9 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  onValueChange={val => setData('sub_unit_id', val)}
  >
  <SelectTrigger className="w-full">
- <SelectValue placeholder="Pilih Sub Unit" />
+ <SelectValue placeholder="Pilih Sub Unit">
+ {subUnits.find(s => String(s.id) === String(data.sub_unit_id))?.nama_layanan}
+ </SelectValue>
  </SelectTrigger>
  <SelectContent>
  {Object.entries(groupedSubUnits).map(([unitName, items]) => (
@@ -343,7 +345,9 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  onValueChange={val => setData('sub_unit_id', val)}
  >
  <SelectTrigger className="w-full">
- <SelectValue placeholder="Pilih Sub Unit" />
+ <SelectValue placeholder="Pilih Sub Unit">
+ {subUnits.find(s => String(s.id) === String(data.sub_unit_id))?.nama_layanan}
+ </SelectValue>
  </SelectTrigger>
  <SelectContent>
  {Object.entries(groupedSubUnits).map(([unitName, items]) => (

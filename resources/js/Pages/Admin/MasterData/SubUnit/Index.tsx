@@ -116,7 +116,18 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  const handleUnitFilter = (e: React.ChangeEvent<HTMLSelectElement>) => {
  const val = e.target.value;
  setFilterUnit(val);
- router.reload({ data: { unit_id: val || undefined }, only: ['subUnits', 'filters'], });
+ const url = new URL(window.location.href);
+ if (val) {
+ url.searchParams.set('unit_id', val);
+ } else {
+ url.searchParams.delete('unit_id');
+ }
+ url.searchParams.delete('page');
+ router.get(url.pathname + url.search, {}, {
+ preserveState: true,
+ preserveScroll: true,
+ replace: true,
+ });
  };
 
  return (
@@ -173,7 +184,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  </div>
 
  <div className="flex items-center gap-4 mb-4">
- <SearchInput placeholder="Cari layanan..." />
+ <SearchInput placeholder="Cari layanan..." defaultValue={filters?.search} />
  <select
  className="border rounded p-2 text-sm"
  value={filterUnit}

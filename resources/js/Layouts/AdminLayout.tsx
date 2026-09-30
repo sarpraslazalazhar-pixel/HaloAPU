@@ -643,7 +643,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
   ];
 
  return (
- <div className={`grid h-screen w-full overflow-hidden transition-all duration-300 ease-in-out ${isCollapsed ? 'md:grid-cols-[72px_1fr]' : 'md:grid-cols-[250px_1fr]'
+ <div className={`grid h-screen w-full overflow-hidden bg-background transition-all duration-300 ease-in-out ${isCollapsed ? 'md:grid-cols-[72px_1fr]' : 'md:grid-cols-[250px_1fr]'
  }`}>
  <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
  {title && <Head title={title} />}
@@ -676,7 +676,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
  </div>
 
  {/* Main Content Area */}
- <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 ">
+ <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50">
  <header className="relative z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
   <div className="flex-1" />
 

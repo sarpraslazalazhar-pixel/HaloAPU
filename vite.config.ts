@@ -20,6 +20,26 @@ export default defineConfig({
     },
     build: {
         cssCodeSplit: true,
-        chunkSizeWarningLimit: 1200,
+        chunkSizeWarningLimit: 1000,
+        rollupOptions: {
+            output: {
+                manualChunks(id) {
+                    if (id.includes('node_modules')) {
+                        if (id.includes('react/') || id.includes('react-dom/')) {
+                            return 'vendor-react';
+                        }
+                        if (id.includes('@inertiajs/')) {
+                            return 'vendor-inertia';
+                        }
+                        if (id.includes('echarts') || id.includes('zrender')) {
+                            return 'vendor-echarts';
+                        }
+                        if (id.includes('@radix-ui/') || id.includes('lucide-react')) {
+                            return 'vendor-ui';
+                        }
+                    }
+                },
+            },
+        },
     },
 });

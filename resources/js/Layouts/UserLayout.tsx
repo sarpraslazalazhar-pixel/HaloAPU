@@ -80,6 +80,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  const { auth, flash, appConfig } = usePage<any>().props;
  const user = auth.user;
  const [profileOpen, setProfileOpen] = useState(false);
+ const [logoError, setLogoError] = useState(false);
  const { subscribe } = useWebPush(user);
 
  useIdleTimer('/logout');
@@ -166,8 +167,17 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  <div className="flex h-full flex-col">
  <div className="flex h-14 shrink-0 items-center gap-2.5 border-b px-5 lg:h-[60px]">
  <Link href="/dashboard" className="flex items-center gap-2.5 min-w-0">
- {appConfig?.logo_path && (
- <img id="displayBannerImg" src={`/storage/${appConfig.logo_path}`} alt="Banner" width={180} height={55} loading="eager" decoding="async" style={{ height: '55px', width: 'auto', objectFit: 'contain', display: 'inline-block' }} />
+ {appConfig?.logo_path && !logoError ? (
+ <img id="displayBannerImg" src={`/storage/${appConfig.logo_path}`} alt={systemName} width={180} height={45} loading="eager" decoding="async" onError={() => setLogoError(true)} style={{ height: '40px', width: 'auto', objectFit: 'contain', display: 'inline-block' }} />
+ ) : (
+ <div className="flex items-center gap-2">
+ <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary font-bold text-sm">
+ {systemName.charAt(0)}
+ </div>
+ <span className="text-base font-bold tracking-tight text-foreground truncate max-w-[160px]">
+ {systemName}
+ </span>
+ </div>
  )}
  </Link>
  </div>
@@ -222,15 +232,15 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  ];
 
  return (
- <div className="grid h-screen w-full overflow-hidden md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
+ <div className="grid h-screen w-full overflow-hidden bg-background md:grid-cols-[240px_1fr] lg:grid-cols-[260px_1fr]">
  <Toaster position="top-center" toastOptions={{ duration: 4000 }} />
  {title && <Head title={title} />}
- 
+
  <div className="hidden border-r bg-white md:flex flex-col overflow-hidden">
  <SidebarContent />
  </div>
- 
- <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50/50 ">
+
+ <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50">
  <header className="relative z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
  <div className="flex-1" />
  

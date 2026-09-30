@@ -44,15 +44,23 @@ class ChatController extends Controller
             ->unique()
             ->toArray();
 
-        $allAdmins = Admin::all();
-        foreach ($allAdmins as $adm) {
-            Conversation::firstOrCreate([
-                'type' => 'user_admin_direct',
-                'user_id' => $user->id,
-                'admin_one_id' => $adm->id,
-            ], [
-                'last_message_at' => now(),
-            ]);
+        $allAdminIds = Admin::pluck('id')->all();
+        if (!empty($allAdminIds)) {
+            $existingAdminIds = Conversation::where('type', 'user_admin_direct')
+                ->where('user_id', $user->id)
+                ->pluck('admin_one_id')
+                ->all();
+
+            $missingAdminIds = array_diff($allAdminIds, $existingAdminIds);
+            foreach ($missingAdminIds as $admId) {
+                Conversation::firstOrCreate([
+                    'type' => 'user_admin_direct',
+                    'user_id' => $user->id,
+                    'admin_one_id' => $admId,
+                ], [
+                    'last_message_at' => now(),
+                ]);
+            }
         }
 
         // Fetch all conversations for this user

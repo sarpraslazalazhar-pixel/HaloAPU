@@ -18,7 +18,7 @@ class CsatController extends Controller
         ]);
 
         if ($unitId = $request->get('unit_id')) {
-            $query->whereHas('ticket.subUnit.unit', fn ($q) => $q->where('id', $unitId));
+            $query->whereHas('ticket', fn ($q) => $q->where('unit_id', $unitId));
         }
 
         if ($subUnitId = $request->get('sub_unit_id')) {
@@ -41,19 +41,18 @@ class CsatController extends Controller
 
         $statsQuery = Csat::query();
         if ($unitId) {
-            $statsQuery->whereHas('ticket.subUnit.unit', fn ($q) => $q->where('id', $unitId));
+            $statsQuery->whereHas('ticket', fn ($q) => $q->where('unit_id', $unitId));
         }
 
-        $avgRating = round($statsQuery->avg('rating'), 2);
-        $totalRating = $statsQuery->count();
         $ratingDistribution = $statsQuery->select('rating', DB::raw('COUNT(*) as jumlah'))
             ->groupBy('rating')
             ->orderBy('rating')
             ->get();
+        $totalRating = (int) $ratingDistribution->sum('jumlah');
+        $avgRating = $totalRating > 0 ? round($ratingDistribution->sum(fn ($r) => $r->rating * $r->jumlah) / $totalRating, 2) : 0;
 
         $csatPerUnit = Csat::join('tickets', 'csats.ticket_id', '=', 'tickets.id')
-            ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
-            ->join('units', 'sub_units.unit_id', '=', 'units.id')
+            ->join('units', 'tickets.unit_id', '=', 'units.id')
             ->select(
                 'units.nama_unit as unit_nama',
                 DB::raw('ROUND(AVG(csats.rating), 2) as rata_rata'),

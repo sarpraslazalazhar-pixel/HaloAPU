@@ -14,11 +14,16 @@ class SubUnitController extends Controller
     {
         $query = SubUnit::with(['unit', 'formFields'])->withCount('formFields');
 
-        if ($request->has('search')) {
-            $query->where('nama_layanan', 'like', '%' . $request->search . '%');
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('nama_layanan', 'like', "%{$search}%")
+                  ->orWhere('deskripsi', 'like', "%{$search}%")
+                  ->orWhereHas('unit', fn ($u) => $u->where('nama_unit', 'like', "%{$search}%"));
+            });
         }
 
-        if ($request->has('unit_id') && $request->unit_id) {
+        if ($request->filled('unit_id')) {
             $query->where('unit_id', $request->unit_id);
         }
 

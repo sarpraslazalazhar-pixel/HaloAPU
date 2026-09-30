@@ -33,7 +33,7 @@ class Ticket extends Model
         }
 
         if ($unitId) {
-            $query->whereHas('subUnit', fn ($q) => $q->where('unit_id', $unitId));
+            $query->where('tickets.unit_id', $unitId);
         }
         if ($subUnitId) {
             $query->where('tickets.sub_unit_id', $subUnitId);
@@ -46,7 +46,7 @@ class Ticket extends Model
             }
         }
         if ($divisiId) {
-            $query->whereHas('user', fn ($q) => $q->where('divisi_id', $divisiId));
+            $query->where('tickets.divisi_id', $divisiId);
         }
         if ($search) {
             $query->where(function ($q) use ($search) {

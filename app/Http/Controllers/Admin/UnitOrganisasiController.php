@@ -14,11 +14,11 @@ class UnitOrganisasiController extends Controller
     {
         $query = OrgUnit::with('divisi');
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $query->where('nama_unit_organisasi', 'like', '%' . $request->search . '%');
         }
 
-        if ($request->has('divisi_id') && $request->divisi_id) {
+        if ($request->filled('divisi_id')) {
             $query->where('divisi_id', $request->divisi_id);
         }
 

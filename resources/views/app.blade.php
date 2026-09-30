@@ -62,7 +62,7 @@
     @vite(['resources/js/app.tsx'])
     @inertiaHead
 </head>
-<body class="font-sans antialiased bg-background text-foreground @if($isLogin) bg-cover bg-center @endif" @if($isLogin) style="background-image: url('{{ $bannerUrl }}');" @endif>
+<body class="font-sans antialiased bg-background text-foreground">
     @routes
     @inertia
 </body>

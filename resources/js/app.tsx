@@ -20,6 +20,14 @@ router.on('invalid' as any, (event: any) => {
   }
 });
 
+// Bersihkan inline background dari body saat navigasi SPA (misal setelah login)
+router.on('navigate', () => {
+  if (typeof document !== 'undefined') {
+    document.body.style.backgroundImage = '';
+    document.body.classList.remove('bg-cover', 'bg-center');
+  }
+});
+
 createInertiaApp({
  title: (title) =>`${title} - ${appName}`,
  // SAFETY: resolvePageComponent returns Promise<unknown>; Inertia's resolve callback requires the broader type, and the runtime value is always the correct React component.

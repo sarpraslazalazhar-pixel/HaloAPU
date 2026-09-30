@@ -13,7 +13,7 @@ class JabatanController extends Controller
     {
         $query = OrgJabatan::query();
 
-        if ($request->has('search')) {
+        if ($request->filled('search')) {
             $query->where('nama_jabatan', 'like', '%' . $request->search . '%');
         }
 

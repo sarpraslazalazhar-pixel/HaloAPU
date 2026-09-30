@@ -117,15 +117,12 @@ export default function KinerjaOperator({
   const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
-    if (unitId && (!initialSubUnits || initialSubUnits.length === 0)) {
+    if (unitId && (!subUnits || subUnits.length === 0)) {
       fetch(`/api/sub-units/${unitId}`)
         .then((r) => r.json())
         .then(setSubUnits);
-    } else if (!unitId) {
-      setSubUnits([]);
-      setSubUnitId('');
     }
-  }, [unitId, initialSubUnits]);
+  }, []);
 
   const applyFilter = () => {
     const params: Record<string, string> = {};
@@ -291,7 +288,17 @@ export default function KinerjaOperator({
                 <select
                   className="w-full rounded-md border-input bg-background text-sm h-9 px-3"
                   value={unitId}
-                  onChange={(e) => setUnitId(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setUnitId(val);
+                    setSubUnitId('');
+                    setSubUnits([]);
+                    if (val) {
+                      fetch(`/api/sub-units/${val}`)
+                        .then((r) => r.json())
+                        .then(setSubUnits);
+                    }
+                  }}
                 >
                   <option value="">Semua Unit</option>
                   {units?.map((u) => (
@@ -609,7 +616,7 @@ export default function KinerjaOperator({
                                 <AlertTriangle className="w-3 h-3" /> {op.total_breaches} telat
                               </span>
                             ) : (
-                              <span className="text-[11px] text-emerald-500 font-medium">0 breach</span>
+                              <span className="text-[11px] text-emerald-500 font-medium">0 pelanggaran</span>
                             )}
                           </div>
                         </td>

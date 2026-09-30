@@ -66,7 +66,7 @@ class LaporanOperatorController extends Controller
         }
 
         if ($unitId) {
-            $ticketSubQuery->whereHas('subUnit', fn ($q) => $q->where('unit_id', $unitId));
+            $ticketSubQuery->where('tickets.unit_id', $unitId);
         }
         if ($subUnitId) {
             $ticketSubQuery->where('tickets.sub_unit_id', $subUnitId);
@@ -212,7 +212,7 @@ class LaporanOperatorController extends Controller
             }
 
             if ($unitId) {
-                $q->whereHas('subUnit', fn ($sq) => $sq->where('unit_id', $unitId));
+                $q->where('unit_id', $unitId);
             }
             if ($subUnitId) {
                 $q->where('sub_unit_id', $subUnitId);
@@ -295,7 +295,7 @@ class LaporanOperatorController extends Controller
         }
 
         if ($unitId) {
-            $ticketSubQuery->whereHas('subUnit', fn ($q) => $q->where('unit_id', $unitId));
+            $ticketSubQuery->where('tickets.unit_id', $unitId);
         }
         if ($subUnitId) {
             $ticketSubQuery->where('tickets.sub_unit_id', $subUnitId);

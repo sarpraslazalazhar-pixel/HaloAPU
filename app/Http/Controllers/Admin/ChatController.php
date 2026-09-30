@@ -41,18 +41,29 @@ class ChatController extends Controller
         ]);
 
         // Auto-create direct conversations with all other admins
-        $otherAdmins = Admin::where('id', '!=', $admin->id)->get();
-        foreach ($otherAdmins as $otherAdmin) {
-            $minId = min($admin->id, $otherAdmin->id);
-            $maxId = max($admin->id, $otherAdmin->id);
+        $otherAdminIds = Admin::where('id', '!=', $admin->id)->pluck('id')->all();
+        if (!empty($otherAdminIds)) {
+            $existingPairs = Conversation::where('type', 'admin_direct')
+                ->where(function ($q) use ($admin) {
+                    $q->where('admin_one_id', $admin->id)->orWhere('admin_two_id', $admin->id);
+                })
+                ->get(['admin_one_id', 'admin_two_id']);
 
-            Conversation::firstOrCreate([
-                'type' => 'admin_direct',
-                'admin_one_id' => $minId,
-                'admin_two_id' => $maxId,
-            ], [
-                'last_message_at' => now(),
-            ]);
+            $existingOtherIds = $existingPairs->map(fn($c) => $c->admin_one_id === $admin->id ? $c->admin_two_id : $c->admin_one_id)->all();
+            $missingAdminIds = array_diff($otherAdminIds, $existingOtherIds);
+
+            foreach ($missingAdminIds as $missingId) {
+                $minId = min($admin->id, $missingId);
+                $maxId = max($admin->id, $missingId);
+
+                Conversation::firstOrCreate([
+                    'type' => 'admin_direct',
+                    'admin_one_id' => $minId,
+                    'admin_two_id' => $maxId,
+                ], [
+                    'last_message_at' => now(),
+                ]);
+            }
         }
 
         // ponytail: wrap base filter in a closure to prevent orWhere leaks

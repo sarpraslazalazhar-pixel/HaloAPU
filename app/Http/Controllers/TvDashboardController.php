@@ -7,6 +7,7 @@ use App\Models\RoomVehicleBooking;
 use App\Models\SystemConfig;
 use App\Models\Unit;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Carbon\Carbon;
 
@@ -25,20 +26,22 @@ class TvDashboardController extends Controller
         $today = Carbon::today();
         $todayStr = $today->toDateString();
 
-        // Statistik Hari Ini (Gabung dalam 1 agregasi SQL)
-        $statRow = Ticket::selectRaw("
-            SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
-            SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as menunggu,
-            SUM(CASE WHEN status = 'on_proses' THEN 1 ELSE 0 END) as diproses,
-            SUM(CASE WHEN DATE(updated_at) = ? AND status IN ('solve', 'close') THEN 1 ELSE 0 END) as selesai
-        ", [$todayStr, $todayStr])->first();
+        // Statistik Hari Ini (Cached 15 Detik)
+        $stats = Cache::remember("tv_dashboard_stats_{$todayStr}", 15, function () use ($todayStr) {
+            $statRow = Ticket::selectRaw("
+                SUM(CASE WHEN DATE(created_at) = ? THEN 1 ELSE 0 END) as total_hari_ini,
+                SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as menunggu,
+                SUM(CASE WHEN status = 'on_proses' THEN 1 ELSE 0 END) as diproses,
+                SUM(CASE WHEN DATE(updated_at) = ? AND status IN ('solve', 'close') THEN 1 ELSE 0 END) as selesai
+            ", [$todayStr, $todayStr])->first();
 
-        $stats = [
-            'total_hari_ini' => (int) ($statRow->total_hari_ini ?? 0),
-            'menunggu' => (int) ($statRow->menunggu ?? 0),
-            'diproses' => (int) ($statRow->diproses ?? 0),
-            'selesai' => (int) ($statRow->selesai ?? 0),
-        ];
+            return [
+                'total_hari_ini' => (int) ($statRow->total_hari_ini ?? 0),
+                'menunggu' => (int) ($statRow->menunggu ?? 0),
+                'diproses' => (int) ($statRow->diproses ?? 0),
+                'selesai' => (int) ($statRow->selesai ?? 0),
+            ];
+        });
 
         // Tiket Terbaru (Live Feed)
         $recentTickets = Ticket::with(['subUnit:id,nama_layanan', 'user:id,name', 'unit:id,nama_unit'])
@@ -55,33 +58,35 @@ class TvDashboardController extends Controller
             ->take(10)
             ->get();
 
-        // ── Daily Chart (7 Hari Terakhir) ──
-        $startDate = now()->subDays(6)->startOfDay();
-        $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
-            ->where('created_at', '>=', $startDate)
-            ->groupBy('date', 'unit_id')
-            ->get();
+        // ── Daily Chart (7 Hari Terakhir) — Cached 60 Detik ──
+        $dailyChartData = Cache::remember('tv_dashboard_daily_chart', 60, function () {
+            $startDate = now()->subDays(6)->startOfDay();
+            $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
+                ->where('created_at', '>=', $startDate)
+                ->groupBy('date', 'unit_id')
+                ->get();
 
-        $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
-        $unitNames = $units->pluck('nama_unit', 'id');
+            $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+            $unitNames = $units->pluck('nama_unit', 'id');
 
-        $dates = collect();
-        for ($i = 6; $i >= 0; $i--) {
-            $dates->push(now()->subDays($i)->format('Y-m-d'));
-        }
-
-        // Optimasi O(1) hash map: [$date][$unit_id] => total
-        $dailyLookup = [];
-        foreach ($dailyRaw as $r) {
-            $dailyLookup[$r->date][$r->unit_id] = (int) $r->total;
-        }
-
-        $dailyChartData = $dates->map(function ($dateStr) use ($dailyLookup, $unitNames) {
-            $row = ['date' => $dateStr];
-            foreach ($unitNames as $id => $name) {
-                $row[$name] = $dailyLookup[$dateStr][$id] ?? 0;
+            $dates = collect();
+            for ($i = 6; $i >= 0; $i--) {
+                $dates->push(now()->subDays($i)->format('Y-m-d'));
             }
-            return $row;
+
+            // Optimasi O(1) hash map: [$date][$unit_id] => total
+            $dailyLookup = [];
+            foreach ($dailyRaw as $r) {
+                $dailyLookup[$r->date][$r->unit_id] = (int) $r->total;
+            }
+
+            return $dates->map(function ($dateStr) use ($dailyLookup, $unitNames) {
+                $row = ['date' => $dateStr];
+                foreach ($unitNames as $id => $name) {
+                    $row[$name] = $dailyLookup[$dateStr][$id] ?? 0;
+                }
+                return $row;
+            })->toArray();
         });
 
         return Inertia::render('Tv/Index', [

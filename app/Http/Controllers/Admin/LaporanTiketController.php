@@ -114,10 +114,9 @@ class LaporanTiketController extends Controller
         });
 
         // 4. ECharts Data: Distribusi Tiket per Unit
-        $ticketsByUnitRaw = (clone $baseQuery)->selectRaw('sub_units.unit_id, units.nama_unit, COUNT(tickets.id) as total')
-            ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
-            ->join('units', 'sub_units.unit_id', '=', 'units.id')
-            ->groupBy('sub_units.unit_id', 'units.nama_unit')
+        $ticketsByUnitRaw = (clone $baseQuery)->selectRaw('tickets.unit_id, units.nama_unit, COUNT(tickets.id) as total')
+            ->join('units', 'tickets.unit_id', '=', 'units.id')
+            ->groupBy('tickets.unit_id', 'units.nama_unit')
             ->get();
 
         $ticketsByUnit = $ticketsByUnitRaw->map(fn ($item) => [
@@ -125,30 +124,14 @@ class LaporanTiketController extends Controller
             'value' => $item->total,
         ]);
 
-        // 5. Top Divisi
-        $topDivisiData = (clone $baseQuery)->selectRaw('org_divisi.nama_divisi, COUNT(tickets.id) as total')
-            ->join('users', 'tickets.user_id', '=', 'users.id')
-            ->join('org_divisi', 'users.divisi_id', '=', 'org_divisi.id')
-            ->groupBy('users.divisi_id', 'org_divisi.nama_divisi')
-            ->orderByDesc('total')
-            ->limit(5)
-            ->get()->map(fn ($item) => [
-                'name' => $item->nama_divisi ?? 'Unknown',
-                'value' => $item->total
-            ]);
-
-        // Tiket per status & layanan
-        $ticketsByStatus = (clone $baseQuery)->selectRaw('status, count(*) as count')
-            ->groupBy('status')
-            ->get();
-
+        // Tiket per layanan
         $ticketsByLayanan = (clone $baseQuery)->selectRaw('sub_units.nama_layanan as layanan, count(tickets.id) as count')
             ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
             ->groupBy('sub_units.id', 'sub_units.nama_layanan')
             ->orderByDesc('count')
             ->get();
 
-        // 6. Paginated Tickets
+        // 5. Paginated Tickets
         $tickets = (clone $baseQuery)->with(['user.divisi', 'subUnit.unit', 'slaTracking'])
             ->latest('tickets.created_at')
             ->paginate(15)
@@ -165,8 +148,7 @@ class LaporanTiketController extends Controller
             'slaPieChartData' => $slaPieChartData,
             'monthlyTrend' => $monthlyTrend,
             'ticketsByUnit' => $ticketsByUnit,
-            'topDivisiData' => $topDivisiData,
-            'ticketsByStatus' => $ticketsByStatus,
+            'ticketsByStatus' => [],
             'ticketsByLayanan' => $ticketsByLayanan,
             'tickets' => $tickets,
         ]);

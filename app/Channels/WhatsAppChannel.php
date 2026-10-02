@@ -51,18 +51,33 @@ class WhatsAppChannel
         $apiKey = SystemConfig::getValue('wa_api_key');
         $numberKey = SystemConfig::getValue('wa_number_key');
 
-        if (!$apiKey || !$numberKey) {
-            Log::error('WhatsApp gateway belum dikonfigurasi (wa_api_key / wa_number_key)');
+        if (!$apiKey) {
+            Log::error('WhatsApp gateway belum dikonfigurasi (wa_api_key belum diisi)');
             return;
         }
 
         try {
-            $response = Http::timeout(30)->post($gatewayUrl, [
-                'api_key' => $apiKey,
-                'number_key' => $numberKey,
-                'phone_no' => $phoneNumber,
-                'message' => $data['message'],
-            ]);
+            $request = Http::timeout(30);
+
+            // Watzap.id memerlukan number_key; gateway custom (nibol/baileys) memakai header auth + payload to
+            if (!empty($numberKey)) {
+                $response = $request->post($gatewayUrl, [
+                    'api_key' => $apiKey,
+                    'number_key' => $numberKey,
+                    'phone_no' => $phoneNumber,
+                    'message' => $data['message'],
+                ]);
+            } else {
+                $response = $request
+                    ->withHeaders([
+                        'x-api-key' => $apiKey,
+                        'Authorization' => 'Bearer ' . $apiKey,
+                    ])
+                    ->post($gatewayUrl, [
+                        'to' => $phoneNumber,
+                        'message' => $data['message'],
+                    ]);
+            }
 
             if ($response->failed()) {
                 Log::error("WhatsApp API error: {$response->status()} - {$response->body()}");

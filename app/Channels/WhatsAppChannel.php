@@ -57,7 +57,7 @@ class WhatsAppChannel
         }
 
         try {
-            $request = Http::timeout(30);
+            $request = Http::timeout(30)->withoutVerifying();
 
             // Watzap.id memerlukan number_key; gateway custom (nibol/baileys) memakai header auth + payload to
             if (!empty($numberKey)) {

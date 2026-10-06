@@ -54,6 +54,7 @@ class SubUnitController extends Controller
             'monitor_start_field_id' => 'nullable|exists:form_fields,id',
             'monitor_end_field_id' => 'nullable|exists:form_fields,id',
             'is_revision_enabled' => 'nullable|boolean',
+            'wajib_kembali' => 'nullable|boolean',
         ]);
 
         if ($request->has('aktif')) {
@@ -64,6 +65,9 @@ class SubUnitController extends Controller
         }
         if ($request->has('is_revision_enabled')) {
             $validated['is_revision_enabled'] = $request->boolean('is_revision_enabled');
+        }
+        if ($request->has('wajib_kembali')) {
+            $validated['wajib_kembali'] = $request->boolean('wajib_kembali');
         }
 
         SubUnit::create($validated);
@@ -87,6 +91,7 @@ class SubUnitController extends Controller
             'monitor_start_field_id' => 'nullable|exists:form_fields,id',
             'monitor_end_field_id' => 'nullable|exists:form_fields,id',
             'is_revision_enabled' => 'nullable|boolean',
+            'wajib_kembali' => 'nullable|boolean',
         ]);
 
         if ($request->has('aktif')) {
@@ -97,6 +102,9 @@ class SubUnitController extends Controller
         }
         if ($request->has('is_revision_enabled')) {
             $validated['is_revision_enabled'] = $request->boolean('is_revision_enabled');
+        }
+        if ($request->has('wajib_kembali')) {
+            $validated['wajib_kembali'] = $request->boolean('wajib_kembali');
         }
 
         $subUnit->update($validated);

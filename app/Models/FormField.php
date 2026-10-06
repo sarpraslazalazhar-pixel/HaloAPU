@@ -24,6 +24,16 @@ class FormField extends Model
         'wajib' => 'boolean',
     ];
 
+    protected static function booted()
+    {
+        static::saved(function ($field) {
+            \Illuminate\Support\Facades\Cache::forget("form_fields_{$field->sub_unit_id}");
+        });
+        static::deleted(function ($field) {
+            \Illuminate\Support\Facades\Cache::forget("form_fields_{$field->sub_unit_id}");
+        });
+    }
+
     public function subUnit()
     {
         return $this->belongsTo(SubUnit::class);

@@ -101,6 +101,12 @@ const actionConfigMap = {
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
     nodeBg: 'bg-indigo-500',
   },
+  alat_dikembalikan: {
+    label: 'Alat Dikembalikan',
+    icon: CheckCheck,
+    badgeClass: 'bg-teal-100 text-teal-800 border-teal-200',
+    nodeBg: 'bg-teal-500',
+  },
 } satisfies Record<string, ActionConfig>;
 
 const getActionConfig = (aksi: string): ActionConfig => {

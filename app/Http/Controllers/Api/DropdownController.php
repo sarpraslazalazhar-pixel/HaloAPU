@@ -26,8 +26,6 @@ class DropdownController extends Controller
 
     public function formFields($subUnitId)
     {
-        return Cache::remember("form_fields_{$subUnitId}", 300, function () use ($subUnitId) {
-            return FormField::where('sub_unit_id', $subUnitId)->orderBy('urutan')->get()->toArray();
-        });
+        return FormField::where('sub_unit_id', $subUnitId)->orderBy('urutan')->get()->toArray();
     }
 }

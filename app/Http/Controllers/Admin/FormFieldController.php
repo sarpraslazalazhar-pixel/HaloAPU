@@ -125,6 +125,8 @@ class FormFieldController extends Controller
                 ->update(['urutan' => $item['urutan']]);
         }
 
+        \Illuminate\Support\Facades\Cache::forget("form_fields_{$subUnit->id}");
+
         return redirect()->back()->with('success', 'Urutan field berhasil diperbarui.');
     }
 }

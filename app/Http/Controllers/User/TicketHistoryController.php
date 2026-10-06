@@ -95,6 +95,12 @@ class TicketHistoryController extends Controller
             abort(403, 'Anda tidak memiliki akses ke tiket ini.');
         }
 
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'dikembalikan_at') || !\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'kondisi_kembali')) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            } catch (\Exception $e) {}
+        }
+
         $ticket->load([
             'unit',
             'subUnit',
@@ -341,5 +347,74 @@ class TicketHistoryController extends Controller
         }
 
         return redirect()->back()->with('success', 'Permintaan revisi berhasil dikirim.');
+    }
+
+    public function kembalikanAlat(Request $request, Ticket $ticket)
+    {
+        if ((int)$ticket->user_id !== (int)auth()->id()) {
+            abort(403);
+        }
+
+        // Auto-migrate jika kolom belum ada di database
+        if (!\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'dikembalikan_at')) {
+            try {
+                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
+            } catch (\Exception $e) {
+                \Log::error("Migrate error in user kembalikanAlat: " . $e->getMessage());
+            }
+        }
+
+        // Pastikan sub unit wajib_kembali aktif
+        if ($ticket->subUnit && !$ticket->subUnit->wajib_kembali) {
+            $ticket->subUnit->update(['wajib_kembali' => true]);
+        }
+
+        $statusNormalized = strtolower(trim((string)$ticket->status));
+        if (!in_array($statusNormalized, ['solve', 'selesai'])) {
+            return redirect()->back()->with('error', 'Status tiket harus selesai terlebih dahulu.');
+        }
+
+        $validated = $request->validate([
+            'kondisi_kembali' => 'nullable|string|in:baik,rusak,tidak_lengkap',
+            'catatan_kembali' => 'nullable|string|max:1000',
+        ]);
+
+        $kondisi = $validated['kondisi_kembali'] ?? 'baik';
+        $catatan = !empty($validated['catatan_kembali']) ? trim($validated['catatan_kembali']) : null;
+
+        $now = now();
+        $ticket->dikembalikan_at = $now;
+        if (\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'kondisi_kembali')) {
+            $ticket->kondisi_kembali = $kondisi;
+        }
+        if (\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'catatan_kembali')) {
+            $ticket->catatan_kembali = $catatan;
+        }
+        $ticket->save();
+
+        $kondisiLabel = match($kondisi) {
+            'rusak' => 'Rusak',
+            'tidak_lengkap' => 'Tidak Lengkap (Aksesoris Kurang)',
+            default => 'Baik (Normal)',
+        };
+
+        $logCatatan = 'Alat dikembalikan [Kondisi: ' . $kondisiLabel . '], ditandai oleh user ' . auth()->user()->username;
+        if ($catatan) {
+            $logCatatan .= ' — Catatan: ' . $catatan;
+        }
+
+        try {
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => null,
+                'aksi' => 'alat_dikembalikan',
+                'catatan' => $logCatatan,
+                'timestamp' => $now,
+            ]);
+        } catch (\Exception $e) {
+            \Log::error("Log error: " . $e->getMessage());
+        }
+
+        return redirect()->back()->with('success', 'Alat berhasil ditandai sudah dikembalikan.');
     }
 }

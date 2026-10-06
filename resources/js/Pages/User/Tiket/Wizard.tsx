@@ -70,9 +70,30 @@ export default function Wizard({ unitList }: WizardProps) {
   useEffect(() => {
     if (data.sub_unit_id) {
       setFieldsLoading(true);
-      axios.get(route('api.form-fields', { subUnitId: data.sub_unit_id }))
+      axios.get(route('api.form-fields', { subUnitId: data.sub_unit_id }), {
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        params: { _t: Date.now() },
+      })
         .then(res => {
-          setFormFields(res.data);
+          const list: FormFieldType[] = res.data || [];
+          const ordered: FormFieldType[] = [];
+          const roots = list.filter(f => !f.parent_field_id);
+          const childMap = new Map<number, FormFieldType[]>();
+          list.forEach(f => {
+            if (f.parent_field_id) {
+              if (!childMap.has(f.parent_field_id)) childMap.set(f.parent_field_id, []);
+              childMap.get(f.parent_field_id)!.push(f);
+            }
+          });
+          const append = (item: FormFieldType) => {
+            ordered.push(item);
+            (childMap.get(item.id) || []).forEach(append);
+          };
+          roots.forEach(append);
+          const added = new Set(ordered.map(f => f.id));
+          list.forEach(f => { if (!added.has(f.id)) ordered.push(f); });
+
+          setFormFields(ordered);
           setData('form_data', {});
           setData('attachments', {});
         })
@@ -151,17 +172,27 @@ export default function Wizard({ unitList }: WizardProps) {
     setData('attachments', newAttachments);
   };
 
+  const isFieldVisible = (field: FormFieldType) => {
+    if (!field.parent_field_id) return true;
+    const parentVal = data.form_data[field.parent_field_id];
+    if (parentVal === undefined || parentVal === null) return false;
+    if (Array.isArray(parentVal)) {
+      return parentVal.includes(field.trigger_value);
+    }
+    return parentVal === field.trigger_value;
+  };
+
   const validateStep = (step: number) => {
     clearErrors();
     let isValid = true;
-    
+
     if (step === 0) {
       if (!data.unit_id) { setError('unit_id', 'Kanal Layanan wajib dipilih'); isValid = false; }
 
       if (!data.sub_unit_id) { setError('sub_unit_id', 'Jenis Layanan wajib dipilih'); isValid = false; }
     } else if (step === 1) {
       nonUploadFields.forEach(field => {
-        const isVisible = !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value;
+        const isVisible = isFieldVisible(field);
 
         if (isVisible && field.wajib && field.tipe_field !== 'info_peraturan') {
           const val = data.form_data[field.id];
@@ -174,7 +205,7 @@ export default function Wizard({ unitList }: WizardProps) {
       });
     } else if (step === 2) {
       uploadFields.forEach(field => {
-        const isVisible = !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value;
+        const isVisible = isFieldVisible(field);
 
         if (isVisible && field.wajib) {
           const files = data.attachments[String(field.id)];
@@ -186,7 +217,7 @@ export default function Wizard({ unitList }: WizardProps) {
         }
       });
     }
-    
+
     return isValid;
   };
 
@@ -421,7 +452,7 @@ export default function Wizard({ unitList }: WizardProps) {
                       {nonUploadFields.length > 0 && (
                         <ReviewSection title="Isian Form" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
                           {nonUploadFields
-                            .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                            .filter(isFieldVisible)
                             .map(field => {
                               const value = data.form_data[field.id];
                               let displayValue: React.ReactNode = '-';
@@ -444,7 +475,7 @@ export default function Wizard({ unitList }: WizardProps) {
                       {(uploadFields.length > 0) && (
                         <ReviewSection title="Lampiran" icon={<CheckCircle2 className="w-4 h-4 text-green-500" />}>
                           {uploadFields
-                            .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                            .filter(isFieldVisible)
                             .map(field => {
                               const files = data.attachments[String(field.id)] || [];
 

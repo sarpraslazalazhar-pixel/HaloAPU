@@ -80,6 +80,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/tiket/{ticket}/reply', [\App\Http\Controllers\User\TicketHistoryController::class, 'reply'])->name('tiket.reply');
     Route::post('/tiket/{ticket}/accept-result', [\App\Http\Controllers\User\TicketHistoryController::class, 'acceptResult'])->name('tiket.accept-result');
     Route::post('/tiket/{ticket}/request-revision', [\App\Http\Controllers\User\TicketHistoryController::class, 'requestRevision'])->name('tiket.request-revision');
+    Route::post('/tiket/{ticket}/kembalikan-alat', [\App\Http\Controllers\User\TicketHistoryController::class, 'kembalikanAlat'])->name('tiket.kembalikan-alat');
     Route::patch('/tiket/{ticket}/batal', [\App\Http\Controllers\User\TicketHistoryController::class, 'cancel'])->name('tiket.batal');
     Route::get('/tiket/download/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'download'])->name('tiket.download');
     Route::get('/tiket/view/{attachment}', [\App\Http\Controllers\User\TicketHistoryController::class, 'viewAttachment'])->name('tiket.view');
@@ -172,6 +173,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::middleware('permission:akses-konfigurasi')->group(function () {
             Route::get('/konfigurasi', [SystemConfigController::class, 'index'])->name('konfigurasi.index');
             Route::put('/konfigurasi', [SystemConfigController::class, 'update'])->name('konfigurasi.update');
+            Route::post('/konfigurasi/test-wa', [SystemConfigController::class, 'testWa'])->name('konfigurasi.test-wa');
             Route::post('/konfigurasi/upload-logo', [SystemConfigController::class, 'uploadLogo'])->name('konfigurasi.upload-logo');
             Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
             Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
@@ -279,6 +281,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/status', [\App\Http\Controllers\Admin\TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [\App\Http\Controllers\Admin\TicketController::class, 'updatePriority'])->name('priority');
             Route::patch('/{ticket}/cancel-booking', [\App\Http\Controllers\Admin\TicketController::class, 'cancelBooking'])->name('cancel-booking');
+            Route::patch('/{ticket}/kembalikan-alat', [\App\Http\Controllers\Admin\TicketController::class, 'kembalikanAlat'])->name('kembalikan-alat');
         });
 
         // Chat Admin

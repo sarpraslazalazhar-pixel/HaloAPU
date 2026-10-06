@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\SystemConfig;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -79,6 +80,53 @@ class SystemConfigController extends Controller
         SystemConfig::setValue('jam_kerja', $validated['jam_kerja']);
 
         return back()->with('success', 'Konfigurasi berhasil disimpan.');
+    }
+
+    public function testWa(Request $request)
+    {
+        $request->validate([
+            'target_phone' => 'required|string',
+        ]);
+
+        $phoneNumber = preg_replace('/\D/', '', $request->target_phone);
+        $phoneNumber = preg_replace('/^0/', '62', $phoneNumber);
+
+        $gatewayUrl = trim((string) SystemConfig::getValue('wa_gateway_url')) ?: 'https://api.watzap.id/v1/send_message';
+        $apiKey = trim((string) SystemConfig::getValue('wa_api_key'));
+        $numberKey = trim((string) SystemConfig::getValue('wa_number_key'));
+
+        if (!$apiKey) {
+            return back()->with('error', 'API Key WhatsApp belum diisi di konfigurasi.');
+        }
+
+        try {
+            $req = Http::timeout(15)->withoutVerifying();
+
+            if (!empty($numberKey)) {
+                $response = $req->post($gatewayUrl, [
+                    'api_key' => $apiKey,
+                    'number_key' => $numberKey,
+                    'phone_no' => $phoneNumber,
+                    'message' => 'Tes notifikasi WhatsApp dari Halo APU.',
+                ]);
+            } else {
+                $response = $req->withHeaders([
+                    'x-api-key' => $apiKey,
+                    'Authorization' => 'Bearer ' . $apiKey,
+                ])->post($gatewayUrl, [
+                    'to' => $phoneNumber,
+                    'message' => 'Tes notifikasi WhatsApp dari Halo APU.',
+                ]);
+            }
+
+            if ($response->successful()) {
+                return back()->with('success', 'Pesan tes WA berhasil dikirim ke ' . $phoneNumber . ': ' . $response->body());
+            }
+
+            return back()->with('error', 'Gateway WA merespons error (' . $response->status() . '): ' . $response->body());
+        } catch (\Throwable $e) {
+            return back()->with('error', 'Gagal koneksi ke gateway WA: ' . $e->getMessage());
+        }
     }
 
     public function uploadLogo(Request $request)

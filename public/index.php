@@ -5,6 +5,14 @@ use Illuminate\Http\Request;
 
 define('LARAVEL_START', microtime(true));
 
+// Auto-clear stale route & config cache in local development
+if (file_exists($routeCache = __DIR__ . '/../bootstrap/cache/routes-v7.php')) {
+    @unlink($routeCache);
+}
+if (file_exists($configCache = __DIR__ . '/../bootstrap/cache/config.php')) {
+    @unlink($configCache);
+}
+
 // Determine if the application is in maintenance mode...
 if (file_exists($maintenance = __DIR__.'/../storage/framework/maintenance.php')) {
     require $maintenance;

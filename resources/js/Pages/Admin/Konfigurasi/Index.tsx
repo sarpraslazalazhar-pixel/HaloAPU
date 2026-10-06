@@ -50,6 +50,18 @@ export default function KonfigurasiIndex({ configs }: any) {
  setData('jam_kerja', { ...data.jam_kerja, [day]: updated });
  };
 
+ const [testPhone, setTestPhone] = React.useState('');
+ const [testingWa, setTestingWa] = React.useState(false);
+
+ const handleTestWa = () => {
+ if (!testPhone) return;
+ setTestingWa(true);
+ router.post(route('admin.konfigurasi.test-wa'), { target_phone: testPhone }, {
+ preserveScroll: true,
+ onFinish: () => setTestingWa(false),
+ });
+ };
+
  const handleFileUpload = (field: string, e: React.ChangeEvent<HTMLInputElement>) => {
  const file = e.target.files?.[0];
 
@@ -162,6 +174,26 @@ export default function KonfigurasiIndex({ configs }: any) {
  <Label htmlFor="nomor_wa_fallback">Nomor WA Fallback</Label>
  <Input id="nomor_wa_fallback" value={data.nomor_wa_fallback} onChange={(e) => setData('nomor_wa_fallback', e.target.value)} />
  {errors.nomor_wa_fallback && <div className="text-destructive text-xs mt-1">{errors.nomor_wa_fallback}</div>}
+ </div>
+ <div className="p-3 border rounded-lg bg-muted/20 space-y-2">
+ <Label className="font-semibold text-sm">Uji Pengiriman WhatsApp</Label>
+ <p className="text-xs text-muted-foreground">Kirim pesan tes langsung untuk memverifikasi gateway dan koneksi nomor.</p>
+ <div className="flex gap-2">
+ <Input
+ placeholder="Nomor tujuan (cth: 081234567890)"
+ value={testPhone}
+ onChange={(e) => setTestPhone(e.target.value)}
+ className="max-w-xs"
+ />
+ <Button
+ type="button"
+ variant="outline"
+ disabled={testingWa || !testPhone}
+ onClick={handleTestWa}
+ >
+ {testingWa ? 'Mengirim...' : 'Kirim Pesan Tes'}
+ </Button>
+ </div>
  </div>
  <div className="pt-4 border-t">
  <Label>Suara Tiket Masuk</Label>

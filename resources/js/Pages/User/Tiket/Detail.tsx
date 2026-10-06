@@ -11,8 +11,10 @@ import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { XCircle, Eye, CheckCircle2, Edit2, Clock, Paperclip, Info } from 'lucide-react';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
+import Swal from 'sweetalert2';
 
 
 interface DetailProps {
@@ -31,6 +33,11 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const [showConfirm, setShowConfirm] = useState(false);
  const [editorOpen, setEditorOpen] = useState(false);
  const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'reply' | 'rev'} | null>(null);
+ const [isReturned, setIsReturned] = useState(Boolean(ticket.dikembalikan_at));
+ const [showKembaliModal, setShowKembaliModal] = useState(false);
+ const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
+ const [catatanKembali, setCatatanKembali] = useState('');
+ const [isSubmittingKembali, setIsSubmittingKembali] = useState(false);
  const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
  const isBooking = Boolean(ticket.booking);
  const bookingServiceTitle = (() => {
@@ -54,6 +61,52 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
 
  const handleCancel = () => {
    router.patch(route('tiket.batal', ticket.id));
+ };
+
+ const handleKembalikanAlat = () => {
+   setIsSubmittingKembali(true);
+   router.post(`/tiket/${ticket.id}/kembalikan-alat`, {
+     kondisi_kembali: kondisiKembali,
+     catatan_kembali: catatanKembali,
+   }, {
+     preserveScroll: true,
+     onSuccess: (page: any) => {
+       setIsSubmittingKembali(false);
+       if (page?.props?.flash?.error) {
+         setIsReturned(false);
+         Swal.fire({
+           title: 'Gagal Menyimpan',
+           text: page.props.flash.error,
+           icon: 'error',
+           confirmButtonColor: '#ef4444',
+         });
+       } else {
+         setIsReturned(true);
+         setShowKembaliModal(false);
+         Swal.fire({
+           title: 'Berhasil!',
+           text: 'Alat telah ditandai sudah dikembalikan.',
+           icon: 'success',
+           confirmButtonColor: '#059669',
+           timer: 2000,
+           showConfirmButton: false,
+         });
+       }
+     },
+     onError: (errs) => {
+       setIsSubmittingKembali(false);
+       const msg = Object.values(errs)[0] || 'Terjadi kesalahan saat memproses pengembalian.';
+       Swal.fire({
+         title: 'Gagal Menyimpan',
+         text: String(msg),
+         icon: 'error',
+         confirmButtonColor: '#ef4444',
+       });
+     },
+     onFinish: () => {
+       setIsSubmittingKembali(false);
+     },
+   });
  };
 
  const renderFormValue = (field: any) => {
@@ -255,6 +308,148 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
            <p className="font-medium">Anda telah menerima hasil akhir tiket ini.</p>
          </div>
        )}
+
+       {ticket.sub_unit?.wajib_kembali && (
+         <div className="mb-6 p-4 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white shadow-sm">
+           <div className="flex items-center gap-3">
+             <div className={`p-2 rounded-full ${isReturned ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+               <CheckCircle2 className="w-5 h-5" />
+             </div>
+             <div>
+               <h4 className="font-semibold text-sm text-slate-800">Status Pengembalian Alat</h4>
+               <p className="text-xs text-slate-500">
+                 {isReturned
+                   ? `Alat sudah dikembalikan${ticket.dikembalikan_at ? ` pada ${formatDateId(ticket.dikembalikan_at)}` : ''}`
+                   : ticket.status === 'solve'
+                     ? 'Tiket telah selesai. Harap konfirmasi jika alat sudah dikembalikan.'
+                     : 'Alat masih dalam masa peminjaman.'}
+               </p>
+               {isReturned && ticket.kondisi_kembali && (
+                 <div className="mt-1.5 flex items-center gap-2 text-xs">
+                   <span className="text-slate-500">Kondisi:</span>
+                   <span className={`font-semibold px-2 py-0.5 rounded text-[11px] ${
+                     ticket.kondisi_kembali === 'rusak'
+                       ? 'bg-rose-100 text-rose-800'
+                       : ticket.kondisi_kembali === 'tidak_lengkap'
+                       ? 'bg-amber-100 text-amber-800'
+                       : 'bg-emerald-100 text-emerald-800'
+                   }`}>
+                     {ticket.kondisi_kembali === 'rusak' ? 'Rusak' : ticket.kondisi_kembali === 'tidak_lengkap' ? 'Kurang Lengkap' : 'Baik (Normal)'}
+                   </span>
+                   {ticket.catatan_kembali && (
+                     <span className="text-slate-600 italic">"{ticket.catatan_kembali}"</span>
+                   )}
+                 </div>
+               )}
+             </div>
+           </div>
+           {ticket.status === 'solve' && !isReturned && (
+             <Button
+               type="button"
+               variant="default"
+               className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-xs"
+               onClick={() => setShowKembaliModal(true)}
+             >
+               Alat Sudah Dikembalikan
+             </Button>
+           )}
+           {isReturned && (
+             <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+               Sudah Dikembalikan
+             </span>
+           )}
+         </div>
+       )}
+
+       {/* Modal Pemeriksaan & Pemilihan Kondisi Alat oleh User */}
+       <Dialog open={showKembaliModal} onOpenChange={setShowKembaliModal}>
+         <DialogContent className="max-w-md">
+           <DialogHeader>
+             <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+               <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+               Konfirmasi Pengembalian Alat
+             </DialogTitle>
+           </DialogHeader>
+           <div className="space-y-4 pt-2">
+             <div>
+               <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                 Kondisi Fisik & Kelengkapan Alat <span className="text-red-500">*</span>
+               </label>
+               <div className="grid grid-cols-3 gap-2">
+                 <button
+                   type="button"
+                   onClick={() => setKondisiKembali('baik')}
+                   className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                     kondisiKembali === 'baik'
+                       ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                   }`}
+                 >
+                   <span className="text-base">🟢</span>
+                   <span>Baik (Normal)</span>
+                 </button>
+                 <button
+                   type="button"
+                   onClick={() => setKondisiKembali('tidak_lengkap')}
+                   className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                     kondisiKembali === 'tidak_lengkap'
+                       ? 'bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20 shadow-xs'
+                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                   }`}
+                 >
+                   <span className="text-base">🟡</span>
+                   <span>Kurang Lengkap</span>
+                 </button>
+                 <button
+                   type="button"
+                   onClick={() => setKondisiKembali('rusak')}
+                   className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                     kondisiKembali === 'rusak'
+                       ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
+                       : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                   }`}
+                 >
+                   <span className="text-base">🔴</span>
+                   <span>Rusak</span>
+                 </button>
+               </div>
+             </div>
+
+             <div>
+               <label className="text-xs font-semibold text-slate-700 block mb-1">
+                 Catatan Kondisi / Kelengkapan <span className="text-slate-400 font-normal">(Opsional)</span>
+               </label>
+               <textarea
+                 rows={3}
+                 value={catatanKembali}
+                 onChange={e => setCatatanKembali(e.target.value)}
+                 placeholder="Contoh: Alat lengkap dan berfungsi baik, atau ada aksesoris yang tertinggal..."
+                 className="w-full text-xs rounded-lg border border-slate-200 p-2.5 focus:outline-none focus:ring-1 focus:ring-primary"
+               />
+             </div>
+
+             <div className="flex items-center justify-end gap-2 pt-2 border-t">
+               <Button
+                 type="button"
+                 variant="outline"
+                 size="sm"
+                 onClick={() => setShowKembaliModal(false)}
+               >
+                 Batal
+               </Button>
+               <Button
+                 type="button"
+                 size="sm"
+                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                 disabled={isSubmittingKembali}
+                 onClick={handleKembalikanAlat}
+               >
+                 {isSubmittingKembali ? 'Menyimpan...' : 'Simpan Pengembalian'}
+               </Button>
+             </div>
+           </div>
+         </DialogContent>
+       </Dialog>
 
        {/* Tabs Navigation for Ticket Details */}
        <Tabs defaultValue="informasi" className="w-full space-y-6">

@@ -74,7 +74,8 @@ class Ticket extends Model
     protected $fillable = [
         'user_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
         'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id',
-        'revision_count', 'waiting_approval_at', 'is_result_accepted'
+        'revision_count', 'waiting_approval_at', 'is_result_accepted', 'dikembalikan_at',
+        'kondisi_kembali', 'catatan_kembali'
     ];
 
     public function getFormattedIdAttribute()
@@ -107,6 +108,7 @@ class Ticket extends Model
         'unit_id' => 'integer',
         'sub_unit_id' => 'integer',
         'is_result_accepted' => 'boolean',
+        'dikembalikan_at' => 'datetime',
     ];
 
     public function user()

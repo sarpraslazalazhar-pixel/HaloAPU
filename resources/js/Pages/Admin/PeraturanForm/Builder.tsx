@@ -122,7 +122,7 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  const [editMode, setEditMode] = useState(false);
  const [currentFieldId, setCurrentFieldId] = useState<number | null>(null);
 
- const { data, setData, delete: destroy, processing, errors, reset } = useForm({
+ const { data, setData, processing, errors, reset } = useForm({
  label: '',
  tipe_field: 'teks_pendek',
  wajib: false,
@@ -197,8 +197,18 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  cancelButtonText: 'Cancel'
  }).then((result) => {
  if (result.isConfirmed) {
- destroy(route('admin.peraturan-form.destroy', id), {
- preserveScroll: true
+ router.delete(route('admin.peraturan-form.destroy', id), {
+ preserveScroll: true,
+ onSuccess: (page: any) => {
+ if (page?.props?.fields) {
+ setFields(page.props.fields as FormField[]);
+ } else {
+ setFields(prev => prev.filter(f => f.id !== id).map(f => ({
+ ...f,
+ child_fields: f.child_fields ? f.child_fields.filter(c => c.id !== id) : []
+ })));
+ }
+ }
  });
  }
  });
@@ -224,12 +234,24 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
 
  if (editMode && currentFieldId) {
  router.put(route('admin.peraturan-form.update', currentFieldId), payload, {
- onSuccess: () => setIsFormOpen(false),
+ onSuccess: (page: any) => {
+ setIsFormOpen(false);
+ reset();
+ if (page?.props?.fields) {
+ setFields(page.props.fields as FormField[]);
+ }
+ },
  preserveScroll: true
  });
  } else {
  router.post(route('admin.peraturan-form.store', subUnit.id), payload, {
- onSuccess: () => setIsFormOpen(false),
+ onSuccess: (page: any) => {
+ setIsFormOpen(false);
+ reset();
+ if (page?.props?.fields) {
+ setFields(page.props.fields as FormField[]);
+ }
+ },
  preserveScroll: true
  });
  }

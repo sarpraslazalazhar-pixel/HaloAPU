@@ -278,7 +278,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  }
 
  return (
- <div className="space-y-1">
+ <div className={`space-y-1 ${field.parent_field_id ? 'ml-3 sm:ml-6 pl-4 border-l-2 border-orange-400 bg-orange-50/30 p-3 rounded-r-lg -mt-1' : ''}`}>
  <label className="block text-sm font-medium text-gray-700">
  {field.label}
  {field.wajib && <span className="text-red-500 ml-1">*</span>}

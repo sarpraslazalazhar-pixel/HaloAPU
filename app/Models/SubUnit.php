@@ -10,13 +10,14 @@ class SubUnit extends Model
         'unit_id', 'nama_layanan', 'deskripsi', 'aktif',
         'is_monitored', 'monitor_kategori',
         'monitor_asset_field_id', 'monitor_date_field_id', 'monitor_end_date_field_id', 'monitor_start_field_id', 'monitor_end_field_id',
-        'is_revision_enabled'
+        'is_revision_enabled', 'wajib_kembali'
     ];
 
     protected $casts = [
         'aktif' => 'boolean',
         'is_monitored' => 'boolean',
         'is_revision_enabled' => 'boolean',
+        'wajib_kembali' => 'boolean',
     ];
 
     protected static function booted()

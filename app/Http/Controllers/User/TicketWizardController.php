@@ -58,7 +58,10 @@ class TicketWizardController extends Controller
             // Skip hidden conditional fields
             if ($field->parent_field_id) {
                 $parentValue = $request->form_data[(string) $field->parent_field_id] ?? null;
-                if ($parentValue !== $field->trigger_value) continue;
+                $isMatched = is_array($parentValue)
+                    ? in_array($field->trigger_value, $parentValue)
+                    : ($parentValue === $field->trigger_value);
+                if (!$isMatched) continue;
             }
             $fieldKey = (string) $field->id;
             if (!isset($request->form_data[$fieldKey]) || empty($request->form_data[$fieldKey])) {

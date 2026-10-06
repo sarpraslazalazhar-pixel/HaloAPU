@@ -12,6 +12,8 @@ import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, X
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
+import Swal from 'sweetalert2';
 
 const validTransitions = {
   open: ['on_proses', 'reject', 'pending'],
@@ -33,6 +35,11 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
   const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelBookingConfirm, setShowCancelBookingConfirm] = useState(false);
+  const [showKembaliModal, setShowKembaliModal] = useState(false);
+  const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
+  const [catatanKembali, setCatatanKembali] = useState('');
+  const [isSubmittingKembali, setIsSubmittingKembali] = useState(false);
+  const [isReturned, setIsReturned] = useState(Boolean(ticket.dikembalikan_at));
 
   const bookingServiceTitle = (() => {
     const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
@@ -382,6 +389,216 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                 cancelText="Tutup"
                 onConfirm={handleCancelBooking}
               />
+
+              {ticket.sub_unit?.wajib_kembali && (
+                <>
+                  <Card className="border-emerald-200 bg-emerald-50/40">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-semibold flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                          Pengembalian Alat
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          isReturned ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                        }`}>
+                          {isReturned ? 'Sudah Dikembalikan' : 'Belum Dikembalikan'}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3 text-sm pt-0">
+                      <p className="text-xs text-slate-600">
+                        {isReturned
+                          ? `Alat telah ditandai dikembalikan${ticket.dikembalikan_at ? ` pada ${formatDateId(ticket.dikembalikan_at)}` : ''}.`
+                          : ticket.status === 'solve'
+                            ? 'Tiket telah selesai. Konfirmasi jika peminjam telah mengembalikan alat.'
+                            : 'Alat masih dalam masa peminjaman. Tombol pengembalian aktif saat tiket selesai.'}
+                      </p>
+
+                      {isReturned && (
+                        <div className="pt-2 border-t border-emerald-100 space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">Kondisi saat kembali:</span>
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold ${
+                              (ticket.kondisi_kembali || kondisiKembali) === 'rusak'
+                                ? 'bg-rose-100 text-rose-800'
+                                : (ticket.kondisi_kembali || kondisiKembali) === 'tidak_lengkap'
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {(ticket.kondisi_kembali || kondisiKembali) === 'rusak' ? 'Rusak' : (ticket.kondisi_kembali || kondisiKembali) === 'tidak_lengkap' ? 'Kurang Lengkap' : 'Baik (Normal)'}
+                            </span>
+                          </div>
+                          {(ticket.catatan_kembali || catatanKembali) && (
+                            <p className="text-[11px] text-slate-600 bg-white/70 p-2 rounded border border-emerald-100">
+                              "{ticket.catatan_kembali || catatanKembali}"
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      {ticket.status === 'solve' && !isReturned && (
+                        <Button
+                          type="button"
+                          className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                          onClick={() => setShowKembaliModal(true)}
+                        >
+                          Tandai Alat Sudah Dikembalikan
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Modal Konfirmasi & Catatan Kondisi Alat */}
+                  <Dialog open={showKembaliModal} onOpenChange={setShowKembaliModal}>
+                    <DialogContent className="max-w-md">
+                      <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                          Pemeriksaan Pengembalian Alat
+                        </DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 pt-2">
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                            Kondisi Fisik & Kelengkapan <span className="text-red-500">*</span>
+                          </label>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setKondisiKembali('baik')}
+                              className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                                kondisiKembali === 'baik'
+                                  ? 'bg-emerald-50 border-emerald-500 text-emerald-800 ring-2 ring-emerald-500/20 shadow-xs'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="text-base">🟢</span>
+                              <span>Baik (Normal)</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setKondisiKembali('tidak_lengkap')}
+                              className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                                kondisiKembali === 'tidak_lengkap'
+                                  ? 'bg-amber-50 border-amber-500 text-amber-800 ring-2 ring-amber-500/20 shadow-xs'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="text-base">🟡</span>
+                              <span>Kurang Lengkap</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setKondisiKembali('rusak')}
+                              className={`p-2.5 rounded-lg border text-xs font-medium flex flex-col items-center gap-1 transition-all ${
+                                kondisiKembali === 'rusak'
+                                  ? 'bg-rose-50 border-rose-500 text-rose-800 ring-2 ring-rose-500/20 shadow-xs'
+                                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                              }`}
+                            >
+                              <span className="text-base">🔴</span>
+                              <span>Rusak</span>
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-xs font-semibold text-slate-700 block mb-1">
+                            Catatan Pemeriksaan <span className="text-slate-400 font-normal">(Opsional)</span>
+                          </label>
+                          <textarea
+                            rows={3}
+                            value={catatanKembali}
+                            onChange={e => setCatatanKembali(e.target.value)}
+                            placeholder="Contoh: Kabel lengkap dan tas bersih, atau ada goresan halus..."
+                            className="w-full text-xs rounded-lg border border-slate-200 p-2.5 focus:outline-none focus:ring-1 focus:ring-primary"
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 pt-2 border-t">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setShowKembaliModal(false)}
+                          >
+                            Batal
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                            disabled={isSubmittingKembali}
+                            onClick={() => {
+                              setIsSubmittingKembali(true);
+                              try {
+                                const url = `/admin/tiket/${ticket.id}/kembalikan-alat`;
+                                router.patch(
+                                  url,
+                                  {
+                                    kondisi_kembali: kondisiKembali,
+                                    catatan_kembali: catatanKembali,
+                                  },
+                                  {
+                                    preserveScroll: true,
+                                    onSuccess: (page: any) => {
+                                      if (page?.props?.flash?.error) {
+                                        setIsSubmittingKembali(false);
+                                        Swal.fire({
+                                          title: 'Gagal Menyimpan',
+                                          text: page.props.flash.error,
+                                          icon: 'error',
+                                          confirmButtonColor: '#ef4444',
+                                        });
+                                      } else {
+                                        setIsReturned(true);
+                                        setShowKembaliModal(false);
+                                        setIsSubmittingKembali(false);
+                                        Swal.fire({
+                                          title: 'Berhasil!',
+                                          text: 'Pengembalian alat berhasil disimpan.',
+                                          icon: 'success',
+                                          confirmButtonColor: '#059669',
+                                          timer: 2000,
+                                          showConfirmButton: false,
+                                        });
+                                      }
+                                    },
+                                    onError: (errs) => {
+                                      setIsSubmittingKembali(false);
+                                      const msg = Object.values(errs)[0] || 'Gagal menyimpan status pengembalian.';
+                                      Swal.fire({
+                                        title: 'Gagal Menyimpan',
+                                        text: String(msg),
+                                        icon: 'error',
+                                        confirmButtonColor: '#ef4444',
+                                      });
+                                    },
+                                    onFinish: () => {
+                                      setIsSubmittingKembali(false);
+                                    },
+                                  }
+                                );
+                              } catch (err: any) {
+                                setIsSubmittingKembali(false);
+                                Swal.fire({
+                                  title: 'Terjadi Kesalahan',
+                                  text: err?.message || 'Gagal mengirim permintaan.',
+                                  icon: 'error',
+                                  confirmButtonColor: '#ef4444',
+                                });
+                              }
+                            }}
+                          >
+                            {isSubmittingKembali ? 'Menyimpan...' : 'Simpan Pengembalian'}
+                          </Button>
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </>
+              )}
 
               <Card>
                 <CardHeader>

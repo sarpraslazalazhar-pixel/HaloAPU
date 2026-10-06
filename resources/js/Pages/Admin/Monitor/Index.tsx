@@ -2,6 +2,7 @@ import React from 'react';
 import { Head } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import MonitorGrid from '@/Components/MonitorGrid';
+import MonitorAlat, { AlatPinjamItem, KetersediaanAlatItem } from '@/Components/MonitorAlat';
 
 interface AssetData {
   nama_aset: string;
@@ -29,15 +30,18 @@ interface CalendarDay {
 interface AdminMonitorProps {
  assets: AssetData[];
  calendarData: CalendarDay[];
+ alatPinjam?: AlatPinjamItem[];
+ ketersediaanAlat?: KetersediaanAlatItem[];
  lastUpdated: string;
 }
 
-export default function AdminMonitor({ assets, calendarData, lastUpdated }: AdminMonitorProps) {
+export default function AdminMonitor({ assets, calendarData, alatPinjam = [], ketersediaanAlat = [], lastUpdated }: AdminMonitorProps) {
  return (
  <AdminLayout title="Live Monitor">
  <Head title="Live Monitor" />
  <div className="container mx-auto py-6">
  <MonitorGrid assets={assets} calendarData={calendarData || []} lastUpdated={lastUpdated} />
+ <MonitorAlat items={alatPinjam} ketersediaan={ketersediaanAlat} isAdmin={true} />
  </div>
  </AdminLayout>
  );

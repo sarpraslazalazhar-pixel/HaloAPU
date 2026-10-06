@@ -34,6 +34,7 @@ interface SubUnit {
  monitor_start_field_id?: number;
  monitor_end_field_id?: number;
  is_revision_enabled: boolean;
+ wajib_kembali?: boolean;
 }
 
 export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: any; units: Unit[]; filters?: { search?: string; unit_id?: number } }) {
@@ -54,6 +55,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  monitor_start_field_id: '',
  monitor_end_field_id: '',
  is_revision_enabled: false,
+ wajib_kembali: false,
  });
 
  const handleAdd = (e: React.FormEvent) => {
@@ -110,6 +112,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  monitor_start_field_id: subUnit.monitor_start_field_id?.toString() || '',
  monitor_end_field_id: subUnit.monitor_end_field_id?.toString() || '',
  is_revision_enabled: subUnit.is_revision_enabled || false,
+ wajib_kembali: subUnit.wajib_kembali || false,
  });
  };
 
@@ -177,6 +180,14 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  <option value="0">Tidak</option>
  </select>
  </div>
+ <div className="space-y-2">
+ <Label>Wajib Pengembalian Alat?</Label>
+ <p className="text-xs text-slate-500 mb-1">Jika ya, tiket yang selesai akan memiliki pemantauan pengembalian alat.</p>
+ <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.wajib_kembali ? '1' : '0'} onChange={e => setData('wajib_kembali', e.target.value === '1')}>
+ <option value="1">Ya</option>
+ <option value="0">Tidak</option>
+ </select>
+ </div>
  <div className="flex justify-end pt-4"><motion.div whileTap={{ scale: 0.95 }}><Button type="submit">Simpan</Button></motion.div></div>
  </form>
  </DialogContent>
@@ -206,6 +217,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  <TableHead>Status</TableHead>
  <TableHead>Revisi</TableHead>
  <TableHead>Live Monitor</TableHead>
+ <TableHead>Wajib Kembali</TableHead>
  <TableHead>Jml Form Field</TableHead>
  <TableHead>Aksi</TableHead>
  </TableRow>
@@ -219,6 +231,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  <TableCell>{item.aktif ? 'Aktif' : 'Nonaktif'}</TableCell>
  <TableCell>{item.is_revision_enabled ? <span className="text-green-600 font-medium">Ya</span> : '-'}</TableCell>
  <TableCell>{item.is_monitored ? <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-xs">Aktif</span> : '-'}</TableCell>
+ <TableCell>{item.wajib_kembali ? <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">Ya</span> : '-'}</TableCell>
  <TableCell>{item.form_fields_count}</TableCell>
  <TableCell className="space-x-2">
  <Button variant="outline" size="icon" onClick={() => openEdit(item)}>
@@ -231,7 +244,7 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  </TableRow>
  )) : (
  <TableRow>
- <TableCell colSpan={7} className="text-center py-4 text-slate-500">
+ <TableCell colSpan={8} className="text-center py-4 text-slate-500">
  Tidak ada data
  </TableCell>
  </TableRow>
@@ -277,6 +290,14 @@ export default function SubUnitIndex({ subUnits, units, filters }: { subUnits: a
  <Label>Aktifkan Fitur Revisi Pengajuan?</Label>
  <p className="text-xs text-slate-500 mb-1">Jika ya, admin bisa meminta user review dan user bisa meminta revisi.</p>
  <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.is_revision_enabled ? '1' : '0'} onChange={e => setData('is_revision_enabled', e.target.value === '1')}>
+ <option value="1">Ya</option>
+ <option value="0">Tidak</option>
+ </select>
+ </div>
+ <div className="space-y-2">
+ <Label>Wajib Pengembalian Alat?</Label>
+ <p className="text-xs text-slate-500 mb-1">Jika ya, tiket yang selesai akan memiliki pemantauan pengembalian alat.</p>
+ <select className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring" value={data.wajib_kembali ? '1' : '0'} onChange={e => setData('wajib_kembali', e.target.value === '1')}>
  <option value="1">Ya</option>
  <option value="0">Tidak</option>
  </select>

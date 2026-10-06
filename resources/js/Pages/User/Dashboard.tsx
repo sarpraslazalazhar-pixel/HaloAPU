@@ -42,7 +42,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
     { label: 'Ajukan Tiket', desc: 'Buat permohonan layanan baru', icon: PlusCircle, href: '/tiket/buat', color: 'text-primary bg-primary/10' },
     { label: 'Riwayat Tiket', desc: 'Lihat semua pengajuan Kamu', icon: History, href: '/tiket/riwayat', color: 'text-emerald-600 bg-emerald-50' },
     { label: 'Riwayat Penilaian', desc: 'Riwayat penilaian kepuasan', icon: Star, href: '/csat/riwayat', color: 'text-amber-600 bg-amber-50' },
-    { label: 'Monitor', desc: 'Pantau status ruangan & kendaraan', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50' },
+    { label: 'Monitor', desc: 'Pantau ruangan, kendaraan & alat', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50' },
   ];
 
   const timeGreeting = () => {
@@ -111,24 +111,25 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
               const Icon = action.icon;
 
               return (
-                <Link key={action.label} href={action.href} aria-label={`${action.label}: ${action.desc}`}>
+                <Link key={action.label} href={action.href} aria-label={`${action.label}: ${action.desc}`} className="h-full block">
                   <motion.div
-                    whileHover={{ y: -3, scale: 1.02 }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ y: -2, scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
                     transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                    className="h-full"
                   >
-                    <Card className="group cursor-pointer border-border/50 transition-shadow duration-200 hover:shadow-md">
-                      <CardContent className="p-5">
-                        <div className="flex items-start gap-4">
-                          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${action.color}`}>
+                    <Card className="group h-full cursor-pointer border-border/50 bg-white transition-all duration-200 hover:shadow-md">
+                      <CardContent className="p-4 flex items-center justify-between gap-3 h-full">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${action.color}`}>
                             <Icon className="h-5 w-5" />
                           </div>
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold text-foreground">{action.label}</p>
-                            <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">{action.desc}</p>
+                            <p className="text-xs text-slate-600 mt-0.5 line-clamp-1">{action.desc}</p>
                           </div>
-                          <ArrowRight className="h-4 w-4 text-muted-foreground/40 transition-all duration-200 group-hover:text-primary group-hover:translate-x-0.5 mt-1" />
                         </div>
+                        <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-all duration-200 group-hover:text-primary group-hover:translate-x-0.5" />
                       </CardContent>
                     </Card>
                   </motion.div>

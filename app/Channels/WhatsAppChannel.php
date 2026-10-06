@@ -19,7 +19,8 @@ class WhatsAppChannel
     {
         // Cek apakah notifikasi WhatsApp diaktifkan secara global di sistem
         $waEnabled = SystemConfig::getValue('wa_notification_enabled', true);
-        if (!$waEnabled || $waEnabled === '0' || $waEnabled === 'false') {
+        $isEnabled = filter_var($waEnabled, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+        if ($isEnabled === false) {
             Log::info("WhatsApp notification dibatalkan: Notifikasi WhatsApp dinonaktifkan di konfigurasi sistem.");
             return;
         }
@@ -47,9 +48,9 @@ class WhatsAppChannel
         $phoneNumber = preg_replace('/^0/', '62', $phoneNumber);
 
         // Ambil konfigurasi gateway dari system_configs
-        $gatewayUrl = SystemConfig::getValue('wa_gateway_url', 'https://api.watzap.id/v1/send_message');
-        $apiKey = SystemConfig::getValue('wa_api_key');
-        $numberKey = SystemConfig::getValue('wa_number_key');
+        $gatewayUrl = trim((string) SystemConfig::getValue('wa_gateway_url')) ?: 'https://api.watzap.id/v1/send_message';
+        $apiKey = trim((string) SystemConfig::getValue('wa_api_key'));
+        $numberKey = trim((string) SystemConfig::getValue('wa_number_key'));
 
         if (!$apiKey) {
             Log::error('WhatsApp gateway belum dikonfigurasi (wa_api_key belum diisi)');

@@ -56,6 +56,11 @@ class AdminManagementController extends Controller
             'units.*' => 'exists:units,id',
         ]);
 
+        $currentAdmin = auth('admin')->user();
+        if (in_array(strtolower($validated['role']), ['superadmin', 'super admin']) && !$currentAdmin->hasRole(['superadmin', 'Super Admin'])) {
+            abort(403, 'Hanya Super Admin yang dapat menugaskan peran Super Admin.');
+        }
+
         $admin = Admin::create([
             'username' => $validated['username'],
             'email' => $validated['email'],
@@ -94,6 +99,13 @@ class AdminManagementController extends Controller
             'units.*' => 'exists:units,id',
         ]);
 
+        $currentAdmin = auth('admin')->user();
+        $isTargetSuper = $admin->hasRole(['superadmin', 'Super Admin']);
+        $isAssigningSuper = in_array(strtolower($validated['role']), ['superadmin', 'super admin']);
+        if (($isTargetSuper || $isAssigningSuper) && !$currentAdmin->hasRole(['superadmin', 'Super Admin'])) {
+            abort(403, 'Hanya Super Admin yang dapat mengelola akun Super Admin.');
+        }
+
         $admin->update([
             'username' => $validated['username'],
             'email' => $validated['email'],
@@ -128,6 +140,11 @@ class AdminManagementController extends Controller
 
         if ($admin->id === auth('admin')->id()) {
             return back()->withErrors(['error' => 'Anda tidak bisa menghapus akun Anda sendiri.']);
+        }
+
+        $currentAdmin = auth('admin')->user();
+        if ($admin->hasRole(['superadmin', 'Super Admin']) && !$currentAdmin->hasRole(['superadmin', 'Super Admin'])) {
+            abort(403, 'Hanya Super Admin yang dapat menghapus akun Super Admin.');
         }
 
         $admin->delete();

@@ -295,9 +295,10 @@ class ChatController extends Controller
             'body' => 'nullable|string',
             'ticket_id' => 'nullable|exists:tickets,id',
             'reply_to_message_id' => 'nullable|exists:messages,id',
-            'attachment' => 'nullable|file|max:3072', 
+            'attachment' => 'nullable|file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,zip',
         ], [
             'attachment.max' => 'Ukuran file lampiran maksimal 3 MB.',
+            'attachment.mimes' => 'Format file lampiran tidak diizinkan.',
         ]);
 
         if (empty($request->body) && empty($request->ticket_id) && !$request->hasFile('attachment')) {
@@ -545,6 +546,13 @@ class ChatController extends Controller
 
     public function downloadAttachment(ChatAttachment $attachment)
     {
+        $message = $attachment->message;
+        if (!$message || !$message->conversation) {
+            abort(404, 'File tidak ditemukan');
+        }
+
+        \Illuminate\Support\Facades\Gate::authorize('view', $message->conversation);
+
         if (!Storage::disk('public')->exists($attachment->file_path)) {
             abort(404, 'File tidak ditemukan');
         }

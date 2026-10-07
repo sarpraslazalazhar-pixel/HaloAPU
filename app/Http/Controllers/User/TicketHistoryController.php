@@ -95,11 +95,6 @@ class TicketHistoryController extends Controller
             abort(403, 'Anda tidak memiliki akses ke tiket ini.');
         }
 
-        if (!\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'dikembalikan_at') || !\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'kondisi_kembali')) {
-            try {
-                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            } catch (\Exception $e) {}
-        }
 
         $ticket->load([
             'unit',
@@ -355,14 +350,6 @@ class TicketHistoryController extends Controller
             abort(403);
         }
 
-        // Auto-migrate jika kolom belum ada di database
-        if (!\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'dikembalikan_at')) {
-            try {
-                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            } catch (\Exception $e) {
-                \Log::error("Migrate error in user kembalikanAlat: " . $e->getMessage());
-            }
-        }
 
         // Pastikan sub unit wajib_kembali aktif
         if ($ticket->subUnit && !$ticket->subUnit->wajib_kembali) {

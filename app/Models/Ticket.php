@@ -170,5 +170,19 @@ class Ticket extends Model
     {
         return $this->belongsTo(Admin::class, 'assigned_admin_id');
     }
+
+    public function isAccessibleBy(Admin $admin): bool
+    {
+        if ($admin->hasRole(['superadmin', 'Super Admin'])) {
+            return true;
+        }
+
+        if ($admin->hasRole('Operator')) {
+            return (int) $this->assigned_admin_id === (int) $admin->id;
+        }
+
+        return (int) $this->assigned_admin_id === (int) $admin->id
+            || $admin->subUnits()->where('sub_units.id', $this->sub_unit_id)->exists();
+    }
 }
 

@@ -192,42 +192,6 @@ export default function UserLogin() {
                 {processing ? 'Memproses...' : 'Masuk'}
               </button>
 
-              {/* Info Akun Demo */}
-              <div className="mt-5 p-3.5 bg-blue-50/70 border border-blue-100 rounded-xl text-xs space-y-2">
-                <div className="font-semibold text-blue-900 flex items-center justify-between">
-                  <span className="flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-blue-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    Akun Demo (Klik untuk autofill)
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setData((prev) => ({ ...prev, username: 'superadmin', password: 'password' }));
-                    }}
-                    className="text-left bg-white p-2.5 rounded-lg border border-blue-100 hover:border-blue-300 hover:bg-blue-50/50 transition cursor-pointer"
-                  >
-                    <div className="font-semibold text-blue-800">Superadmin</div>
-                    <div className="text-gray-500 mt-0.5">User: <span className="font-mono text-gray-800 font-medium select-all">superadmin</span></div>
-                    <div className="text-gray-500">Pass: <span className="font-mono text-gray-800 font-medium select-all">password</span></div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setData((prev) => ({ ...prev, username: 'sarpras', password: 'password' }));
-                    }}
-                    className="text-left bg-white p-2.5 rounded-lg border border-blue-100 hover:border-blue-300 hover:bg-blue-50/50 transition cursor-pointer"
-                  >
-                    <div className="font-semibold text-blue-800">User Pengaju</div>
-                    <div className="text-gray-500 mt-0.5">User: <span className="font-mono text-gray-800 font-medium select-all">sarpras</span></div>
-                    <div className="text-gray-500">Pass: <span className="font-mono text-gray-800 font-medium select-all">password</span></div>
-                  </button>
-                </div>
-              </div>
-
               {/* Register Prompt */}
               <div className="mt-6 text-center text-xs text-gray-500">
                 Belum punya akun? <Link href="/register" className="font-semibold text-[#006da3] py-1 px-1 inline-block">Hubungi Admin</Link>

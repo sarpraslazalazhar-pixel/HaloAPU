@@ -95,16 +95,21 @@ export function AttachmentViewer({ attachment, viewRoute, downloadRoute, childre
  <div className="flex-1 w-full h-full">
  <iframe src={viewUrl} className="w-full h-full border-0" title={attachment.original_name} />
  </div>
- ) : isDocx ? (
- <div className="flex-1 w-full h-full bg-white overflow-auto p-8 prose max-w-none">
- {docxLoading ? (
- <div className="flex justify-center items-center h-full">
- <p className="text-slate-500">Memuat dokumen...</p>
- </div>
- ) : docxHtml ? (
- <div dangerouslySetInnerHTML={{ __html: docxHtml }} />
- ) : (
- <div className="flex justify-center items-center h-full text-center">
+      ) : isDocx ? (
+        <div className="flex-1 w-full h-full bg-white overflow-hidden p-2">
+          {docxLoading ? (
+            <div className="flex justify-center items-center h-full">
+              <p className="text-slate-500">Memuat dokumen...</p>
+            </div>
+          ) : docxHtml ? (
+            <iframe
+              srcDoc={docxHtml}
+              className="w-full h-full border-0 bg-white"
+              sandbox=""
+              title={attachment.original_name}
+            />
+          ) : (
+            <div className="flex justify-center items-center h-full text-center">
  <div>
  <p className="font-medium text-slate-700 text-lg">Gagal memuat pratinjau</p>
  <a href={downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-5 py-2.5 mt-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm text-sm font-medium">

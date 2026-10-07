@@ -56,7 +56,7 @@ class UnreadChatCountTest extends TestCase
             }
         };
 
-        $adminRequest = Request::create('/');
+        $adminRequest = Request::create('/admin');
         $adminRequest->setUserResolver(function ($guard = null) use ($admin) {
             return $guard === 'admin' ? $admin : null;
         });

@@ -95,22 +95,8 @@ class TicketController extends Controller
     public function show(Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
-            if ($admin->hasRole('Operator')) {
-                if ($ticket->assigned_admin_id !== $admin->id) {
-                    abort(403, 'Anda tidak berhak mengakses tiket ini.');
-                }
-            } else {
-                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
-                    abort(403, 'Anda tidak berhak mengakses tiket ini.');
-                }
-            }
-        }
-
-        if (!\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'dikembalikan_at') || !\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'kondisi_kembali')) {
-            try {
-                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-            } catch (\Exception $e) {}
+        if (!$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Anda tidak berhak mengakses tiket ini.');
         }
 
         $ticket->load([
@@ -141,16 +127,8 @@ class TicketController extends Controller
     public function updateStatus(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
-            if ($admin->hasRole('Operator')) {
-                if ($ticket->assigned_admin_id !== $admin->id) {
-                    abort(403, 'Anda tidak berhak mengubah status tiket ini.');
-                }
-            } else {
-                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
-                    abort(403, 'Anda tidak berhak mengubah status tiket ini.');
-                }
-            }
+        if (!$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Anda tidak berhak mengubah status tiket ini.');
         }
 
         $validTransitions = [
@@ -327,6 +305,12 @@ class TicketController extends Controller
 
     public function downloadAttachment(TicketAttachment $attachment)
     {
+        $admin = auth('admin')->user();
+        $ticket = $attachment->ticket;
+        if (!$ticket || !$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Anda tidak berhak mengakses lampiran ini.');
+        }
+
         if (!Storage::disk('public')->exists($attachment->file_path)) {
             abort(404, 'File tidak ditemukan.');
         }
@@ -336,6 +320,12 @@ class TicketController extends Controller
 
     public function viewAttachment(TicketAttachment $attachment)
     {
+        $admin = auth('admin')->user();
+        $ticket = $attachment->ticket;
+        if (!$ticket || !$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Anda tidak berhak mengakses lampiran ini.');
+        }
+
         if (!Storage::disk('public')->exists($attachment->file_path)) {
             abort(404, 'File tidak ditemukan.');
         }
@@ -386,16 +376,8 @@ class TicketController extends Controller
     public function cancelBooking(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
-            if ($admin->hasRole('Operator')) {
-                if ($ticket->assigned_admin_id !== $admin->id) {
-                    abort(403, 'Anda tidak berhak membatalkan booking tiket ini.');
-                }
-            } else {
-                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
-                    abort(403, 'Anda tidak berhak membatalkan booking tiket ini.');
-                }
-            }
+        if (!$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Anda tidak berhak membatalkan booking tiket ini.');
         }
 
         if (!$ticket->booking) {
@@ -445,16 +427,8 @@ class TicketController extends Controller
     public function kembalikanAlat(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
-            if ($admin->hasRole('Operator')) {
-                if ($ticket->assigned_admin_id !== $admin->id) {
-                    abort(403, 'Anda tidak berhak mengakses tiket ini.');
-                }
-            } else {
-                if ($ticket->assigned_admin_id !== $admin->id && !$admin->subUnits()->where('sub_units.id', $ticket->sub_unit_id)->exists()) {
-                    abort(403, 'Anda tidak berhak mengakses tiket ini.');
-                }
-            }
+        if (!$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Anda tidak berhak mengakses tiket ini.');
         }
 
         if (!in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
@@ -477,25 +451,11 @@ class TicketController extends Controller
         $kondisi = $validated['kondisi_kembali'] ?? 'baik';
         $catatan = !empty($validated['catatan_kembali']) ? trim($validated['catatan_kembali']) : null;
 
-        try {
-            $ticket->update([
-                'dikembalikan_at' => now(),
-                'kondisi_kembali' => $kondisi,
-                'catatan_kembali' => $catatan,
-            ]);
-        } catch (\Exception $e) {
-            \Log::error("Gagal simpan kondisi pengembalian: " . $e->getMessage());
-            try {
-                \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-                $ticket->update([
-                    'dikembalikan_at' => now(),
-                    'kondisi_kembali' => $kondisi,
-                    'catatan_kembali' => $catatan,
-                ]);
-            } catch (\Exception $e2) {
-                \Log::error("Gagal auto-migrate: " . $e2->getMessage());
-            }
-        }
+        $ticket->update([
+            'dikembalikan_at' => now(),
+            'kondisi_kembali' => $kondisi,
+            'catatan_kembali' => $catatan,
+        ]);
 
         $kondisiLabel = match($kondisi) {
             'rusak' => 'Rusak',

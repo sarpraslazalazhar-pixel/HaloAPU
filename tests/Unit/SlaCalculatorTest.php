@@ -225,36 +225,29 @@ class SlaCalculatorTest extends TestCase
             'password' => bcrypt('password'),
         ]);
         $admin->assignRole('admin');
+        $perm = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'akses-konfigurasi', 'guard_name' => 'admin']);
+        $admin->givePermissionTo($perm);
+        $config = \App\Models\SlaConfig::create([
+            'sub_unit_id' => null,
+            'priority' => 'Rendah',
+            'jenis' => 'respon',
+            'threshold_minutes' => 30,
+        ]);
 
         $response = $this->actingAs($admin, 'admin')
-            ->put(route('admin.sla-config.update'), [
-                'configs' => [
-                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30],
-                    ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon', 'threshold_minutes' => 60],
-                    ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'respon', 'threshold_minutes' => 120],
-                ]
+            ->put(route('admin.sla-config.update', $config->id), [
+                'sub_unit_id' => null,
+                'priority' => 'Rendah',
+                'jenis' => 'respon',
+                'threshold_minutes' => 45,
             ]);
 
         $response->assertRedirect();
         $response->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('sla_configs', [
-            'sub_unit_id' => null,
-            'priority' => 'Rendah',
-            'jenis' => 'respon',
-            'threshold_minutes' => 30,
-        ]);
-        $this->assertDatabaseHas('sla_configs', [
-            'sub_unit_id' => null,
-            'priority' => 'Sedang',
-            'jenis' => 'respon',
-            'threshold_minutes' => 60,
-        ]);
-        $this->assertDatabaseHas('sla_configs', [
-            'sub_unit_id' => null,
-            'priority' => 'Tinggi',
-            'jenis' => 'respon',
-            'threshold_minutes' => 120,
+            'id' => $config->id,
+            'threshold_minutes' => 45,
         ]);
     }
 
@@ -270,15 +263,24 @@ class SlaCalculatorTest extends TestCase
             'password' => bcrypt('password'),
         ]);
         $admin->assignRole('admin');
+        $perm = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'akses-konfigurasi', 'guard_name' => 'admin']);
+        $admin->givePermissionTo($perm);
+        $config = \App\Models\SlaConfig::create([
+            'sub_unit_id' => null,
+            'priority' => 'Rendah',
+            'jenis' => 'respon',
+            'threshold_minutes' => 30,
+        ]);
 
         $response = $this->actingAs($admin, 'admin')
-            ->put(route('admin.sla-config.update'), [
-                'configs' => [
-                    ['sub_unit_id' => null, 'priority' => 'InvalidPriority', 'jenis' => 'respon', 'threshold_minutes' => 30],
-                ]
+            ->put(route('admin.sla-config.update', $config->id), [
+                'sub_unit_id' => null,
+                'priority' => 'InvalidPriority',
+                'jenis' => 'respon',
+                'threshold_minutes' => 30,
             ]);
 
-        $response->assertSessionHasErrors(['configs.0.priority']);
+        $response->assertSessionHasErrors(['priority']);
     }
 
     public function test_endpoint_validation_fails_if_threshold_less_than_one(): void
@@ -293,14 +295,23 @@ class SlaCalculatorTest extends TestCase
             'password' => bcrypt('password'),
         ]);
         $admin->assignRole('admin');
+        $perm = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'akses-konfigurasi', 'guard_name' => 'admin']);
+        $admin->givePermissionTo($perm);
+        $config = \App\Models\SlaConfig::create([
+            'sub_unit_id' => null,
+            'priority' => 'Rendah',
+            'jenis' => 'respon',
+            'threshold_minutes' => 30,
+        ]);
 
         $response = $this->actingAs($admin, 'admin')
-            ->put(route('admin.sla-config.update'), [
-                'configs' => [
-                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 0], // Invalid
-                ]
+            ->put(route('admin.sla-config.update', $config->id), [
+                'sub_unit_id' => null,
+                'priority' => 'Rendah',
+                'jenis' => 'respon',
+                'threshold_minutes' => 0,
             ]);
 
-        $response->assertSessionHasErrors(['configs.0.threshold_minutes']);
+        $response->assertSessionHasErrors(['threshold_minutes']);
     }
 }

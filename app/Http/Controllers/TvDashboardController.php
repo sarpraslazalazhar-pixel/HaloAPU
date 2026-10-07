@@ -16,11 +16,11 @@ class TvDashboardController extends Controller
     public function index(Request $request)
     {
         // Require valid API token (or other auth mechanism) to view TV Dashboard
-        $token = $request->query('token');
-        $validToken = \App\Models\SystemConfig::getValue('tv_dashboard_token', 'HaloAPU-TV-Token-Secret'); // Use config, fallback to default secret
+        $token = (string) $request->query('token');
+        $validToken = (string) \App\Models\SystemConfig::getValue('tv_dashboard_token', env('TV_DASHBOARD_TOKEN', ''));
 
-        if (!$token || $token !== $validToken) {
-            return abort(403, 'Akses TV Dashboard Ditolak. Token tidak valid.');
+        if (empty($validToken) || !hash_equals($validToken, $token)) {
+            abort(403, 'Akses TV Dashboard Ditolak. Token tidak valid.');
         }
 
         $today = Carbon::today();
@@ -58,17 +58,17 @@ class TvDashboardController extends Controller
             ->take(10)
             ->get();
 
+        $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+
         // ── Daily Chart (7 Hari Terakhir) — Cached 60 Detik ──
-        $dailyChartData = Cache::remember('tv_dashboard_daily_chart', 60, function () {
+        $dailyChartData = Cache::remember('tv_dashboard_daily_chart', 60, function () use ($units) {
             $startDate = now()->subDays(6)->startOfDay();
             $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
                 ->where('created_at', '>=', $startDate)
                 ->groupBy('date', 'unit_id')
                 ->get();
 
-            $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
             $unitNames = $units->pluck('nama_unit', 'id');
-
             $dates = collect();
             for ($i = 6; $i >= 0; $i--) {
                 $dates->push(now()->subDays($i)->format('Y-m-d'));

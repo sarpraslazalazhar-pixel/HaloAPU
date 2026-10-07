@@ -23,32 +23,19 @@ Route::get('/system/notification-sound', [\App\Http\Controllers\Admin\SystemConf
 
 // Storage fallback when public/storage symlink is missing on Windows
 Route::get('/storage/{path}', function ($path) {
-    $filePath = storage_path('app/public/' . $path);
-    if (!file_exists($filePath) || is_dir($filePath)) {
+    $basePath = realpath(storage_path('app/public'));
+    $targetPath = storage_path('app/public/' . $path);
+    $realPath = realpath($targetPath);
+
+    if (!$realPath || !$basePath || !str_starts_with($realPath, $basePath) || is_dir($realPath)) {
         abort(404);
     }
-    return response()->file($filePath, [
+
+    return response()->file($realPath, [
         'Cache-Control' => 'public, max-age=86400',
     ]);
 })->where('path', '.*')->name('storage.local');
 
-// System Optimization for Shared Hosting (Protected: Admin Only)
-Route::middleware('auth:admin')->prefix('system')->group(function () {
-    Route::get('/optimize', function() {
-        \Illuminate\Support\Facades\Artisan::call('config:cache');
-        \Illuminate\Support\Facades\Artisan::call('route:cache');
-        \Illuminate\Support\Facades\Artisan::call('view:cache');
-        return 'System optimized successfully. <a href="/">Go back to Home</a>';
-    });
-
-    Route::get('/clear', function() {
-        \Illuminate\Support\Facades\Artisan::call('config:clear');
-        \Illuminate\Support\Facades\Artisan::call('route:clear');
-        \Illuminate\Support\Facades\Artisan::call('view:clear');
-        \Illuminate\Support\Facades\Artisan::call('cache:clear');
-        return 'System cache cleared successfully. <a href="/">Go back to Home</a>';
-    });
-});
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [UserLoginController::class, 'showLoginForm'])->name('login');
@@ -58,14 +45,17 @@ Route::middleware('guest')->group(function () {
 
     // Lupa Password
     Route::get('/lupa-password', [ForgotPasswordController::class, 'showForm'])->name('password.request');
-    Route::post('/lupa-password', [ForgotPasswordController::class, 'sendResetLink'])->name('password.email');
+    Route::post('/lupa-password', [ForgotPasswordController::class, 'sendResetLink'])->middleware('throttle:5,1')->name('password.email');
     Route::get('/reset-password/{token}', [ForgotPasswordController::class, 'showResetForm'])->name('password.reset');
-    Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'])->name('password.update');
+    Route::post('/reset-password', [ForgotPasswordController::class, 'resetPassword'])->middleware('throttle:5,1')->name('password.update');
 });
 
 Route::middleware('auth')->group(function () {
     Route::post('logout', [UserLoginController::class, 'logout'])->name('logout');
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/faq', function () {
+        return \Inertia\Inertia::render('User/Faq');
+    })->name('faq');
 
     // Tickets Wizard
     Route::get('/tiket', function () {
@@ -196,8 +186,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             })->name('system.clear');
         });
 
-        // Manual Scheduler
-        Route::prefix('scheduler')->name('scheduler.')->group(function () {
+        // Manual Scheduler (Protected by akses-konfigurasi permission)
+        Route::middleware('permission:akses-konfigurasi')->prefix('scheduler')->name('scheduler.')->group(function () {
             Route::post('/sla-check', [\App\Http\Controllers\Admin\SchedulerController::class, 'runSlaCheck'])->name('sla-check');
             Route::post('/booking-reminder', [\App\Http\Controllers\Admin\SchedulerController::class, 'runBookingReminder'])->name('booking-reminder');
             Route::post('/pending-reminder', [\App\Http\Controllers\Admin\SchedulerController::class, 'runPendingReminder'])->name('pending-reminder');

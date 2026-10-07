@@ -145,7 +145,7 @@ class CsatTest extends TestCase
     /**
      * User cannot submit rating twice for the same ticket.
      */
-    public function test_user_cannot_submit_rating_twice_for_same_ticket(): void
+    public function test_user_can_update_existing_rating_for_same_ticket(): void
     {
         $ticket = $this->createTicket(['status' => 'solve']);
 
@@ -157,15 +157,20 @@ class CsatTest extends TestCase
             ]);
         $response1->assertSessionHasNoErrors();
 
-        // Second submit
+        // Second submit (Edit rating via CsatDialog)
         $response2 = $this->actingAs($this->user)
             ->post(route('csat.store', $ticket), [
                 'rating' => 4,
-                'komentar' => 'Second rate',
+                'komentar' => 'Updated rate',
             ]);
 
-        $response2->assertSessionHasErrors(['rating']);
+        $response2->assertSessionHasNoErrors();
         $this->assertEquals(1, Csat::where('ticket_id', $ticket->id)->count());
+        $this->assertDatabaseHas('csats', [
+            'ticket_id' => $ticket->id,
+            'rating' => 4,
+            'komentar' => 'Updated rate',
+        ]);
     }
 
     /**

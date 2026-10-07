@@ -157,6 +157,19 @@ class TicketController extends Controller
         $ticket->form_data = $formData ?? [];
         $ticket->status = 'open';
         $ticket->priority = $validated['priority'] ?? 'normal';
+        // Validate file attachments before saving
+        if ($request->hasFile('attachments')) {
+            $flatFiles = [];
+            foreach ($request->file('attachments') as $files) {
+                foreach (is_array($files) ? $files : [$files] as $f) {
+                    if ($f) $flatFiles[] = $f;
+                }
+            }
+            \Illuminate\Support\Facades\Validator::make(
+                ['files' => $flatFiles],
+                ['files.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx']
+            )->validate();
+        }
 
         $ticket->save();
 
@@ -176,7 +189,7 @@ class TicketController extends Controller
                         'field_id' => $fieldId,
                         'file_path' => $path,
                         'original_name' => $originalName,
-                        'mime_type' => $file->getClientMimeType() ?: 'image/jpeg',
+                        'mime_type' => $file->getMimeType() ?: ($file->getClientMimeType() ?: 'image/jpeg'),
                         'file_size' => $file->getSize(),
                     ]);
                 }
@@ -718,6 +731,9 @@ class TicketController extends Controller
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
+        if (!$ticket->isAccessibleBy($user)) {
+            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk mengubah status tiket ini.'], 403);
+        }
         $request->validate([
             'status' => 'required|in:open,on_proses,solve,reject,dibatalkan,pending',
             'catatan' => 'nullable|string|max:1000',

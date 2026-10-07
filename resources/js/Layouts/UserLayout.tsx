@@ -8,7 +8,8 @@ import {
  Star, 
  LogOut,
  User,
- MessageSquare,
+  MessageSquare,
+  HelpCircle,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import {
@@ -48,7 +49,8 @@ const userNavItems: NavItem[] = [
  { label: 'Pesan', icon: MessageSquare, route: '/chat' },
  { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
  { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
- { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
+  { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
+  { label: 'Pusat Bantuan', icon: HelpCircle, route: '/faq' },
 ];
 
 function NavLink({ item, active, badge }: { item: NavItem; active: boolean; badge?: number }) {
@@ -243,7 +245,12 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  <div className="flex flex-col min-w-0 overflow-hidden bg-zinc-50">
  <header className="relative z-50 flex h-14 shrink-0 items-center gap-3 border-b bg-white/80 backdrop-blur-md supports-[backdrop-filter]:bg-white/60 px-4 lg:h-[60px] lg:px-6">
  <div className="flex-1" />
- 
+
+        <Link href="/faq" title="Pusat Bantuan & FAQ">
+          <Button variant="ghost" size="icon" aria-label="Pusat Bantuan dan FAQ" className="rounded-full h-8 w-8 text-muted-foreground hover:text-foreground">
+            <HelpCircle className="h-4 w-4" />
+          </Button>
+        </Link>
  <NotificationBell />
  
  <DropdownMenu>

@@ -47,6 +47,7 @@ class SlaCalculatorStressTest extends TestCase
         if (Role::where('name', 'admin')->where('guard_name', 'admin')->doesntExist()) {
             Role::create(['name' => 'admin', 'guard_name' => 'admin']);
         }
+        $perm = \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'akses-konfigurasi', 'guard_name' => 'admin']);
 
         $this->admin = Admin::create([
             'username' => 'admin_stress',
@@ -54,6 +55,7 @@ class SlaCalculatorStressTest extends TestCase
             'password' => bcrypt('password'),
         ]);
         $this->admin->assignRole('admin');
+        $this->admin->givePermissionTo($perm);
     }
 
     /**
@@ -130,52 +132,45 @@ class SlaCalculatorStressTest extends TestCase
     }
 
     /**
-     * Test batch update endpoint: duplicate configs for the same priority in the same request.
+     * Test update endpoint: duplicate config for the same priority and sub_unit is rejected.
      */
     public function test_endpoint_validation_with_duplicate_priorities_in_request(): void
     {
+        $existing = SlaConfig::create(['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30]);
+        $target = SlaConfig::create(['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon', 'threshold_minutes' => 60]);
+
+        // Attempting to update target to duplicate existing
         $response = $this->actingAs($this->admin, 'admin')
-            ->put(route('admin.sla-config.update'), [
-                'configs' => [
-                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30],
-                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 40],
-                    ['sub_unit_id' => null, 'priority' => 'Sedang', 'jenis' => 'respon', 'threshold_minutes' => 60],
-                    ['sub_unit_id' => null, 'priority' => 'Tinggi', 'jenis' => 'respon', 'threshold_minutes' => 120],
-                ]
+            ->put(route('admin.sla-config.update', $target->id), [
+                'sub_unit_id' => null,
+                'priority' => 'Rendah',
+                'jenis' => 'respon',
+                'threshold_minutes' => 40,
             ]);
 
-        $response->assertRedirect();
-        $response->assertSessionHasNoErrors();
-
-        $this->assertDatabaseHas('sla_configs', [
-            'sub_unit_id' => null,
-            'priority' => 'Rendah',
-            'jenis' => 'respon',
-            'threshold_minutes' => 40,
-        ]);
+        $response->assertSessionHasErrors(['message']);
     }
 
     /**
-     * Test batch update endpoint: partial update is processed successfully.
+     * Test update endpoint: valid update is processed successfully.
      */
     public function test_endpoint_validation_partial_update(): void
     {
-        SlaConfig::create(['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30]);
+        $config = SlaConfig::create(['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 30]);
 
         $response = $this->actingAs($this->admin, 'admin')
-            ->put(route('admin.sla-config.update'), [
-                'configs' => [
-                    ['sub_unit_id' => null, 'priority' => 'Rendah', 'jenis' => 'respon', 'threshold_minutes' => 80],
-                ]
+            ->put(route('admin.sla-config.update', $config->id), [
+                'sub_unit_id' => null,
+                'priority' => 'Rendah',
+                'jenis' => 'respon',
+                'threshold_minutes' => 80,
             ]);
 
         $response->assertRedirect();
         $response->assertSessionHasNoErrors();
 
         $this->assertDatabaseHas('sla_configs', [
-            'sub_unit_id' => null,
-            'priority' => 'Rendah',
-            'jenis' => 'respon',
+            'id' => $config->id,
             'threshold_minutes' => 80,
         ]);
     }

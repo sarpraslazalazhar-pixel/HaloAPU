@@ -10,7 +10,7 @@ use App\Http\Controllers\Api\CsatApiController;
 use App\Http\Controllers\Api\NotificationApiController;
 use App\Http\Controllers\Api\MonitorApiController;
 
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 
 Route::middleware('auth:sanctum')->group(function () {
     // Proxy to serve attachments with CORS headers for Flutter Web

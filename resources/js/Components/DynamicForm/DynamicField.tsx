@@ -5,67 +5,63 @@ import FieldRenderer from '@/Components/FormBuilder/FieldRenderer';
 export type DynamicFieldValue = string | number | boolean | string[] | File | File[] | null | undefined;
 
 interface DynamicFieldProps {
- fields: FormField[];
- values: Record<string, DynamicFieldValue>;
- onChange: (fieldId: number, value: DynamicFieldValue) => void;
- errors?: Record<string, string>;
+  fields: FormField[];
+  values: Record<string, DynamicFieldValue>;
+  onChange: (fieldId: number, value: DynamicFieldValue) => void;
+  errors?: Record<string, string>;
 }
 
+// Exported: stable domain concept used in Wizard.tsx and here (>2 call sites across files).
+export const normalizeOption = (v: unknown): string =>
+  String(v ?? '').trim().toLowerCase().replace(/[:\s]+$/, '');
+
 export default function DynamicField({ fields, values, onChange, errors }: DynamicFieldProps) {
- const isFieldVisible = (field: FormField) => {
-   if (!field.parent_field_id) return true;
-   const parentValue = values[field.parent_field_id];
-   if (parentValue === undefined || parentValue === null) return false;
+  const isFieldVisible = (field: FormField) => {
+    if (!field.parent_field_id) return true;
+    // parent_field_id from backend may arrive as number; form_data keys are stored as string(number).
+    const parentValue = values[String(field.parent_field_id)];
+    if (parentValue === undefined || parentValue === null) return false;
+    const trigger = normalizeOption(field.trigger_value);
+    if (Array.isArray(parentValue)) {
+      return parentValue.some(v => normalizeOption(v) === trigger);
+    }
+    return normalizeOption(parentValue) === trigger;
+  };
 
-   if (Array.isArray(parentValue)) {
-     return parentValue.includes(field.trigger_value as string);
-   }
+  // Urutkan field agar cabang/child langsung berada tepat di bawah parent-nya
+  const orderedFields: FormField[] = [];
+  const rootFields = fields.filter(f => !f.parent_field_id);
+  const childMap = new Map<number, FormField[]>();
 
-   return parentValue === field.trigger_value;
- };
+  fields.forEach(f => {
+    if (f.parent_field_id) {
+      const pid = Number(f.parent_field_id);
+      if (!childMap.has(pid)) childMap.set(pid, []);
+      childMap.get(pid)!.push(f);
+    }
+  });
 
- // Urutkan field agar cabang/child langsung berada tepat di bawah parent-nya
- const orderedFields: FormField[] = [];
- const rootFields = fields.filter(f => !f.parent_field_id);
- const childMap = new Map<number, FormField[]>();
+  const appendFieldAndChildren = (field: FormField) => {
+    orderedFields.push(field);
+    (childMap.get(Number(field.id)) ?? []).forEach(appendFieldAndChildren);
+  };
 
- fields.forEach(f => {
-   if (f.parent_field_id) {
-     if (!childMap.has(f.parent_field_id)) {
-       childMap.set(f.parent_field_id, []);
-     }
-     childMap.get(f.parent_field_id)!.push(f);
-   }
- });
+  rootFields.forEach(appendFieldAndChildren);
 
- const appendFieldAndChildren = (field: FormField) => {
-   orderedFields.push(field);
-   const children = childMap.get(field.id) || [];
-   children.forEach(child => appendFieldAndChildren(child));
- };
+  const addedIds = new Set(orderedFields.map(f => Number(f.id)));
+  fields.forEach(f => { if (!addedIds.has(Number(f.id))) orderedFields.push(f); });
 
- rootFields.forEach(root => appendFieldAndChildren(root));
-
- const addedIds = new Set(orderedFields.map(f => f.id));
- fields.forEach(f => {
-   if (!addedIds.has(f.id)) {
-     orderedFields.push(f);
-   }
- });
-
- const visibleFields = orderedFields.filter(isFieldVisible);
-
- return (
- <div className="space-y-4">
- {visibleFields.map(field => (
- <FieldRenderer
- key={field.id}
- field={field}
- value={values[field.id]}
- onChange={onChange}
- errors={errors}
- />
- ))}
- </div>
- );
+  return (
+    <div className="space-y-4">
+      {orderedFields.filter(isFieldVisible).map(field => (
+        <FieldRenderer
+          key={field.id}
+          field={field}
+          value={values[String(field.id)]}
+          onChange={onChange}
+          errors={errors}
+        />
+      ))}
+    </div>
+  );
 }

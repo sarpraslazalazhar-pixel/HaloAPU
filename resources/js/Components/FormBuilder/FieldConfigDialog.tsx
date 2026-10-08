@@ -106,20 +106,37 @@ export default function FieldConfigDialog({
  <h4 className="text-sm font-semibold mb-2">Logika Kondisional</h4>
  <div>
  <Label className="text-xs text-muted-foreground">Tampil jika parent:</Label>
- <select className="w-full border rounded-md p-2 text-sm" value={data.parent_field_id || ''}
- onChange={e => setData('parent_field_id', e.target.value)}>
+        <select className="w-full border rounded-md p-2 text-sm" value={data.parent_field_id || ''}
+          onChange={e => { setData('parent_field_id', e.target.value); setData('trigger_value', ''); }}>
  <option value="">-- Selalu Tampil --</option>
  {allFields.filter(f => tipeDenganOpsi.includes(f.tipe_field) && f.id !== editField?.id).map(f => (
  <option key={f.id} value={f.id}>{f.label}</option>
  ))}
  </select>
  </div>
- {data.parent_field_id && (
- <div className="mt-2">
- <Label className="text-xs text-muted-foreground">Nilai pemicu:</Label>
- <Input value={data.trigger_value} onChange={e => setData('trigger_value', e.target.value)} placeholder="Contoh: Ya" />
- </div>
- )}
+        {data.parent_field_id && (() => {
+          const parentOpsi = allFields.find(f => String(f.id) === String(data.parent_field_id))?.opsi ?? [];
+          return (
+            <div className="mt-2">
+              <Label className="text-xs text-muted-foreground">Nilai pemicu:</Label>
+              {parentOpsi.length > 0 ? (
+                <select
+                  className="w-full border rounded-md p-2 text-sm"
+                  value={data.trigger_value}
+                  onChange={e => setData('trigger_value', e.target.value)}
+                  required
+                >
+                  <option value="">-- Pilih nilai pemicu --</option>
+                  {parentOpsi.map(opt => (
+                    <option key={opt} value={opt}>{opt}</option>
+                  ))}
+                </select>
+              ) : (
+                <Input value={data.trigger_value} onChange={e => setData('trigger_value', e.target.value)} placeholder="Contoh: Ya" required />
+              )}
+            </div>
+          );
+        })()}
  </div>
  <div className="flex gap-2 justify-end pt-2">
  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Batal</Button>

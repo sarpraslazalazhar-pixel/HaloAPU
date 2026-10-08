@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/Com
 import { Label } from '@/Components/ui/label';
 import { RadioCardGrid } from '@/Components/RadioCardGrid';
 import { useDependentDropdown } from '@/hooks/useDependentDropdown';
-import DynamicField from '@/Components/DynamicForm/DynamicField';
+import DynamicField, { normalizeOption } from '@/Components/DynamicForm/DynamicField';
 import axios from 'axios';
 import { FormField as FormFieldType } from '@/types';
 import { FileDropzone } from '@/Components/FileDropzone';
@@ -81,17 +81,18 @@ export default function Wizard({ unitList }: WizardProps) {
           const childMap = new Map<number, FormFieldType[]>();
           list.forEach(f => {
             if (f.parent_field_id) {
-              if (!childMap.has(f.parent_field_id)) childMap.set(f.parent_field_id, []);
-              childMap.get(f.parent_field_id)!.push(f);
+              const pid = Number(f.parent_field_id);
+              if (!childMap.has(pid)) childMap.set(pid, []);
+              childMap.get(pid)!.push(f);
             }
           });
           const append = (item: FormFieldType) => {
             ordered.push(item);
-            (childMap.get(item.id) || []).forEach(append);
+            (childMap.get(Number(item.id)) ?? []).forEach(append);
           };
           roots.forEach(append);
-          const added = new Set(ordered.map(f => f.id));
-          list.forEach(f => { if (!added.has(f.id)) ordered.push(f); });
+          const added = new Set(ordered.map(f => Number(f.id)));
+          list.forEach(f => { if (!added.has(Number(f.id))) ordered.push(f); });
 
           setFormFields(ordered);
           setData('form_data', {});
@@ -174,12 +175,13 @@ export default function Wizard({ unitList }: WizardProps) {
 
   const isFieldVisible = (field: FormFieldType) => {
     if (!field.parent_field_id) return true;
-    const parentVal = data.form_data[field.parent_field_id];
+    const parentVal = data.form_data[String(field.parent_field_id)];
     if (parentVal === undefined || parentVal === null) return false;
+    const trigger = normalizeOption(field.trigger_value);
     if (Array.isArray(parentVal)) {
-      return parentVal.includes(field.trigger_value);
+      return (parentVal as string[]).some(v => normalizeOption(v) === trigger);
     }
-    return parentVal === field.trigger_value;
+    return normalizeOption(parentVal) === trigger;
   };
 
   const validateStep = (step: number) => {
@@ -423,7 +425,7 @@ export default function Wizard({ unitList }: WizardProps) {
                       ) : (
                         <div className="space-y-6">
                           {uploadFields
-                            .filter(field => !field.parent_field_id || data.form_data[field.parent_field_id] === field.trigger_value)
+                            .filter(isFieldVisible)
                             .map(field => (
                               <div key={field.id}>
                                 <div className="flex items-center gap-2">

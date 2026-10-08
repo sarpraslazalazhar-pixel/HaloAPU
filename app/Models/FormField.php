@@ -20,8 +20,12 @@ class FormField extends Model
     ];
 
     protected $casts = [
-        'opsi' => 'array',
-        'wajib' => 'boolean',
+        'id'             => 'integer',
+        'sub_unit_id'    => 'integer',
+        'parent_field_id'=> 'integer',
+        'urutan'         => 'integer',
+        'opsi'           => 'array',
+        'wajib'          => 'boolean',
     ];
 
     protected static function booted()

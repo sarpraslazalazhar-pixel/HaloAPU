@@ -402,8 +402,8 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  <label className="block text-xs font-medium mb-1 text-gray-500">Tampil Jika Field Parent:</label>
  <select 
  className="w-full border rounded-md p-2 text-sm bg-gray-50"
- value={data.parent_field_id}
- onChange={e => setData('parent_field_id', e.target.value)}
+                value={data.parent_field_id}
+                onChange={e => { setData('parent_field_id', e.target.value); setData('trigger_value', ''); }}
  >
  <option value="">-- Tidak ada (Selalu Tampil) --</option>
  {allFields
@@ -414,20 +414,37 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  </select>
  </div>
  
- {data.parent_field_id && (
- <div>
- <label className="block text-xs font-medium mb-1 text-gray-500">Nilai Parent Sama Dengan:</label>
- <input 
- type="text" 
- className="w-full border rounded-md p-2 text-sm bg-gray-50" 
- value={data.trigger_value}
- onChange={e => setData('trigger_value', e.target.value)}
- placeholder="Contoh: Ya"
- required={!!data.parent_field_id}
- />
- <p className="text-[10px] text-gray-400 mt-1">Field ini akan muncul jika user memilih nilai ini pada field parent.</p>
- </div>
- )}
+                {data.parent_field_id && (() => {
+                  const parentOpsi = allFields.find(f => String(f.id) === String(data.parent_field_id))?.opsi ?? [];
+                  return (
+                    <div>
+                      <label className="block text-xs font-medium mb-1 text-gray-500">Nilai Parent Sama Dengan:</label>
+                      {parentOpsi.length > 0 ? (
+                        <select
+                          className="w-full border rounded-md p-2 text-sm bg-gray-50"
+                          value={data.trigger_value}
+                          onChange={e => setData('trigger_value', e.target.value)}
+                          required={!!data.parent_field_id}
+                        >
+                          <option value="">-- Pilih nilai pemicu --</option>
+                          {parentOpsi.map(opt => (
+                            <option key={opt} value={opt}>{opt}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type="text"
+                          className="w-full border rounded-md p-2 text-sm bg-gray-50"
+                          value={data.trigger_value}
+                          onChange={e => setData('trigger_value', e.target.value)}
+                          placeholder="Contoh: Ya"
+                          required={!!data.parent_field_id}
+                        />
+                      )}
+                      <p className="text-[10px] text-gray-400 mt-1">Field ini akan muncul jika user memilih nilai ini pada field parent.</p>
+                    </div>
+                  );
+                })()}
  </div>
  </div>
 

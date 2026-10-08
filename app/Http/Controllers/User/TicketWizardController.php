@@ -58,9 +58,11 @@ class TicketWizardController extends Controller
             // Skip hidden conditional fields
             if ($field->parent_field_id) {
                 $parentValue = $request->form_data[(string) $field->parent_field_id] ?? null;
+                $normalize = fn(string $s): string => rtrim(strtolower(trim($s)), ': ');
+                $triggerNorm = $normalize((string) $field->trigger_value);
                 $isMatched = is_array($parentValue)
-                    ? in_array($field->trigger_value, $parentValue)
-                    : ($parentValue === $field->trigger_value);
+                    ? collect($parentValue)->contains(fn($v) => $normalize((string) $v) === $triggerNorm)
+                    : $normalize((string) $parentValue) === $triggerNorm;
                 if (!$isMatched) continue;
             }
             $fieldKey = (string) $field->id;

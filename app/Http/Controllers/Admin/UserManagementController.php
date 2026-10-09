@@ -33,9 +33,9 @@ class UserManagementController extends Controller
 
         $users = $query->with(['divisi', 'orgUnit', 'jabatan'])->latest()->paginate(15);
 
-        $divisiList = \Illuminate\Support\Facades\Cache::remember('master_divisi_select', 300, fn () => \App\Models\OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get());
-        $unitOrgList = \Illuminate\Support\Facades\Cache::remember('master_unit_org_select', 300, fn () => \App\Models\OrgUnit::select('id', 'nama_unit_organisasi', 'divisi_id')->orderBy('nama_unit_organisasi')->get());
-        $jabatanList = \Illuminate\Support\Facades\Cache::remember('master_jabatan_select', 300, fn () => \App\Models\OrgJabatan::select('id', 'nama_jabatan')->orderBy('nama_jabatan')->get());
+        $divisiList = \App\Models\OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
+        $unitOrgList = \App\Models\OrgUnit::select('id', 'nama_unit_organisasi', 'divisi_id')->orderBy('nama_unit_organisasi')->get();
+        $jabatanList = \App\Models\OrgJabatan::select('id', 'nama_jabatan')->orderBy('nama_jabatan')->get();
 
         return Inertia::render('Admin/ManajemenUser/Index', [
             'users' => $users,

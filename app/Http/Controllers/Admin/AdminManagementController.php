@@ -28,9 +28,9 @@ class AdminManagementController extends Controller
         }
 
         $admins = $query->latest()->paginate(15);
-        $roles = \Illuminate\Support\Facades\Cache::remember('admin_roles_list', 300, fn () => \Spatie\Permission\Models\Role::where('guard_name', 'admin')->select('id', 'name')->get());
-        $subUnits = \Illuminate\Support\Facades\Cache::remember('admin_subunits_with_unit', 300, fn () => \App\Models\SubUnit::with('unit:id,nama_unit')->select('id', 'unit_id', 'nama_layanan')->get());
-        $units = \Illuminate\Support\Facades\Cache::remember('master_units_active', 300, fn () => \App\Models\Unit::where('aktif', true)->select('id', 'nama_unit')->orderBy('nama_unit')->get());
+        $roles = \Spatie\Permission\Models\Role::where('guard_name', 'admin')->select('id', 'name')->get();
+        $subUnits = \App\Models\SubUnit::with('unit:id,nama_unit')->select('id', 'unit_id', 'nama_layanan')->get();
+        $units = \App\Models\Unit::where('aktif', true)->select('id', 'nama_unit')->orderBy('nama_unit')->get();
 
         return Inertia::render('Admin/ManajemenOperator/Index', [
             'admins' => $admins,

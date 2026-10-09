@@ -28,7 +28,11 @@ export function useDependentDropdown(baseUrl: string) {
     try {
       const decodedUrl = decodeURIComponent(baseUrl);
       const url = decodedUrl.replace(/\{[^}]+\}/, String(parentId));
-      const { data } = await axios.get(url, { signal: controller.signal });
+      const { data } = await axios.get(url, {
+        signal: controller.signal,
+        headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+        params: { _t: Date.now() },
+      });
 
       // Hanya update state jika request ini belum dibatalkan
       if (!controller.signal.aborted) {

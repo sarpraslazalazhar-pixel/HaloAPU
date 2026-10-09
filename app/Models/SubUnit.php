@@ -24,9 +24,11 @@ class SubUnit extends Model
     {
         static::saved(function ($subUnit) {
             \Illuminate\Support\Facades\Cache::forget("sub_units_{$subUnit->unit_id}");
+            \Illuminate\Support\Facades\Cache::forget('admin_subunits_with_unit');
         });
         static::deleted(function ($subUnit) {
             \Illuminate\Support\Facades\Cache::forget("sub_units_{$subUnit->unit_id}");
+            \Illuminate\Support\Facades\Cache::forget('admin_subunits_with_unit');
         });
     }
 

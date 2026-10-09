@@ -12,20 +12,16 @@ class DropdownController extends Controller
 {
     public function orgUnits($divisiId)
     {
-        return Cache::remember("org_units_{$divisiId}", 300, function () use ($divisiId) {
-            return OrgUnit::where('divisi_id', $divisiId)->orderBy('nama_unit_organisasi')->get()->toArray();
-        });
+        return response()->json(OrgUnit::where('divisi_id', $divisiId)->orderBy('nama_unit_organisasi')->get()->toArray())->header('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
 
     public function subUnits($unitId)
     {
-        return Cache::remember("sub_units_{$unitId}", 300, function () use ($unitId) {
-            return SubUnit::where('unit_id', $unitId)->where('aktif', true)->orderBy('nama_layanan')->get()->toArray();
-        });
+        return response()->json(SubUnit::where('unit_id', $unitId)->where('aktif', true)->orderBy('nama_layanan')->get()->toArray())->header('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
 
     public function formFields($subUnitId)
     {
-        return FormField::where('sub_unit_id', $subUnitId)->orderBy('urutan')->get()->toArray();
+        return response()->json(FormField::where('sub_unit_id', $subUnitId)->orderBy('urutan')->get()->toArray())->header('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
 }

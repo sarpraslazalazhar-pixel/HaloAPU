@@ -34,7 +34,7 @@ class MonitorController extends Controller
         $bookings = $query->get();
 
         // Ambil daftar aset dari konfigurasi SubUnit (Eager load FormField untuk eliminasi N+1)
-        $monitoredSubUnits = \App\Models\SubUnit::where('is_monitored', true)->get();
+        $monitoredSubUnits = \App\Models\SubUnit::aktif()->where('is_monitored', true)->get();
         $fieldIds = $monitoredSubUnits->pluck('monitor_asset_field_id')->filter()->unique();
         $formFields = $fieldIds->isNotEmpty()
             ? \App\Models\FormField::whereIn('id', $fieldIds)->get()->keyBy('id')

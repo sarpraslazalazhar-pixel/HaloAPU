@@ -118,6 +118,7 @@ class AdminManagementController extends Controller
         }
 
         $admin->syncRoles([$validated['role']]);
+        \Illuminate\Support\Facades\Cache::forget("admin_perms_{$admin->id}");
         
         if (isset($validated['sub_units'])) {
             $admin->subUnits()->sync($validated['sub_units']);
@@ -148,6 +149,7 @@ class AdminManagementController extends Controller
         }
 
         $admin->delete();
+        \Illuminate\Support\Facades\Cache::forget("admin_perms_{$admin->id}");
 
         return back()->with('success', "Operator {$admin->username} berhasil dihapus.");
     }

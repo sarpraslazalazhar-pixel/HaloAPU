@@ -45,6 +45,12 @@ class Admin extends Authenticatable
         ];
     }
 
+    protected static function booted()
+    {
+        static::saved(fn ($admin) => \Illuminate\Support\Facades\Cache::forget("admin_perms_{$admin->id}"));
+        static::deleted(fn ($admin) => \Illuminate\Support\Facades\Cache::forget("admin_perms_{$admin->id}"));
+    }
+
     public function getNameAttribute(): string
     {
         return !empty($this->attributes['name']) ? $this->attributes['name'] : $this->username;

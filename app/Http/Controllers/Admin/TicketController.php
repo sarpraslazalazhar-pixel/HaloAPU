@@ -73,15 +73,9 @@ class TicketController extends Controller
 
         $tickets = $query->latest()->paginate(10)->withQueryString();
 
-        $units = \Illuminate\Support\Facades\Cache::remember('master_units_filter', 300, function () {
-            return Unit::where('aktif', true)->select('id', 'nama_unit')->orderBy('nama_unit')->get();
-        });
-        $divisiList = \Illuminate\Support\Facades\Cache::remember('master_divisi_filter', 300, function () {
-            return OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
-        });
-        $orgUnitList = \Illuminate\Support\Facades\Cache::remember('master_org_unit_filter', 300, function () {
-            return OrgUnit::select('id', 'nama_unit_organisasi')->orderBy('nama_unit_organisasi')->get();
-        });
+        $units = Unit::aktif()->select('id', 'nama_unit')->orderBy('nama_unit')->get();
+        $divisiList = OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
+        $orgUnitList = OrgUnit::select('id', 'nama_unit_organisasi')->orderBy('nama_unit_organisasi')->get();
 
         return Inertia::render('Admin/Tiketing/Index', [
             'tickets' => $tickets,

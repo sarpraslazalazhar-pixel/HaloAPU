@@ -8,7 +8,7 @@ export default function UserLogin() {
   const { data, setData, post, processing, errors } = useForm({
     username: '',
     password: '',
-    remember: true,
+    remember: false,
     role: '',
   });
 

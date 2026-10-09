@@ -9,7 +9,7 @@ export default function AdminLogin() {
   const { data, setData, post, processing, errors } = useForm({
     username: '',
     password: '',
-    remember: true,
+    remember: false,
   });
 
   const [showPassword, setShowPassword] = useState(false);

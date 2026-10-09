@@ -19,6 +19,13 @@ class Unit extends Model
             \Illuminate\Support\Facades\Cache::forget("sub_units_{$model->id}");
         });
     }
+    public function scopeAktif($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('aktif', true)->orWhereNull('aktif');
+        });
+    }
+
 
     public function subUnits()
     {

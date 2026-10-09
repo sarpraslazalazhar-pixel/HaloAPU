@@ -26,7 +26,7 @@ class TicketWizardController extends Controller
     public function create()
     {
         return Inertia::render('User/Tiket/Wizard', [
-            'unitList' => Unit::where('aktif', true)->orderBy('nama_unit')->get(),
+            'unitList' => Unit::aktif()->orderBy('nama_unit')->get(),
         ]);
     }
 

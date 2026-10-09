@@ -17,7 +17,7 @@ class DropdownController extends Controller
 
     public function subUnits($unitId)
     {
-        return response()->json(SubUnit::where('unit_id', $unitId)->where('aktif', true)->orderBy('nama_layanan')->get()->toArray())->header('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return response()->json(SubUnit::where('unit_id', $unitId)->aktif()->orderBy('nama_layanan')->get()->toArray())->header('Cache-Control', 'no-cache, no-store, must-revalidate');
     }
 
     public function formFields($subUnitId)

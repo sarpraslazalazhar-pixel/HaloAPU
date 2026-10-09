@@ -14,9 +14,7 @@ class ServiceController extends Controller
      */
     public function index()
     {
-        $units = Unit::with(['subUnits' => function ($query) {
-            $query->where('aktif', true);
-        }])->where('aktif', true)->get();
+        $units = Unit::aktif()->with(['subUnits' => fn ($q) => $q->aktif()])->get();
 
         return response()->json([
             'data' => $units

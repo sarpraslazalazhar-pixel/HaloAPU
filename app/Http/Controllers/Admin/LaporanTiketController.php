@@ -36,7 +36,7 @@ class LaporanTiketController extends Controller
         $filters['year'] = $filters['year'] ?? date('Y');
 
         // References for Dropdowns
-        $units = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+        $units = Unit::aktif()->orderBy('nama_unit')->get();
         $subUnits = !empty($filters['unit_id']) ? SubUnit::where('unit_id', $filters['unit_id'])->orderBy('nama_layanan')->get() : [];
         $divisiList = OrgDivisi::orderBy('nama_divisi')->get();
 

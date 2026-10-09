@@ -31,6 +31,13 @@ class SubUnit extends Model
             \Illuminate\Support\Facades\Cache::forget('admin_subunits_with_unit');
         });
     }
+    public function scopeAktif($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('aktif', true)->orWhereNull('aktif');
+        });
+    }
+
 
     public function unit()
     {

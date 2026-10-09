@@ -29,7 +29,7 @@ class LaporanOperatorController extends Controller
         $search = $request->input('search');
 
         // References for Filter Dropdowns
-        $units = Unit::where('aktif', true)->orderBy('nama_unit')->get(['id', 'nama_unit']);
+        $units = Unit::aktif()->orderBy('nama_unit')->get(['id', 'nama_unit']);
         $subUnits = $unitId ? SubUnit::where('unit_id', $unitId)->orderBy('nama_layanan')->get(['id', 'unit_id', 'nama_layanan']) : [];
 
         // 1. Get Operators (Admins with role Operator or admins that have assigned tickets)

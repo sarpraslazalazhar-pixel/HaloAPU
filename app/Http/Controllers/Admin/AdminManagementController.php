@@ -30,7 +30,7 @@ class AdminManagementController extends Controller
         $admins = $query->latest()->paginate(15);
         $roles = \Spatie\Permission\Models\Role::where('guard_name', 'admin')->select('id', 'name')->get();
         $subUnits = \App\Models\SubUnit::with('unit:id,nama_unit')->select('id', 'unit_id', 'nama_layanan')->get();
-        $units = \App\Models\Unit::where('aktif', true)->select('id', 'nama_unit')->orderBy('nama_unit')->get();
+        $units = \App\Models\Unit::aktif()->select('id', 'nama_unit')->orderBy('nama_unit')->get();
 
         return Inertia::render('Admin/ManajemenOperator/Index', [
             'admins' => $admins,

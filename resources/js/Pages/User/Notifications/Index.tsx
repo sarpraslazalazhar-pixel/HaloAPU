@@ -87,7 +87,7 @@ export default function UserNotificationsIndex({ notifications, filters }: Props
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Notifikasi</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Pemberitahuan dan riwayat notifikasi Anda
+            Pemberitahuan dan riwayat notifikasi kamu
           </p>
         </div>
       </div>

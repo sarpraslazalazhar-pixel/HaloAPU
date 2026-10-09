@@ -206,7 +206,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
          <div className="mb-6 p-4 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg flex flex-col gap-4">
            <div>
              <p className="font-semibold text-lg flex items-center gap-2"><Eye className="w-5 h-5"/> Review Hasil</p>
-             <p className="text-sm">Tiket ini sudah diselesaikan. Silakan periksa hasil pekerjaan. Anda dapat menerima hasil akhir atau meminta revisi. Sisa revisi Anda: {maxRevisions - (ticket.revision_count || 0)} kali.</p>
+             <p className="text-sm">Tiket ini sudah diselesaikan. Silakan periksa hasil pekerjaan. Kamu dapat menerima hasil akhir atau meminta revisi. Sisa revisi kamu: {maxRevisions - (ticket.revision_count || 0)} kali.</p>
            </div>
            <div className="flex gap-3">
              <Button 
@@ -305,7 +305,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
        {ticket.status === 'solve' && ticket.sub_unit?.is_revision_enabled && ticket.is_result_accepted && (
          <div className="mb-6 p-4 bg-green-50 border border-green-200 text-green-700 rounded-lg flex items-center gap-3">
            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
-           <p className="font-medium">Anda telah menerima hasil akhir tiket ini.</p>
+           <p className="font-medium">Kamu telah menerima hasil akhir tiket ini.</p>
          </div>
        )}
 
@@ -540,7 +540,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                    }} className="space-y-4">
                      <div className="space-y-2">
                        <label className="text-sm font-medium">Catatan <span className="text-red-500">*</span></label>
-                       <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={replyData.catatan} onChange={e => setReplyData('catatan', e.target.value)} placeholder="Tulis balasan Anda di sini..." required />
+                       <textarea className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[100px]" value={replyData.catatan} onChange={e => setReplyData('catatan', e.target.value)} placeholder="Tulis balasan kamu di sini..." required />
                        {errorsReply.catatan && <p className="text-red-500 text-sm">{errorsReply.catatan}</p>}
                      </div>
                      <div className="space-y-2">

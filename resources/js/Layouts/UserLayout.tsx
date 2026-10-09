@@ -119,7 +119,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  toast((t) => (
  <div className="flex flex-col gap-2">
  <span className="text-sm font-medium">Aktifkan Notifikasi Browser</span>
- <span className="text-xs text-muted-foreground">Terima pemberitahuan saat status tiket Anda diperbarui.</span>
+ <span className="text-xs text-muted-foreground">Terima pemberitahuan saat status tiket kamu diperbarui.</span>
  <div className="flex gap-2 justify-end mt-1">
  <Button size="sm" variant="outline" onClick={() => {
  localStorage.setItem('notif_last_asked', Date.now().toString());

@@ -288,7 +288,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
                       className="text-xs h-7 px-2"
                       onClick={() => {
                         if (!('Notification' in window)) {
-                          alert('Browser Anda tidak mendukung notifikasi.');
+                          alert('Browser kamu tidak mendukung notifikasi.');
 
                           return;
                         }
@@ -296,7 +296,7 @@ export default function ProfileModal({ open, onOpenChange, user, isAdmin = false
                         Notification.requestPermission().then((permission) => {
                           if (permission === 'granted') {
                             alert('Izin notifikasi diberikan!');
-                            new Notification('Notifikasi Aktif', { body: 'Anda akan menerima update tiket di sini.' });
+                            new Notification('Notifikasi Aktif', { body: 'Kamu akan menerima update tiket di sini.' });
                           } else {
                             alert('Izin notifikasi ditolak.');
                           }

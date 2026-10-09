@@ -45,8 +45,8 @@ class CsatReminderNotification extends Notification
             'ticket_id' => $this->ticket->id,
             'judul_tiket' => $this->ticket->judul,
             'hari_sejak_solve' => $this->hariSejak,
-            'judul' => "Berikan Rating Tiket Anda",
-            'pesan' => "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah diselesaikan {$this->hariSejak} hari lalu. Mohon berikan rating Anda.",
+            'judul' => "Berikan Rating Tiket Kamu",
+            'pesan' => "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah diselesaikan {$this->hariSejak} hari lalu. Mohon berikan rating kamu.",
             'icon' => 'star',
             'aksi_url' => "/tiket/{$this->ticket->id}",
         ];
@@ -57,11 +57,11 @@ class CsatReminderNotification extends Notification
         return (new MailMessage)
             ->subject("Berikan Rating untuk Tiket #{$this->ticket->formatted_id} — Halo APU")
             ->greeting("Halo, {$notifiable->name}!")
-            ->line("Tiket Anda telah diselesaikan. Kami ingin mendengar pendapat Anda!")
+            ->line("Tiket kamu telah diselesaikan. Kami ingin mendengar pendapat kamu!")
             ->line("**Tiket:** #{$this->ticket->formatted_id} — {$this->ticket->judul}")
             ->line("**Diselesaikan:** {$this->hariSejak} hari lalu")
             ->action('Berikan Rating', url("/tiket/{$this->ticket->id}"))
-            ->line('Rating Anda sangat berarti bagi peningkatan layanan kami. Terima kasih!');
+            ->line('Rating kamu sangat berarti bagi peningkatan layanan kami. Terima kasih!');
     }
 
     public function toWhatsApp(object $notifiable): array

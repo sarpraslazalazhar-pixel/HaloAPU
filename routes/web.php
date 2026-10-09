@@ -153,6 +153,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/laporan/kinerja-operator', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'index'])->name('laporan.operator');
             Route::get('/laporan/kinerja-operator/{admin}/ulasan', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'ulasan'])->name('laporan.operator.ulasan');
             Route::get('/laporan/kinerja-operator/export', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'export'])->name('laporan.operator.export');
+            Route::get('/laporan/kinerja-operator/export-pdf', [\App\Http\Controllers\Admin\LaporanOperatorController::class, 'exportPdf'])->name('laporan.operator.export-pdf');
         });
 
         // Monitor Admin

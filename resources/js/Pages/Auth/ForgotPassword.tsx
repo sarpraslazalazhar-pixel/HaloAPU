@@ -57,7 +57,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
  </div>
 
  <div className="mb-6 text-sm text-gray-600 text-center">
- Lupa password Anda? Tidak masalah. Beri tahu kami alamat email Anda dan kami akan mengirimi Anda link reset password.
+ Lupa password kamu? Tidak masalah. Beri tahu kami alamat email kamu dan kami akan mengirimi kamu link reset password.
  </div>
 
  {status && (
@@ -82,7 +82,7 @@ export default function ForgotPassword({ status }: { status?: string }) {
  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-[#0088cc] focus:border-[#0088cc] text-sm" 
  id="email" 
  name="email" 
- placeholder="Masukkan email Anda" 
+ placeholder="Masukkan email kamu"
  required 
  type="email"
  value={data.email}

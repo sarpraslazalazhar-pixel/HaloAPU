@@ -44,7 +44,7 @@ export function CsatDialog({ ticketId, disabled = false, existingRating, existin
  return (
  <div className="flex items-center gap-3">
  <div className="flex items-center gap-1">
- <span className="text-sm text-muted-foreground mr-1">Rating Anda:</span>
+ <span className="text-sm text-muted-foreground mr-1">Rating Kamu:</span>
  {[1, 2, 3, 4, 5].map((star) => (
  <Star
  key={star}
@@ -124,7 +124,7 @@ export function CsatDialog({ ticketId, disabled = false, existingRating, existin
  id="komentar"
  value={data.komentar}
  onChange={(e) => setData('komentar', e.target.value)}
- placeholder="Berikan komentar tentang layanan yang Anda terima..."
+ placeholder="Berikan komentar tentang layanan yang kamu terima..."
  rows={4}
  maxLength={1000}
  />

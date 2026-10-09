@@ -93,7 +93,7 @@ class TicketStatusUpdatedOperatorNotification extends Notification implements Sh
         $url = route('admin.tiket.show', $this->ticket->id);
         
         $message = "Halo *{$nama}* 👋\n\n";
-        $message .= "Ada update status pada tiket yang ditugaskan kepada Anda:\n\n";
+        $message .= "Ada update status pada tiket yang ditugaskan kepada kamu:\n\n";
         $message .= "🎫 *ID Tiket:* #{$this->ticket->formatted_id}\n";
         $message .= "📌 *Status Baru:* {$statusStr}\n";
         $message .= "👤 *Diubah Oleh:* {$this->pengubahName}\n";

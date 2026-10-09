@@ -96,7 +96,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         if (!$ticket->isAccessibleBy($admin)) {
-            abort(403, 'Anda tidak berhak mengakses tiket ini.');
+            abort(403, 'Kamu tidak berhak mengakses tiket ini.');
         }
 
         $ticket->load([
@@ -128,7 +128,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         if (!$ticket->isAccessibleBy($admin)) {
-            abort(403, 'Anda tidak berhak mengubah status tiket ini.');
+            abort(403, 'Kamu tidak berhak mengubah status tiket ini.');
         }
 
         $validTransitions = [
@@ -308,7 +308,7 @@ class TicketController extends Controller
         $admin = auth('admin')->user();
         $ticket = $attachment->ticket;
         if (!$ticket || !$ticket->isAccessibleBy($admin)) {
-            abort(403, 'Anda tidak berhak mengakses lampiran ini.');
+            abort(403, 'Kamu tidak berhak mengakses lampiran ini.');
         }
 
         if (!Storage::disk('public')->exists($attachment->file_path)) {
@@ -323,7 +323,7 @@ class TicketController extends Controller
         $admin = auth('admin')->user();
         $ticket = $attachment->ticket;
         if (!$ticket || !$ticket->isAccessibleBy($admin)) {
-            abort(403, 'Anda tidak berhak mengakses lampiran ini.');
+            abort(403, 'Kamu tidak berhak mengakses lampiran ini.');
         }
 
         if (!Storage::disk('public')->exists($attachment->file_path)) {
@@ -342,7 +342,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         if (!$admin->hasRole(['superadmin', 'Super Admin']) && !$admin->hasPermissionTo('akses-assign-operator')) {
-            abort(403, 'Anda tidak memiliki hak akses untuk menugaskan operator.');
+            abort(403, 'Kamu tidak memiliki hak akses untuk menugaskan operator.');
         }
 
         $request->validate([
@@ -377,7 +377,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         if (!$ticket->isAccessibleBy($admin)) {
-            abort(403, 'Anda tidak berhak membatalkan booking tiket ini.');
+            abort(403, 'Kamu tidak berhak membatalkan booking tiket ini.');
         }
 
         if (!$ticket->booking) {
@@ -428,7 +428,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         if (!$ticket->isAccessibleBy($admin)) {
-            abort(403, 'Anda tidak berhak mengakses tiket ini.');
+            abort(403, 'Kamu tidak berhak mengakses tiket ini.');
         }
 
         if (!in_array(strtolower($ticket->status), ['solve', 'selesai'])) {

@@ -95,7 +95,7 @@ export default function Riwayat({ csats }: { csats: any }) {
  <Star className="h-12 w-12 mx-auto mb-3 opacity-30" />
  <p>Belum ada rating yang diberikan.</p>
  <p className="text-sm mt-1">
- Berikan rating setelah tiket Anda selesai diproses.
+ Berikan rating setelah tiket kamu selesai diproses.
  </p>
  </CardContent>
  </Card>

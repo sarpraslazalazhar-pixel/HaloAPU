@@ -18,7 +18,7 @@ class TestPushNotification extends Notification
         return (new WebPushMessage)
             ->title('Test Notifikasi Berhasil! 🎉')
             ->icon('/favicon.ico')
-            ->body('Halo! Jika Anda melihat popup ini, berarti integrasi sistem Push Notification berjalan dengan sempurna.')
+            ->body('Halo! Jika kamu melihat popup ini, berarti integrasi sistem Push Notification berjalan dengan sempurna.')
             ->action('Tutup', url('/'));
     }
 }

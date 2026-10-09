@@ -349,7 +349,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>Buka Kunci Perangkat?</AlertDialogTitle>
                                   <AlertDialogDescription>
-                                    Apakah Anda yakin ingin membuka kunci perangkat untuk user <strong>"{user.name || user.username}"</strong>?
+                                    Apakah kamu yakin ingin membuka kunci perangkat untuk user <strong>"{user.name || user.username}"</strong>?
                                     <br /><br />
                                     Perangkat saat ini: <strong>{user.device_name || 'Smartphone Android'}</strong>.
                                     Setelah dibuka, user dapat login kembali menggunakan HP baru.
@@ -380,7 +380,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Hapus User?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Apakah Anda yakin ingin menghapus user <strong>"{user.name || user.username}"</strong>?
+                                  Apakah kamu yakin ingin menghapus user <strong>"{user.name || user.username}"</strong>?
                                   {' '}Tindakan ini tidak dapat dibatalkan. User yang memiliki tiket aktif tidak bisa dihapus.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>

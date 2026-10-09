@@ -15,9 +15,9 @@ class SubUnitSeeder extends Seeder
 
         $mapping = [
             'GA (General Affair)' => [
-                ['nama_layanan' => 'Peminjaman Alat',         'deskripsi' => 'Pinjam berbagai peralatan pendukung kegiatan Anda dengan cepat, mudah, dan praktis.', 'wajib_kembali' => true],
-                ['nama_layanan' => 'Penggunaan Ruangan',      'deskripsi' => 'Pesan dan gunakan ruangan untuk berbagai kegiatan Anda dengan proses yang cepat dan mudah.'],
-                ['nama_layanan' => 'Penggunaan Kendaraan',    'deskripsi' => 'Pesan dan gunakan kendaraan operasional dengan mudah dan aman untuk mendukung mobilitas kegiatan Anda.'],
+                ['nama_layanan' => 'Peminjaman Alat',         'deskripsi' => 'Pinjam berbagai peralatan pendukung kegiatan kamu dengan cepat, mudah, dan praktis.', 'wajib_kembali' => true],
+                ['nama_layanan' => 'Penggunaan Ruangan',      'deskripsi' => 'Pesan dan gunakan ruangan untuk berbagai kegiatan kamu dengan proses yang cepat dan mudah.'],
+                ['nama_layanan' => 'Penggunaan Kendaraan',    'deskripsi' => 'Pesan dan gunakan kendaraan operasional dengan mudah dan aman untuk mendukung mobilitas kegiatan kamu.'],
                 ['nama_layanan' => 'Pengadaan Jasa & Barang', 'deskripsi' => 'Layanan pengajuan dan pengelolaan pengadaan barang serta jasa dengan prosedur yang akuntabel, terstruktur, dan efisien.'],
                 ['nama_layanan' => 'Perbaikan & Perawatan',   'deskripsi' => null],
                 ['nama_layanan' => 'Perpanjang Pajak',        'deskripsi' => null],

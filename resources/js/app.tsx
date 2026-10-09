@@ -14,7 +14,7 @@ router.on('invalid' as any, (event: any) => {
     event.preventDefault();
     sessionStorage.setItem(
       'session_expired_alert',
-      'Sesi Anda telah berakhir karena batas waktu tidak aktif (3 jam). Silakan login kembali.'
+      'Sesi kamu telah berakhir karena batas waktu tidak aktif (3 jam). Silakan login kembali.'
     );
     window.location.reload();
   }

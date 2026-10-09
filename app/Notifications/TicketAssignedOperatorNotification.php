@@ -52,7 +52,7 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
         $layanan = $this->ticket->subUnit->nama_layanan ?? 'Umum';
         return [
             'title' => 'Penugasan Tiket #' . $this->ticket->id,
-            'body' => "Anda telah ditugaskan untuk menangani tiket layanan {$layanan}.",
+            'body' => "Kamu telah ditugaskan untuk menangani tiket layanan {$layanan}.",
             'ticket_id' => (string) $this->ticket->id,
             'url' => url('/admin/tiket/' . $this->ticket->id),
             'type' => 'ticket_assigned',
@@ -71,7 +71,7 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
             'type' => 'ticket_assigned',
             'ticket_id' => $this->ticket->id,
             'title' => 'Penugasan Tiket Baru',
-            'message' => "Anda telah ditugaskan untuk menangani tiket terkait layanan {$layanan}.",
+            'message' => "Kamu telah ditugaskan untuk menangani tiket terkait layanan {$layanan}.",
             'url' => url('/admin/tiket/' . $this->ticket->id),
         ]);
     }
@@ -82,7 +82,7 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
         return (new \NotificationChannels\WebPush\WebPushMessage)
             ->title('Penugasan Tiket Baru')
             ->icon('/images/logo.png')
-            ->body("Anda telah ditugaskan untuk menangani tiket terkait layanan {$layanan}.")
+            ->body("Kamu telah ditugaskan untuk menangani tiket terkait layanan {$layanan}.")
             ->action('Lihat Tiket', url('/admin/tiket/' . $this->ticket->id))
             ->data(['url' => url('/admin/tiket/' . $this->ticket->id)]);
     }
@@ -95,7 +95,7 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
             'type' => 'ticket_assigned',
             'ticket_id' => $this->ticket->id,
             'title' => 'Penugasan Tiket Baru',
-            'message' => "Anda telah ditugaskan untuk menangani tiket terkait layanan {$layanan}.",
+            'message' => "Kamu telah ditugaskan untuk menangani tiket terkait layanan {$layanan}.",
             'url' => url('/admin/tiket/' . $this->ticket->id),
         ];
     }
@@ -108,7 +108,7 @@ class TicketAssignedOperatorNotification extends Notification implements ShouldB
         $namaAdmin = $notifiable->name ?? ($notifiable->nama ?? 'Admin');
 
         $message = "Halo *{$namaAdmin}* 👋\n\n";
-        $message .= "Anda telah ditugaskan untuk menangani tiket layanan *{$layanan}*.\n\n";
+        $message .= "Kamu telah ditugaskan untuk menangani tiket layanan *{$layanan}*.\n\n";
         $message .= "Mohon segera cek detailnya di sini:\n{$url}\n\n";
         $message .= "Terima kasih";
 

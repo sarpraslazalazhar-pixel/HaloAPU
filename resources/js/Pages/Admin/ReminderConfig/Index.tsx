@@ -87,7 +87,7 @@ export default function ReminderConfigIndex({ configs }: Props) {
  <CardHeader>
  <CardTitle>Daftar Reminder</CardTitle>
  <CardDescription>
- Pastikan Anda mengaktifkan channel yang sesuai dengan kebutuhan.
+ Pastikan kamu mengaktifkan channel yang sesuai dengan kebutuhan.
  </CardDescription>
  </CardHeader>
  <CardContent>

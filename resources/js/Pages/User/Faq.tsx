@@ -55,21 +55,21 @@ const FAQ_ITEMS: FaqItem[] = [
     category: 'Peminjaman Aset',
     question: 'Bagaimana prosedur peminjaman ruangan atau kendaraan dinas?',
     answer:
-      'Pengajuan peminjaman dilakukan melalui menu "Ajukan Tiket" dengan memilih kategori Peminjaman Ruangan atau Peminjaman Kendaraan. Anda wajib mengisi estimasi waktu mulai, waktu selesai, agenda kegiatan, serta kapasitas atau fasilitas pendukung yang dibutuhkan untuk diverifikasi pengelola sarana.',
+      'Pengajuan peminjaman dilakukan melalui menu "Ajukan Tiket" dengan memilih kategori Peminjaman Ruangan atau Peminjaman Kendaraan. Kamu wajib mengisi estimasi waktu mulai, waktu selesai, agenda kegiatan, serta kapasitas atau fasilitas pendukung yang dibutuhkan untuk diverifikasi pengelola sarana.',
   },
   {
     id: 5,
     category: 'Peminjaman Aset',
     question: 'Di mana saya bisa memantau jadwal ketersediaan ruangan dan kendaraan secara langsung?',
     answer:
-      'Anda dapat memantau ketersediaan aset secara real-time melalui halaman Live Monitor (/monitor). Menu ini menyajikan kalender jadwal penggunaan ruangan, ketersediaan unit kendaraan operasional, serta ketersediaan alat untuk mencegah bentrok jadwal penggunaan.',
+      'Kamu dapat memantau ketersediaan aset secara real-time melalui halaman Live Monitor (/monitor). Menu ini menyajikan kalender jadwal penggunaan ruangan, ketersediaan unit kendaraan operasional, serta ketersediaan alat untuk mencegah bentrok jadwal penggunaan.',
   },
   {
     id: 6,
     category: 'Akun & Umum',
     question: 'Bagaimana cara melakukan reset password jika saya lupa kata sandi?',
     answer:
-      'Pada halaman login HaloAPU, klik tautan "Lupa Password". Masukkan alamat email kedinasan terdaftar Anda untuk menerima tautan pembaruan kata sandi. Buka tautan di kotak masuk email Anda dan masukkan password baru yang aman.',
+      'Pada halaman login HaloAPU, klik tautan "Lupa Password". Masukkan alamat email kedinasan terdaftar kamu untuk menerima tautan pembaruan kata sandi. Buka tautan di kotak masuk email kamu dan masukkan password baru yang aman.',
   },
   {
     id: 7,
@@ -83,7 +83,7 @@ const FAQ_ITEMS: FaqItem[] = [
     category: 'Penilaian CSAT',
     question: 'Kapan penilaian kepuasan layanan (CSAT) harus diisi dan apa kegunaannya?',
     answer:
-      'Formulir penilaian CSAT (Customer Satisfaction) akan otomatis tersedia segera setelah tiket Anda berstatus Selesai (Solve). Penilaian bintang 1-5 dan saran Anda menjadi tolok ukur utama peningkatan kualitas dan evaluasi performa pelayanan HaloAPU.',
+      'Formulir penilaian CSAT (Customer Satisfaction) akan otomatis tersedia segera setelah tiket kamu berstatus Selesai (Solve). Penilaian bintang 1-5 dan saran kamu menjadi tolok ukur utama peningkatan kualitas dan evaluasi performa pelayanan HaloAPU.',
   },
   {
     id: 9,

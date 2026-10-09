@@ -139,7 +139,7 @@ class AdminManagementController extends Controller
         $admin = $manajemen_operator;
 
         if ($admin->id === auth('admin')->id()) {
-            return back()->withErrors(['error' => 'Anda tidak bisa menghapus akun Anda sendiri.']);
+            return back()->withErrors(['error' => 'Kamu tidak bisa menghapus akun kamu sendiri.']);
         }
 
         $currentAdmin = auth('admin')->user();

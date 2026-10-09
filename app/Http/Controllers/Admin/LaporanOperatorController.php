@@ -2,16 +2,19 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Exports\LaporanKinerjaOperatorExport;
 use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Models\Csat;
 use App\Models\Ticket;
 use App\Models\Unit;
 use App\Models\SubUnit;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Inertia\Inertia;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Maatwebsite\Excel\Facades\Excel;
 
 class LaporanOperatorController extends Controller
 {
@@ -252,17 +255,35 @@ class LaporanOperatorController extends Controller
         ]);
     }
 
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request)
     {
-        $year = $request->input('year', date('Y'));
-        $month = $request->input('month');
-        $dateFrom = $request->input('date_from');
-        $dateTo = $request->input('date_to');
-        $unitId = $request->input('unit_id');
-        $subUnitId = $request->input('sub_unit_id');
-        $search = $request->input('search');
+        $filters = $request->only(['year', 'month', 'date_from', 'date_to', 'unit_id', 'sub_unit_id', 'search']);
+        $filters['year'] = $filters['year'] ?? date('Y');
 
-        $adminQuery = Admin::with(['units:id,nama_unit', 'subUnits:id,nama_layanan'])
+        $admin = auth('admin')->user();
+        $filename = 'laporan-kinerja-operator-' . date('Ymd-His') . '.xlsx';
+
+        return Excel::download(new LaporanKinerjaOperatorExport($filters, $admin), $filename);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        ini_set('memory_limit', '256M');
+        ini_set('max_execution_time', 300);
+
+        $filters = $request->only(['year', 'month', 'date_from', 'date_to', 'unit_id', 'sub_unit_id', 'search']);
+        $filters['year'] = $filters['year'] ?? date('Y');
+        $admin = auth('admin')->user();
+
+        $year     = $filters['year'] ?? null;
+        $month    = $filters['month'] ?? null;
+        $dateFrom = $filters['date_from'] ?? null;
+        $dateTo   = $filters['date_to'] ?? null;
+        $unitId   = $filters['unit_id'] ?? null;
+        $subUnitId = $filters['sub_unit_id'] ?? null;
+        $search   = $filters['search'] ?? null;
+
+        $adminQuery = Admin::with(['units:id,nama_unit'])
             ->where(function ($q) {
                 $q->whereHas('roles', fn ($r) => $r->whereIn('name', ['Operator', 'operator', 'Admin', 'admin']))
                   ->orWhereExists(function ($sub) {
@@ -275,10 +296,10 @@ class LaporanOperatorController extends Controller
         if ($search) {
             $adminQuery->where(function ($q) use ($search) {
                 $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('username', 'like', "%{$search}%");
+                  ->orWhere('username', 'like', "%{$search}%")
+                  ->orWhere('email', 'like', "%{$search}%");
             });
         }
-
         if ($unitId) {
             $adminQuery->whereHas('units', fn ($q) => $q->where('units.id', $unitId));
         }
@@ -293,13 +314,8 @@ class LaporanOperatorController extends Controller
             if ($year) $ticketSubQuery->whereYear('tickets.created_at', $year);
             if ($month) $ticketSubQuery->whereMonth('tickets.created_at', $month);
         }
-
-        if ($unitId) {
-            $ticketSubQuery->where('tickets.unit_id', $unitId);
-        }
-        if ($subUnitId) {
-            $ticketSubQuery->where('tickets.sub_unit_id', $subUnitId);
-        }
+        if ($unitId)    $ticketSubQuery->where('tickets.unit_id', $unitId);
+        if ($subUnitId) $ticketSubQuery->where('tickets.sub_unit_id', $subUnitId);
 
         $statsByAdmin = (clone $ticketSubQuery)
             ->leftJoin('ticket_sla_tracking', 'tickets.id', '=', 'ticket_sla_tracking.ticket_id')
@@ -319,63 +335,111 @@ class LaporanOperatorController extends Controller
             ->get()
             ->keyBy('assigned_admin_id');
 
-        $filename = 'laporan-kinerja-operator-' . date('Y-m-d') . '.csv';
+        $operatorData = $operators->map(function ($operator) use ($statsByAdmin) {
+            $stat = $statsByAdmin->get($operator->id);
 
-        return response()->streamDownload(function () use ($operators, $statsByAdmin) {
-            $handle = fopen('php://output', 'w');
-            // Add UTF-8 BOM for Excel compatibility
-            fprintf($handle, chr(0xEF).chr(0xBB).chr(0xBF));
+            $total    = (int) ($stat->total_tickets ?? 0);
+            $active   = (int) ($stat->active_tickets ?? 0);
+            $solved   = (int) ($stat->solved_tickets ?? 0);
+            $rejected = (int) ($stat->rejected_tickets ?? 0);
+            $totalResolved = (int) ($stat->total_resolved ?? 0);
+            $breaches = (int) ($stat->resolution_breaches ?? 0);
 
-            fputcsv($handle, [
-                'Nama Operator',
-                'Username',
-                'Email',
-                'Unit Layanan',
-                'Tiket Aktif (Berjalan)',
-                'Tiket Selesai',
-                'Tiket Ditolak/Batal',
-                'Total Tiket',
-                'Kepatuhan SLA Resolusi (%)',
-                'Pelanggaran SLA',
-                'Rata-rata Rating CSAT (1-5)',
-                'Jumlah Ulasan CSAT'
-            ]);
+            $compliance = $totalResolved > 0
+                ? round((($totalResolved - $breaches) / $totalResolved) * 100, 1)
+                : 100;
 
-            foreach ($operators as $op) {
-                $stat = $statsByAdmin->get($op->id);
-                $total = (int) ($stat->total_tickets ?? 0);
-                $active = (int) ($stat->active_tickets ?? 0);
-                $solved = (int) ($stat->solved_tickets ?? 0);
-                $rejected = (int) ($stat->rejected_tickets ?? 0);
-                $totalResolved = (int) ($stat->total_resolved ?? 0);
-                $breaches = (int) ($stat->resolution_breaches ?? 0);
-                $compliance = $totalResolved > 0
-                    ? round((($totalResolved - $breaches) / $totalResolved) * 100, 1) . '%'
-                    : ($total > 0 ? '100%' : '100%');
-                $rating = $stat && $stat->avg_rating !== null ? $stat->avg_rating : '-';
-                $reviews = (int) ($stat->total_reviews ?? 0);
-                $units = $op->units->pluck('nama_unit')->join(', ') ?: '-';
+            return [
+                'name'                 => $operator->name,
+                'username'             => $operator->username,
+                'units'                => $operator->units->pluck('nama_unit')->join(', '),
+                'active_tickets'       => $active,
+                'solved_tickets'       => $solved,
+                'rejected_tickets'     => $rejected,
+                'total_tickets'        => $total,
+                'resolution_compliance'=> $compliance,
+                'resolution_breaches'  => $breaches,
+                'avg_rating'           => $stat && $stat->avg_rating !== null ? (float) $stat->avg_rating : null,
+                'total_reviews'        => (int) ($stat->total_reviews ?? 0),
+            ];
+        })->sortByDesc('active_tickets')->values();
 
-                fputcsv($handle, [
-                    $op->name,
-                    $op->username,
-                    $op->email,
-                    $units,
-                    $active,
-                    $solved,
-                    $rejected,
-                    $total,
-                    $compliance,
-                    $breaches,
-                    $rating,
-                    $reviews,
-                ]);
+        // Summary
+        $totalOperators = $operatorData->count();
+        $totalTickets   = $operatorData->sum('total_tickets');
+        $totalSolved    = $operatorData->sum('solved_tickets');
+        $totalActive    = $operatorData->sum('active_tickets');
+        $totalRejected  = $operatorData->sum('rejected_tickets');
+        $totalBreaches  = $operatorData->sum('resolution_breaches');
+        $totalReviews   = $operatorData->sum('total_reviews');
+        $avgCompliance  = $totalOperators > 0 ? round($operatorData->avg('resolution_compliance'), 1) : 100;
+
+        $ratedOps = $operatorData->filter(fn ($o) => $o['avg_rating'] !== null);
+        $avgRating = $ratedOps->count() > 0 ? round($ratedOps->avg('avg_rating'), 2) : 0;
+
+        // Periode label
+        $periodePrint = null;
+        if ($dateFrom && $dateTo) {
+            $periodePrint = \Carbon\Carbon::parse($dateFrom)->format('d M Y') . ' - ' . \Carbon\Carbon::parse($dateTo)->format('d M Y');
+        } elseif ($year && $month) {
+            $periodePrint = \Carbon\Carbon::createFromDate($year, $month, 1)->translatedFormat('F Y');
+        } elseif ($year) {
+            $periodePrint = "Tahun {$year}";
+        }
+
+        // Filter label
+        $filterParts = [];
+        if ($unitId) {
+            $unit = Unit::find($unitId);
+            if ($unit) $filterParts[] = "Unit = {$unit->nama_unit}";
+        }
+        if ($subUnitId) {
+            $sub = SubUnit::find($subUnitId);
+            if ($sub) $filterParts[] = "Layanan = {$sub->nama_layanan}";
+        }
+        if ($search) $filterParts[] = "Kata kunci = {$search}";
+        $filterPrint = $filterParts ? implode(' | ', $filterParts) : null;
+
+        // Logo
+        $logo = null;
+        try {
+            $logoPath = public_path('storage/logo.png');
+            if (File::exists($logoPath)) {
+                $logo = 'data:image/png;base64,' . base64_encode(file_get_contents($logoPath));
             }
+        } catch (\Exception $e) {}
 
-            fclose($handle);
-        }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        $pdf = Pdf::loadView('exports.laporan-kinerja-operator-pdf', [
+            'operators'    => $operatorData,
+            'summary'      => [
+                'totalOperators' => $totalOperators,
+                'totalTickets'   => $totalTickets,
+                'totalSolved'    => $totalSolved,
+                'totalActive'    => $totalActive,
+                'avgCompliance'  => $avgCompliance,
+                'avgRating'      => $avgRating,
+            ],
+            'totals'       => [
+                'active'       => $totalActive,
+                'solved'       => $totalSolved,
+                'rejected'     => $totalRejected,
+                'total'        => $totalTickets,
+                'avgCompliance'=> $avgCompliance,
+                'breaches'     => $totalBreaches,
+                'avgRating'    => $avgRating,
+                'reviews'      => $totalReviews,
+            ],
+            'periodePrint' => $periodePrint,
+            'filterPrint'  => $filterPrint,
+            'logo'         => $logo,
+            'userName'     => $admin->name ?? $admin->username,
+        ])->setOption([
+            'isHtml5ParserEnabled' => true,
+            'isRemoteEnabled'      => false,
+            'defaultFont'          => 'DejaVu Sans',
         ]);
+
+        $filename = 'laporan-kinerja-operator-' . date('Ymd-His') . '.pdf';
+        return $pdf->download($filename);
     }
 }

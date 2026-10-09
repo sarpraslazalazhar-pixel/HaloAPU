@@ -191,7 +191,7 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
 
         <Card className="shadow-sm border-slate-200/80">
           <CardHeader>
-            <CardTitle>Daftar Tiket Anda</CardTitle>
+            <CardTitle>Daftar Tiket Kamu</CardTitle>
           </CardHeader>
           <CardContent>
             <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: any) => t.id} emptyMessage="Belum ada tiket yang diajukan." />

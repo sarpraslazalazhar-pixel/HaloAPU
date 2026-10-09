@@ -222,7 +222,7 @@ export default function UserLogin() {
                 </div>
                 <h2 className="text-lg font-bold text-gray-900">Pilih Peran Masuk</h2>
                 <p className="text-xs text-gray-600">
-                  Akun Anda terdaftar sebagai <strong>Pengaju</strong> dan <strong>Admin / Operator</strong>. Pilih peran yang ingin Anda gunakan:
+                  Akun kamu terdaftar sebagai <strong>Pengaju</strong> dan <strong>Admin / Operator</strong>. Pilih peran yang ingin kamu gunakan:
                 </p>
               </div>
 
@@ -240,7 +240,7 @@ export default function UserLogin() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-semibold text-sm text-gray-900 group-hover:text-[#0088cc]">
-                      Masuk sebagai Pengaju
+                      Masuk sebagai User
                     </div>
                     <div className="text-xs text-gray-500 truncate">
                       Buat tiket, pantau progres & layanan

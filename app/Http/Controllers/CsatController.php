@@ -12,7 +12,7 @@ class CsatController extends Controller
     public function store(Request $request, Ticket $ticket)
     {
         if ($ticket->user_id !== $request->user()->id) {
-            abort(403, 'Anda tidak memiliki akses ke tiket ini.');
+            abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
         }
 
         if (!in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
@@ -50,7 +50,7 @@ class CsatController extends Controller
             \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketRatedAdminNotification($ticket, $validated['rating'], $validated['komentar'] ?? ''));
         }
 
-        return back()->with('success', 'Terima kasih atas rating Anda!');
+        return back()->with('success', 'Terima kasih atas rating kamu!');
     }
 
     public function riwayat(Request $request)

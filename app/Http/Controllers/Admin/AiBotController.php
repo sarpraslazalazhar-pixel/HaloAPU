@@ -364,7 +364,7 @@ EOT;
             $out .= "| Rata-rata Skor CSAT | {$csat['rata_rata_rating']} |\n\n";
 
             if (!$prefix) {
-                $out .= "\n\n> 🔑 **Tips Aktivasi Percakapan Penuh (Google Gemini)**:\n> Tambahkan baris berikut ke file `.env` aplikasi Anda:\n> ```env\n> GEMINI_API_KEY=AIzaSy...\n> GEMINI_MODEL=gemini-1.5-flash\n> ```\n> Setelah itu, Anda bisa berdialog secara fleksibel dan mendalam dengan kecerdasan Gemini AI.";
+                $out .= "\n\n> 🔑 **Tips Aktivasi Percakapan Penuh (Google Gemini)**:\n> Tambahkan baris berikut ke file `.env` aplikasi kamu:\n> ```env\n> GEMINI_API_KEY=AIzaSy...\n> GEMINI_MODEL=gemini-1.5-flash\n> ```\n> Setelah itu, kamu bisa berdialog secara fleksibel dan mendalam dengan kecerdasan Gemini AI.";
             }
         }
 

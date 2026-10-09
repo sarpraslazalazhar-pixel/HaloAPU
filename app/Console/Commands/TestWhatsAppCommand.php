@@ -88,7 +88,7 @@ class TestWhatsAppCommand extends Command
             };
 
             $channel->send(new AnonymousNotifiable, $notification);
-            $this->info("-> Eksekusi WhatsAppChannel selesai. Cek log atau WhatsApp Anda.");
+            $this->info("-> Eksekusi WhatsAppChannel selesai. Cek log atau WhatsApp kamu.");
         } catch (\Throwable $e) {
             $this->error("-> Error di WhatsAppChannel: " . $e->getMessage());
             return 1;

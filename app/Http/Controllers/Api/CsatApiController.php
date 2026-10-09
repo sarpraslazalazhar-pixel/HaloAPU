@@ -78,7 +78,7 @@ class CsatApiController extends Controller
                 'comment' => $csat->komentar,
                 'createdAt' => $csat->created_at->toIso8601String(),
             ],
-            'message' => 'Terima kasih atas rating Anda!',
+            'message' => 'Terima kasih atas rating kamu!',
         ], 201);
     }
 

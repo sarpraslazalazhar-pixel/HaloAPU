@@ -549,7 +549,7 @@ export default function AiBotHaloAPUPage({ hasApiKey, quickMetrics, geminiModel 
                                         {/* Sender & Timestamp Header */}
                                         <div className="flex items-center justify-between gap-4 mb-1 text-[11px] opacity-75">
                                             <span className="font-semibold">
-                                                {msg.role === 'user' ? 'Anda (Admin)' : 'HaloAPU AI'}
+                                                {msg.role === 'user' ? 'Kamu (Admin)' : 'HaloAPU AI'}
                                             </span>
                                             <span>{msg.timestamp}</span>
                                         </div>

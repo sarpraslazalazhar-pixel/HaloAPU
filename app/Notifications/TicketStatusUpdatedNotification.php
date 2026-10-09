@@ -56,7 +56,7 @@ class TicketStatusUpdatedNotification extends Notification implements ShouldBroa
             'type' => 'ticket_status_updated',
             'ticket_id' => $this->ticket->id,
             'title' => 'Status Tiket Diubah',
-            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
+            'message' => 'Status tiket kamu berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
             'url' => route('tiket.show', $this->ticket->id),
         ]);
     }
@@ -67,7 +67,7 @@ class TicketStatusUpdatedNotification extends Notification implements ShouldBroa
         return (new \NotificationChannels\WebPush\WebPushMessage)
             ->title('Status Tiket Diubah')
             ->icon('/images/logo.png')
-            ->body('Status tiket Anda berubah menjadi ' . $statusStr . '. Catatan: ' . \Illuminate\Support\Str::limit($this->catatan, 50))
+            ->body('Status tiket kamu berubah menjadi ' . $statusStr . '. Catatan: ' . \Illuminate\Support\Str::limit($this->catatan, 50))
             ->action('Lihat Tiket', route('tiket.show', $this->ticket->id))
             ->data(['url' => route('tiket.show', $this->ticket->id)]);
     }
@@ -79,7 +79,7 @@ class TicketStatusUpdatedNotification extends Notification implements ShouldBroa
             'type' => 'ticket_status_updated',
             'ticket_id' => $this->ticket->id,
             'title' => 'Status Tiket Diubah',
-            'message' => 'Status tiket Anda berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
+            'message' => 'Status tiket kamu berubah menjadi ' . $statusStr . (!empty($this->catatan) ? '. Catatan: ' . $this->catatan : ''),
             'url' => route('tiket.show', $this->ticket->id),
         ];
     }

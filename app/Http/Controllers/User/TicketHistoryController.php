@@ -92,7 +92,7 @@ class TicketHistoryController extends Controller
     {
         // Pastikan tiket milik user yang login
         if ((int)$ticket->user_id !== (int)auth()->id()) {
-            abort(403, 'Anda tidak memiliki akses ke tiket ini.');
+            abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
         }
 
 
@@ -266,7 +266,7 @@ class TicketHistoryController extends Controller
             'catatan' => 'Hasil akhir diterima oleh user.',
         ]);
 
-        return redirect()->back()->with('success', 'Hasil telah Anda terima.');
+        return redirect()->back()->with('success', 'Hasil telah kamu terima.');
     }
 
     public function requestRevision(Request $request, Ticket $ticket)
@@ -286,7 +286,7 @@ class TicketHistoryController extends Controller
         $maxRevisions = (int) SystemConfig::getValue('max_revisions', 5);
 
         if ($ticket->revision_count >= $maxRevisions) {
-            return redirect()->back()->with('error', 'Anda telah mencapai batas maksimal revisi (' . $maxRevisions . ' kali).');
+            return redirect()->back()->with('error', 'Kamu telah mencapai batas maksimal revisi (' . $maxRevisions . ' kali).');
         }
 
         $request->validate([

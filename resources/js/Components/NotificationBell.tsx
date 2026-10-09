@@ -72,7 +72,7 @@ export default function NotificationBell() {
 
               if (latest && !latest.read_at) {
                 const title = latest.data.title || latest.data.judul || 'Notifikasi Baru';
-                const body = latest.data.message || latest.data.pesan || 'Anda memiliki notifikasi baru';
+                const body = latest.data.message || latest.data.pesan || 'Kamu memiliki notifikasi baru';
                 
                 toast.success(title, { id: `poll-notif-${latest.id || Date.now()}` });
 

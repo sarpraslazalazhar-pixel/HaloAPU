@@ -109,7 +109,7 @@ export default function KinerjaOperator({
   const [search, setSearch] = useState(filters?.search || '');
   const [subUnits, setSubUnits] = useState(initialSubUnits || []);
   const [showFilter, setShowFilter] = useState(false);
-
+  const [exporting, setExporting] = useState(false);
   // Modal Review States
   const [selectedOperator, setSelectedOperator] = useState<OperatorStat | null>(null);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
@@ -141,11 +141,8 @@ export default function KinerjaOperator({
     router.get(route('admin.laporan.operator'));
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
-
   const handleExportExcel = () => {
+    setExporting(true);
     const params = new URLSearchParams();
     if (year) params.set('year', year);
     if (month) params.set('month', month);
@@ -154,8 +151,54 @@ export default function KinerjaOperator({
     if (unitId) params.set('unit_id', unitId);
     if (subUnitId) params.set('sub_unit_id', subUnitId);
     if (search) params.set('search', search);
+    const qs = params.toString();
+    const url = `/admin/laporan/kinerja-operator/export` + (qs ? '?' + qs : '');
+    window.location.href = url;
+    setTimeout(() => {
+      setExporting(false);
+    }, 5000);
+  };
 
-    window.location.href = route('admin.laporan.operator.export') + '?' + params.toString();
+  const handleExportPdf = async () => {
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (year) params.set('year', year);
+      if (month) params.set('month', month);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
+      if (unitId) params.set('unit_id', unitId);
+      if (subUnitId) params.set('sub_unit_id', subUnitId);
+      if (search) params.set('search', search);
+      const qs = params.toString();
+      const url = `/admin/laporan/kinerja-operator/export-pdf` + (qs ? '?' + qs : '');
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        const data = await response.json();
+        if (data.error) {
+          alert(data.error);
+        } else {
+          alert('Terjadi kesalahan saat membuat PDF');
+        }
+        setExporting(false);
+        return;
+      }
+
+      const blob = await response.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      link.download = `laporan-kinerja-operator-${new Date().getTime()}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      window.URL.revokeObjectURL(downloadUrl);
+      document.body.removeChild(link);
+    } catch (error) {
+      alert('Gagal mengunduh PDF: ' + (error instanceof Error ? error.message : 'Unknown error'));
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleOpenReviews = async (operator: OperatorStat) => {
@@ -221,11 +264,17 @@ export default function KinerjaOperator({
               <Filter className="w-4 h-4 mr-2" />
               {showFilter ? 'Sembunyikan Filter' : 'Filter Laporan'}
             </Button>
-            <Button variant="outline" onClick={handlePrint}>
-              <Printer className="w-4 h-4 mr-2" /> Cetak / PDF
+            <Button variant="outline" onClick={handleExportPdf} disabled={exporting}>
+              <Printer className="w-4 h-4 mr-2" /> {exporting ? 'Membuat PDF...' : 'Export PDF'}
             </Button>
-            <Button variant="default" onClick={handleExportExcel} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              <Download className="w-4 h-4 mr-2" /> Export CSV / Excel
+            <Button
+              variant="default"
+              onClick={handleExportExcel}
+              disabled={exporting}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-bounce' : ''}`} />{' '}
+              {exporting ? 'Mengunduh...' : 'Export Excel'}
             </Button>
           </div>
         </div>

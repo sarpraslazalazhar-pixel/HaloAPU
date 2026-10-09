@@ -100,7 +100,7 @@ class BookingReminderNotification extends Notification
                 ->line("**Aset:** {$this->booking->nama_aset}")
                 ->line("**Mulai:** {$tglMulai}")
                 ->line("**Selesai:** {$tglSelesai}")
-                ->line("Mohon pastikan persiapan Anda telah selesai.")
+                ->line("Mohon pastikan persiapan kamu telah selesai.")
                 ->action('Lihat Detail', url($notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}"));
         } elseif ($this->stage === 'started') {
             $mail->subject("Jadwal Pemakaian {$tipeLabel} Dimulai — Halo APU")
@@ -145,7 +145,7 @@ class BookingReminderNotification extends Notification
         if ($this->stage === 'h_min_10') {
             $message = "Halo *{$namaAdmin}* 👋\n\n";
             $message .= "🔔 *PENGINGAT 10 MENIT LAGI*\n";
-            $message .= "Jadwal pemakaian *{$tipeLabel}* Anda akan dimulai dalam *10 menit*.\n\n";
+            $message .= "Jadwal pemakaian *{$tipeLabel}* kamu akan dimulai dalam *10 menit*.\n\n";
             $message .= "📌 *Aset:* {$this->booking->nama_aset}\n";
             $message .= "⏱️ *Mulai:* {$tglMulai}\n";
             $message .= "🏁 *Selesai:* {$tglSelesai}\n\n";
@@ -153,7 +153,7 @@ class BookingReminderNotification extends Notification
         } elseif ($this->stage === 'started') {
             $message = "Halo *{$namaAdmin}* 👋\n\n";
             $message .= "▶️ *JADWAL PEMAKAIAN TELAH DIMULAI*\n";
-            $message .= "Jadwal pemakaian *{$tipeLabel}* Anda telah resmi dimulai sekarang.\n\n";
+            $message .= "Jadwal pemakaian *{$tipeLabel}* kamu telah resmi dimulai sekarang.\n\n";
             $message .= "📌 *Aset:* {$this->booking->nama_aset}\n";
             $message .= "⏱️ *Mulai:* {$tglMulai}\n";
             $message .= "🏁 *Selesai:* {$tglSelesai}\n\n";
@@ -161,7 +161,7 @@ class BookingReminderNotification extends Notification
         } elseif ($this->stage === 'h_min_15_ending') {
             $message = "Halo *{$namaAdmin}* 👋\n\n";
             $message .= "⚠️ *PERINGATAN WAKTU HABIS*\n";
-            $message .= "Waktu pemakaian *{$tipeLabel}* Anda tersisa *15 menit lagi*.\n\n";
+            $message .= "Waktu pemakaian *{$tipeLabel}* kamu tersisa *15 menit lagi*.\n\n";
             $message .= "📌 *Aset:* {$this->booking->nama_aset}\n";
             $message .= "🏁 *Batas Waktu Selesai:* {$tglSelesai}\n\n";
             $message .= "❗ *PERHATIAN:* Mohon segera mengosongkan ruangan atau mengembalikan unit kendaraan tepat waktu. Keterlambatan dapat dikenakan *denda* sesuai peraturan yang berlaku.\n\n";

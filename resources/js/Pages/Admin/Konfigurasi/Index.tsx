@@ -208,7 +208,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  }} />
  {configs.notification_sound_path && (
  <audio controls className="mt-2" src={`${typeof route === 'function' && route().has('system.notification-sound') ? route('system.notification-sound') : '/system/notification-sound'}?v=${encodeURIComponent(configs.notification_sound_path)}`}>
- Browser Anda tidak mendukung elemen audio.
+ Browser kamu tidak mendukung elemen audio.
  </audio>
  )}
  </div>

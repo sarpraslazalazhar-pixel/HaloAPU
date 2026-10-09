@@ -29,10 +29,10 @@ class CustomResetPasswordNotification extends Notification
         return (new MailMessage)
             ->subject('Permintaan Reset Password - Halo APU')
             ->greeting('Halo, ' . ($notifiable->username ?? 'Pengguna') . '!')
-            ->line('Anda menerima email ini karena kami menerima permintaan reset password untuk akun Anda di sistem Halo APU.')
+            ->line('Kamu menerima email ini karena kami menerima permintaan reset password untuk akun kamu di sistem Halo APU.')
             ->action('Reset Password', $url)
             ->line('Link reset password ini akan kedaluwarsa dalam 60 menit.')
-            ->line('Jika Anda tidak merasa meminta reset password, Anda dapat mengabaikan email ini dan akun Anda akan tetap aman.')
+            ->line('Jika kamu tidak merasa meminta reset password, kamu dapat mengabaikan email ini dan akun kamu akan tetap aman.')
             ->salutation('Salam hormat, Tim Halo APU');
     }
 }

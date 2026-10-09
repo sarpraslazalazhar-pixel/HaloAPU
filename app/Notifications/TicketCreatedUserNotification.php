@@ -56,7 +56,7 @@ class TicketCreatedUserNotification extends Notification implements ShouldBroadc
             'type' => 'ticket_created',
             'ticket_id' => $this->ticket->id,
             'title' => 'Tiket Baru Berhasil Dibuat',
-            'message' => 'Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
+            'message' => 'Tiket kamu dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
             'url' => route('tiket.show', $this->ticket->id),
         ]);
     }
@@ -66,7 +66,7 @@ class TicketCreatedUserNotification extends Notification implements ShouldBroadc
         return (new \NotificationChannels\WebPush\WebPushMessage)
             ->title('Tiket Baru Berhasil Dibuat')
             ->icon('/images/logo.png')
-            ->body('Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.')
+            ->body('Tiket kamu dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.')
             ->action('Lihat Tiket', route('tiket.show', $this->ticket->id))
             ->data(['url' => route('tiket.show', $this->ticket->id)]);
     }
@@ -77,7 +77,7 @@ class TicketCreatedUserNotification extends Notification implements ShouldBroadc
             'type' => 'ticket_created',
             'ticket_id' => $this->ticket->id,
             'title' => 'Tiket Baru Berhasil Dibuat',
-            'message' => 'Tiket Anda dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
+            'message' => 'Tiket kamu dengan layanan ' . ($this->ticket->subUnit->nama_layanan ?? '-') . ' telah kami terima dan akan segera diproses.',
             'url' => route('tiket.show', $this->ticket->id),
         ];
     }

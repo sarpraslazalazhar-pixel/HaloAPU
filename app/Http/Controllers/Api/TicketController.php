@@ -587,7 +587,7 @@ class TicketController extends Controller
 
         if ($ticket->revision_count >= $maxRevisions) {
             return response()->json([
-                'message' => 'Anda telah mencapai batas maksimal revisi (' . $maxRevisions . ' kali)'
+                'message' => 'Kamu telah mencapai batas maksimal revisi (' . $maxRevisions . ' kali)'
             ], 422);
         }
 
@@ -655,7 +655,7 @@ class TicketController extends Controller
         }
 
         if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin']) && !$user->hasPermissionTo('akses-assign-operator')) {
-            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk menugaskan operator'], 403);
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk menugaskan operator'], 403);
         }
 
         $ticket = Ticket::where('id', str_replace('-', '', $id))
@@ -732,7 +732,7 @@ class TicketController extends Controller
         }
 
         if (!$ticket->isAccessibleBy($user)) {
-            return response()->json(['message' => 'Anda tidak memiliki hak akses untuk mengubah status tiket ini.'], 403);
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk mengubah status tiket ini.'], 403);
         }
         $request->validate([
             'status' => 'required|in:open,on_proses,solve,reject,dibatalkan,pending',

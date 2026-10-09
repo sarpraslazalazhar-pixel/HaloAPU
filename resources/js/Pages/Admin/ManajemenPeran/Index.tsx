@@ -89,7 +89,7 @@ export default function Index({ roles, permissions: _permissions }: Props) {
  
  Swal.fire({
  title: 'Hapus Role?',
- text:`Apakah Anda yakin ingin menghapus role ${role.name}?`,
+ text:`Apakah kamu yakin ingin menghapus role ${role.name}?`,
  icon: 'warning',
  showCancelButton: true,
  confirmButtonColor: '#ef4444',

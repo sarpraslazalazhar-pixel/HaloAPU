@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import MonthlyUnitChart from '@/Components/Charts/MonthlyUnitChart';
 import SubUnitChart from '@/Components/Charts/SubUnitChart';
-import { AlertTriangle, Eye, Clock, Hourglass, Folder, CheckCircle, XCircle, Calendar, Star } from 'lucide-react';
+import { AlertTriangle, Eye, Clock, Hourglass, Folder, CheckCircle, XCircle, Calendar, Star, Plus } from 'lucide-react';
 import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 
@@ -298,6 +298,12 @@ export default function DashboardIndex({
                         <Button onClick={applyFilter} size="sm">
                             Terapkan
                         </Button>
+                        <Link href="/admin/tiket/buat">
+                            <Button size="sm" className="gap-1.5 bg-[#0088cc] hover:bg-[#0077b3] text-white shadow-xs">
+                                <Plus className="h-4 w-4" />
+                                Ajukan Tiket
+                            </Button>
+                        </Link>
                     </div>
                 </div>
             </div>

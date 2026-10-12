@@ -44,6 +44,11 @@ class Admin extends Authenticatable
             'notify_sound' => 'boolean',
         ];
     }
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new \App\Notifications\CustomResetPasswordNotification($token));
+    }
+
 
     protected static function booted()
     {
@@ -54,6 +59,12 @@ class Admin extends Authenticatable
     public function getNameAttribute(): string
     {
         return !empty($this->attributes['name']) ? $this->attributes['name'] : $this->username;
+    }
+
+    public function isCoordinator(): bool
+    {
+        return $this->hasRole(['Koordinator', 'koordinator', 'Pengatur Tim', 'pengatur tim'])
+            || $this->hasPermissionTo('akses-assign-operator');
     }
 
     public function units()

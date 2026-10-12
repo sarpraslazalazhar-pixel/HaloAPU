@@ -167,4 +167,19 @@ class AdminManagementController extends Controller
 
         return back()->with('success', 'Kunci perangkat admin ' . ($admin->name ?? $admin->username) . ' berhasil dibuka / di-reset.');
     }
+    public function sendResetLink(Admin $manajemen_operator)
+    {
+        $admin = $manajemen_operator;
+        if (empty($admin->email)) {
+            return back()->withErrors(['error' => 'Operator tidak memiliki alamat email.']);
+        }
+
+        $status = \Illuminate\Support\Facades\Password::broker('admins')->sendResetLink([
+            'email' => $admin->email,
+        ]);
+
+        return $status === \Illuminate\Support\Facades\Password::RESET_LINK_SENT
+            ? back()->with('success', "Link reset password berhasil dikirim ke {$admin->email}.")
+            : back()->withErrors(['error' => __($status)]);
+    }
 }

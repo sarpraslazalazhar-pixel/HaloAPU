@@ -19,7 +19,21 @@ class CustomResetPasswordNotification extends Notification
 
     public function via($notifiable)
     {
-        return ['mail'];
+        $channels = ['mail'];
+        if (!empty($notifiable->no_wa)) {
+            $channels[] = \App\Channels\WhatsAppChannel::class;
+        }
+        return $channels;
+    }
+
+    public function toWhatsApp($notifiable)
+    {
+        $url = url('/reset-password/' . $this->token . '?email=' . urlencode($notifiable->email));
+        $name = $notifiable->name ?? $notifiable->username ?? 'Pengguna';
+        return [
+            'receiver' => $notifiable->no_wa,
+            'message' => "*Permintaan Reset Password - Halo APU*\n\nHalo, {$name}!\n\nKami menerima permintaan reset password untuk akun kamu.\nSilakan klik tautan berikut untuk membuat password baru:\n{$url}\n\nTautan ini berlaku selama 60 menit.\nAbaikan pesan ini jika kamu tidak merasa meminta reset password.",
+        ];
     }
 
     public function toMail($notifiable)

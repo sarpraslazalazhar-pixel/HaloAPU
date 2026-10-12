@@ -1,4 +1,4 @@
-import { Head, useForm, usePage } from '@inertiajs/react';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import React, { FormEventHandler, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
@@ -171,6 +171,12 @@ export default function AdminLogin() {
                   />
                   <label className="text-xs text-gray-600 font-medium cursor-pointer" htmlFor="remember">Ingat saya</label>
                 </div>
+                <Link 
+                  href="/lupa-password" 
+                  className="text-xs text-[#0088cc] hover:underline font-medium"
+                >
+                  Lupa password?
+                </Link>
               </div>
               
               {/* Submit Button */}

@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Users, Pencil, Trash2, Plus, Search, UserX, Smartphone, Unlock, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Users, Pencil, Trash2, Plus, Search, UserX, Smartphone, Unlock, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -367,6 +367,30 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                               </AlertDialogContent>
                             </AlertDialog>
                           )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="outline" size="icon" className="h-8 w-8 text-blue-600 hover:text-blue-700 hover:bg-blue-50" title="Kirim Link Reset Password">
+                                <KeyRound className="w-3.5 h-3.5" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Kirim Link Reset Password User?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Kirimkan tautan reset password ke email user <strong>"{user.name || user.username}"</strong> ({user.email})?
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Batal</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => router.post(route('admin.manajemen-user.send-reset-link', user.id), {}, { preserveScroll: true })}
+                                  className="bg-blue-600 text-white hover:bg-blue-700"
+                                >
+                                  Kirim Link
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                           <Button variant="outline" size="icon" onClick={() => openEdit(user)} className="h-8 w-8">
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>

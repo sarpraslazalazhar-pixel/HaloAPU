@@ -201,10 +201,12 @@ Route::prefix('admin')->name('admin.')->group(function () {
             // Manajemen Operator
             Route::resource('manajemen-operator', AdminManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-operator');
             Route::post('manajemen-operator/{manajemen_operator}/reset-device', [AdminManagementController::class, 'resetDevice'])->name('manajemen-operator.reset-device');
+            Route::post('manajemen-operator/{manajemen_operator}/send-reset-link', [AdminManagementController::class, 'sendResetLink'])->name('manajemen-operator.send-reset-link');
             
             // Manajemen User
             Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-user');
             Route::post('manajemen-user/{user}/reset-device', [UserManagementController::class, 'resetDevice'])->name('manajemen-user.reset-device');
+            Route::post('manajemen-user/{user}/send-reset-link', [UserManagementController::class, 'sendResetLink'])->name('manajemen-user.send-reset-link');
             
             // Manajemen Peran
             Route::resource('manajemen-peran', \App\Http\Controllers\Admin\RoleManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-peran');
@@ -265,6 +267,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
         // Tiketing Admin
         Route::prefix('tiket')->name('tiket.')->group(function () {
             Route::get('/', [\App\Http\Controllers\Admin\TicketController::class, 'index'])->name('index');
+            Route::get('/buat', [\App\Http\Controllers\Admin\TicketController::class, 'create'])->name('create');
+            Route::post('/', [\App\Http\Controllers\Admin\TicketController::class, 'store'])->name('store');
             Route::get('/download/{attachment}', [\App\Http\Controllers\Admin\TicketController::class, 'downloadAttachment'])->name('download');
             Route::get('/view/{attachment}', [\App\Http\Controllers\Admin\TicketController::class, 'viewAttachment'])->name('view');
             Route::get('/{ticket}', [\App\Http\Controllers\Admin\TicketController::class, 'show'])->name('show');
@@ -272,6 +276,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/status', [\App\Http\Controllers\Admin\TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [\App\Http\Controllers\Admin\TicketController::class, 'updatePriority'])->name('priority');
             Route::patch('/{ticket}/cancel-booking', [\App\Http\Controllers\Admin\TicketController::class, 'cancelBooking'])->name('cancel-booking');
+            Route::patch('/{ticket}/batal', [\App\Http\Controllers\Admin\TicketController::class, 'cancel'])->name('cancel');
             Route::patch('/{ticket}/kembalikan-alat', [\App\Http\Controllers\Admin\TicketController::class, 'kembalikanAlat'])->name('kembalikan-alat');
         });
 

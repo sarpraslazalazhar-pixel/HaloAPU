@@ -133,4 +133,18 @@ class UserManagementController extends Controller
 
         return back()->with('success', 'Kunci perangkat user ' . ($user->name ?? $user->username) . ' berhasil dibuka / di-reset.');
     }
+    public function sendResetLink(User $user)
+    {
+        if (empty($user->email)) {
+            return back()->withErrors(['error' => 'User tidak memiliki alamat email.']);
+        }
+
+        $status = \Illuminate\Support\Facades\Password::broker('users')->sendResetLink([
+            'email' => $user->email,
+        ]);
+
+        return $status === \Illuminate\Support\Facades\Password::RESET_LINK_SENT
+            ? back()->with('success', "Link reset password berhasil dikirim ke {$user->email}.")
+            : back()->withErrors(['error' => __($status)]);
+    }
 }

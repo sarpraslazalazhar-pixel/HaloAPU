@@ -29,8 +29,10 @@ class PermissionSeeder extends Seeder
         $superAdmin = Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'admin']);
         $admin = Role::firstOrCreate(['name' => 'Admin', 'guard_name' => 'admin']);
         $operator = Role::firstOrCreate(['name' => 'Operator', 'guard_name' => 'admin']);
+        $koordinator = Role::firstOrCreate(['name' => 'Koordinator', 'guard_name' => 'admin']);
 
         // Admin gets all permissions by default (or Super Admin via Gate::before if we set it up)
         $admin->syncPermissions($permissions);
+        $koordinator->givePermissionTo('akses-assign-operator');
     }
 }

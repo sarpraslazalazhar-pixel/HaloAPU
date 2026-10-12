@@ -177,8 +177,8 @@ export default function LaporanTiket({
  header: 'Pengaju',
  render: (t: any) => (
  <div>
- <p className="font-medium">{t.user?.username || '-'}</p>
- <p className="text-xs text-slate-500">{t.user?.divisi?.nama_divisi || '-'}</p>
+ <p className="font-medium">{t.user?.name || t.created_by_admin?.name || t.user?.username || t.created_by_admin?.username || '-'}</p>
+ <p className="text-xs text-slate-500">{t.user?.divisi?.nama_divisi || (t.created_by_admin ? 'Internal Admin' : '-')}</p>
  </div>
  ),
  },

@@ -20,6 +20,14 @@ class DashboardController extends Controller
      */
     public function index(Request $request): Response
     {
+        $admin = auth('admin')->user();
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin']);
+        $adminKey = $admin->id;
+        // Batasi query berbasis DB::table / join ke tiket yang boleh diakses admin.
+        $scope = fn ($q) => $isSuperAdmin
+            ? $q
+            : $q->whereIn('tickets.id', Ticket::query()->incomingFor($admin)->select('tickets.id'));
+
         // ── 1. Filter Bulan & Tahun (Nullable untuk mendukung "Semua Bulan" & "Semua Tahun") ──
         $monthInput = $request->input('month');
         $yearInput = $request->input('year');
@@ -28,7 +36,7 @@ class DashboardController extends Controller
         $year = ($yearInput !== null && $yearInput !== '') ? (int) $yearInput : null;
 
         // ── 2. Ringkasan Status Tiket (Mengikuti filter bulan & tahun jika aktif) ──
-        $baseQuery = Ticket::query();
+        $baseQuery = Ticket::query()->incomingFor($admin);
         if ($year) {
             $baseQuery->whereYear('created_at', $year);
         }
@@ -59,6 +67,7 @@ class DashboardController extends Controller
             ->selectRaw('COUNT(tickets.id) as total_tiket')
             ->join('tickets', 'users.id', '=', 'tickets.user_id')
             ->leftJoin('org_divisi', 'users.divisi_id', '=', 'org_divisi.id');
+        $scope($topUsersQuery);
 
         if ($year) {
             $topUsersQuery->whereYear('tickets.created_at', $year);
@@ -80,7 +89,7 @@ class DashboardController extends Controller
             ->toArray();
 
         // ── 4. Tiket Perlu Ditindak Lanjuti (Open & Pending, ikut filter periode dashboard, maks 10) ──
-        $followUpQuery = Ticket::query()
+        $followUpQuery = Ticket::query()->incomingFor($admin)
             ->whereIn('status', ['open', 'pending']);
 
         if ($year) {
@@ -123,7 +132,16 @@ class DashboardController extends Controller
             ->toArray();
 
         // ── 5. Master Unit Aktif & Lookup Nama Unit ──
-        $unitsList = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+        if ($isSuperAdmin) {
+            $unitsList = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+        } else {
+            $unitsList = $admin->isCoordinator() && $admin->units()->exists()
+                ? $admin->units()->where('aktif', true)->orderBy('nama_unit')->get()
+                : Unit::whereIn('id', $admin->subUnits()->pluck('unit_id'))->where('aktif', true)->orderBy('nama_unit')->get();
+            if ($unitsList->isEmpty()) {
+                $unitsList = Unit::where('aktif', true)->orderBy('nama_unit')->get();
+            }
+        }
         $units = $unitsList->map(fn($u) => [
             'id' => (int) $u->id,
             'nama_unit' => (string) $u->nama_unit,
@@ -137,10 +155,11 @@ class DashboardController extends Controller
         // Jika filter tahun tidak dipilih ("Semua Tahun"), fallback ke tahun berjalan (current year)
         // agar grafik bulanan tidak kosong saat dashboard pertama kali dimuat.
         $chartYear = $year ?: (int) date('Y');
-        $monthlyCacheKey = "admin_dashboard_monthly_{$chartYear}";
+        $monthlyCacheKey = "admin_dashboard_monthly_{$chartYear}_{$adminKey}";
 
-        $monthlyChartData = Cache::remember($monthlyCacheKey, 60, function () use ($chartYear, $unitNames) {
-            $monthlyRaw = Ticket::selectRaw('MONTH(created_at) as bulan, unit_id, COUNT(*) as total')
+        $monthlyChartData = Cache::remember($monthlyCacheKey, 60, function () use ($chartYear, $unitNames, $admin) {
+            $monthlyRaw = Ticket::query()->incomingFor($admin)
+                ->selectRaw('MONTH(created_at) as bulan, unit_id, COUNT(*) as total')
                 ->whereYear('created_at', $chartYear)
                 ->groupBy('bulan', 'unit_id')
                 ->get();
@@ -163,8 +182,9 @@ class DashboardController extends Controller
         });
 
         // ── 7. Grafik Tahunan — Cached 60 Detik ──
-        $yearlyChartData = Cache::remember('admin_dashboard_yearly', 60, function () use ($unitNames) {
-            $yearlyRaw = Ticket::selectRaw('YEAR(created_at) as tahun, unit_id, COUNT(*) as total')
+        $yearlyChartData = Cache::remember("admin_dashboard_yearly_{$adminKey}", 60, function () use ($unitNames, $admin) {
+            $yearlyRaw = Ticket::query()->incomingFor($admin)
+                ->selectRaw('YEAR(created_at) as tahun, unit_id, COUNT(*) as total')
                 ->groupBy('tahun', 'unit_id')
                 ->get();
 
@@ -192,7 +212,7 @@ class DashboardController extends Controller
         });
 
         // ── 8. Grafik per Sub Unit (Mengikuti filter bulan & tahun) ──
-        $subUnitQuery = Ticket::selectRaw('tickets.unit_id, tickets.sub_unit_id, sub_units.nama_layanan, COUNT(tickets.id) as total')
+        $subUnitQuery = Ticket::query()->incomingFor($admin)->selectRaw('tickets.unit_id, tickets.sub_unit_id, sub_units.nama_layanan, COUNT(tickets.id) as total')
             ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
             ->whereNotNull('tickets.sub_unit_id');
 
@@ -229,8 +249,8 @@ class DashboardController extends Controller
             ])->values()->toArray();
 
         // ── 9. Top 5 User Sepanjang Waktu (Cached 60s) ──
-        $topUsersAll = Cache::remember('admin_dashboard_top_users_all', 60, function () {
-            return DB::table('tickets')
+        $topUsersAll = Cache::remember("admin_dashboard_top_users_all_{$adminKey}", 60, function () use ($scope) {
+            return $scope(DB::table('tickets'))
                 ->join('users', 'tickets.user_id', '=', 'users.id')
                 ->select('users.username', DB::raw('COUNT(*) as total_tiket'))
                 ->groupBy('users.id', 'users.username')
@@ -245,15 +265,15 @@ class DashboardController extends Controller
         });
 
         // ── 10. Tren CSAT 12 Bulan Terakhir (Cached 60s) ──
-        $csatTrend = Cache::remember('admin_dashboard_csat_trend_12m', 60, function () {
-            return DB::table('csats')
+        $csatTrend = Cache::remember("admin_dashboard_csat_trend_12m_{$adminKey}", 60, function () use ($scope) {
+            return $scope(DB::table('csats')->join('tickets', 'csats.ticket_id', '=', 'tickets.id'))
                 ->select(
-                    DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
+                    DB::raw("DATE_FORMAT(csats.created_at, '%Y-%m') as bulan"),
                     DB::raw('ROUND(AVG(rating), 2) as rata_rata'),
                     DB::raw('COUNT(*) as total')
                 )
-                ->where('created_at', '>=', now()->subYear())
-                ->groupBy(DB::raw("DATE_FORMAT(created_at, '%Y-%m')"))
+                ->where('csats.created_at', '>=', now()->subYear())
+                ->groupBy(DB::raw("DATE_FORMAT(csats.created_at, '%Y-%m')"))
                 ->orderBy('bulan')
                 ->get()
                 ->map(fn($c) => [
@@ -265,8 +285,8 @@ class DashboardController extends Controller
         });
 
         // ── 11. Tiket Bulanan 12 Bulan Terakhir (Cached 60s) ──
-        $tiketBulanan = Cache::remember('admin_dashboard_ticket_monthly_trend_12m', 60, function () {
-            return DB::table('tickets')
+        $tiketBulanan = Cache::remember("admin_dashboard_ticket_monthly_trend_12m_{$adminKey}", 60, function () use ($scope) {
+            return $scope(DB::table('tickets'))
                 ->select(
                     DB::raw("DATE_FORMAT(created_at, '%Y-%m') as bulan"),
                     DB::raw('COUNT(*) as total'),
@@ -288,8 +308,8 @@ class DashboardController extends Controller
 
         // ── 12. Data Kepatuhan SLA & Status SLA Aktif ──
         // A. Status SLA Aktif (Real-time untuk tiket yang saat ini aktif: open, on_proses, pending)
-        $activeBreachQuery = DB::table('ticket_sla_tracking')
-            ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
+        $activeBreachQuery = $scope(DB::table('ticket_sla_tracking')
+            ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id'))
             ->whereIn('tickets.status', ['open', 'on_proses', 'pending'])
             ->selectRaw('
                 SUM(CASE WHEN 
@@ -320,6 +340,7 @@ class DashboardController extends Controller
             ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
             ->join('units', 'sub_units.unit_id', '=', 'units.id')
             ->whereNotIn('tickets.status', ['reject', 'dibatalkan']);
+        $scope($slaQuery);
 
         if ($year) {
             $slaQuery->whereYear('tickets.created_at', $year);
@@ -398,10 +419,10 @@ class DashboardController extends Controller
         ];
 
         // Kepatuhan SLA per Unit (Mengikuti filter Bulan/Tahun & Unit terpilih) — Cached 60s
-        $slaBarCacheKey = 'admin_dashboard_sla_bar_' . md5(($year ?? 'all') . '_' . ($month ?? 'all') . '_' . ($slaUnitId ?? 'all'));
-        $slaBarChartData = Cache::remember($slaBarCacheKey, 60, function () use ($year, $month, $slaUnitId, $respBreachSql, $resBreachSql) {
-            $query = DB::table('ticket_sla_tracking')
-                ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
+        $slaBarCacheKey = 'admin_dashboard_sla_bar_' . md5(($year ?? 'all') . '_' . ($month ?? 'all') . '_' . ($slaUnitId ?? 'all') . "_{$adminKey}");
+        $slaBarChartData = Cache::remember($slaBarCacheKey, 60, function () use ($year, $month, $slaUnitId, $respBreachSql, $resBreachSql, $scope) {
+            $query = $scope(DB::table('ticket_sla_tracking')
+                ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id'))
                 ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
                 ->join('units', 'sub_units.unit_id', '=', 'units.id')
                 ->whereNotIn('tickets.status', ['reject', 'dibatalkan'])
@@ -435,10 +456,10 @@ class DashboardController extends Controller
 
         // Tren Kepatuhan SLA Bulanan (Januari–Desember) — Mengikuti Tahun Terpilih (Cached 60s)
         $slaTrendYear = $year ?: (int) date('Y');
-        $slaTrendCacheKey = "admin_dashboard_sla_trend_{$slaTrendYear}";
-        $slaTrendData = Cache::remember($slaTrendCacheKey, 60, function () use ($slaTrendYear, $respBreachSql, $resBreachSql) {
-            $trendRaw = DB::table('ticket_sla_tracking')
-                ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
+        $slaTrendCacheKey = "admin_dashboard_sla_trend_{$slaTrendYear}_{$adminKey}";
+        $slaTrendData = Cache::remember($slaTrendCacheKey, 60, function () use ($slaTrendYear, $respBreachSql, $resBreachSql, $scope) {
+            $trendRaw = $scope(DB::table('ticket_sla_tracking')
+                ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id'))
                 ->whereYear('tickets.created_at', $slaTrendYear)
                 ->whereNotIn('tickets.status', ['reject', 'dibatalkan'])
                 ->select(
@@ -467,7 +488,7 @@ class DashboardController extends Controller
 
         // ── 13. Grafik Tiket Harian (7 Hari Terakhir) ──
         $startDate = now()->subDays(6)->startOfDay();
-        $dailyRaw = Ticket::selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
+        $dailyRaw = Ticket::query()->incomingFor($admin)->selectRaw('DATE(created_at) as date, unit_id, COUNT(*) as total')
             ->where('created_at', '>=', $startDate)
             ->groupBy('date', 'unit_id')
             ->get();

@@ -7,7 +7,7 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { Eye, Filter, Search, X } from 'lucide-react';
+import { Eye, Filter, Inbox, Plus, Search, Send, X } from 'lucide-react';
 import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
@@ -20,7 +20,8 @@ const STATUS_LIST = [
 
 interface Ticket {
  id: number;
- user: { id: number; username: string; divisi?: { nama_divisi: string } };
+ user?: { id: number; username: string; divisi?: { nama_divisi: string } } | null;
+ created_by_admin?: { id: number; name: string; username: string } | null;
  unit?: { nama_unit: string };
  sub_unit?: { nama_layanan: string };
  assigned_admin?: { id: number; name: string; username: string };
@@ -28,7 +29,12 @@ interface Ticket {
  created_at: string;
 }
 
-export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList }: any) {
+const TABS = [
+ { key: 'masuk', label: 'Tiket Masuk', Icon: Inbox },
+ { key: 'saya_ajukan', label: 'Tiket Saya Ajukan', Icon: Send },
+];
+
+export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts }: any) {
  const [showFilter, setShowFilter] = useState(() => {
  return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
  });
@@ -61,8 +67,12 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  );
  };
 
+ const changeTab = (tab: string) => {
+ router.get(route('admin.tiket.index'), { tab }, {});
+ };
+
  const applyFilter = () => {
- const params: any = {};
+ const params: Record<string, unknown> = { tab: currentTab };
 
  if (unitId) params.unit_id = unitId;
 
@@ -112,8 +122,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  header: 'Pengaju',
  render: (t: Ticket) => (
  <div>
- <p className="font-medium">{t.user?.username || '-'}</p>
- <p className="text-xs text-slate-500">{t.user?.divisi?.nama_divisi || '-'}</p>
+ <p className="font-medium">{t.user?.username || (t.created_by_admin ? `${t.created_by_admin.name || t.created_by_admin.username} (Admin)` : '-')}</p>
+ <p className="text-xs text-slate-500">{t.user?.divisi?.nama_divisi || (t.created_by_admin ? 'Internal Admin' : '-')}</p>
  </div>
  ),
  },
@@ -145,7 +155,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </Button>
  ),
  },
- ];
+ ].filter(c => !(currentTab === 'saya_ajukan' && c.key === 'user'));
 
  return (
  <AdminLayout title="Daftar Tiket">
@@ -163,15 +173,33 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  className="w-full rounded-md border border-input bg-transparent pl-9 pr-8 py-2 text-sm"
  />
  {search && (
- <button onClick={() => { setSearch(''); const p: any = {}; if (unitId) p.unit_id = unitId; if (subUnitId) p.sub_unit_id = subUnitId; if (selectedStatuses.length > 0) p.status = selectedStatuses; if (dateFrom) p.date_from = dateFrom; if (dateTo) p.date_to = dateTo; if (divisiId) p.divisi_id = divisiId; if (orgUnitId) p.org_unit_id = orgUnitId; router.get(route('admin.tiket.index'), p, {}); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+ <button onClick={() => { setSearch(''); const p: Record<string, unknown> = { tab: currentTab }; if (unitId) p.unit_id = unitId; if (subUnitId) p.sub_unit_id = subUnitId; if (selectedStatuses.length > 0) p.status = selectedStatuses; if (dateFrom) p.date_from = dateFrom; if (dateTo) p.date_to = dateTo; if (divisiId) p.divisi_id = divisiId; if (orgUnitId) p.org_unit_id = orgUnitId; router.get(route('admin.tiket.index'), p, {}); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
  <X className="h-4 w-4" />
  </button>
  )}
  </div>
+ <div className="flex items-center gap-2">
  <Button onClick={() => setShowFilter(!showFilter)} variant="outline" className="flex items-center gap-2">
  <Filter className="w-4 h-4" />
  {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
  </Button>
+ <Button onClick={() => router.get(route('admin.tiket.create'))} className="flex items-center gap-2">
+ <Plus className="w-4 h-4" /> Ajukan Tiket
+ </Button>
+ </div>
+ </div>
+
+ <div className="flex gap-2 mb-4 border-b">
+ {TABS.map(({ key, label, Icon }) => (
+ <button
+ key={key}
+ onClick={() => changeTab(key)}
+ className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px ${currentTab === key ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
+ >
+ <Icon className="w-4 h-4" /> {label}
+ <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">{tabCounts?.[key] ?? 0}</span>
+ </button>
+ ))}
  </div>
 
  {showFilter && (

@@ -26,6 +26,7 @@ import {
  ExternalLink,
  UserCheck,
  Activity,
+ PlusCircle,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { Sheet, SheetContent } from '@/Components/ui/sheet';
@@ -86,6 +87,9 @@ function isRouteActive(url: string, routePath?: string): boolean {
   if (!routePath) return false;
   const pathOnly = url.split('?')[0].split('#')[0];
 
+  // /admin/tiket/buat hanya mengaktifkan "Ajukan Tiket", bukan "Tiketing"
+  if (routePath === '/admin/tiket' && pathOnly === '/admin/tiket/buat') return false;
+
   return pathOnly === routePath || pathOnly.startsWith(routePath + '/');
 }
 
@@ -93,6 +97,7 @@ const adminNavItems: NavItem[] = [
   { type: 'link', label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
   { type: 'link', label: 'Pesan', icon: MessageSquare, route: '/admin/chat' },
   { type: 'link', label: 'Tiketing', icon: Ticket, route: '/admin/tiket' },
+  { type: 'link', label: 'Ajukan Tiket', icon: PlusCircle, route: '/admin/tiket/buat' },
   { type: 'link', label: 'Monitor Grid', icon: Grid3X3, route: '/admin/monitor' },
 
   { type: 'header', label: 'MASTER DATA' },

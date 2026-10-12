@@ -77,7 +77,7 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
           <div>
             <h1 className="text-2xl font-bold">Monitor Langsung</h1>
             <p className="text-sm text-muted-foreground">
-              Status aset diperbarui otomatis setiap 10 detik
+              Status diperbarui otomatis setiap 10 detik
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -170,7 +170,7 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
         <div>
           <h1 className="text-2xl font-bold">Live Monitor</h1>
           <p className="text-sm text-muted-foreground">
-            Status aset diperbarui otomatis setiap 10 detik
+            Status diperbarui otomatis setiap 10 detik
           </p>
         </div>
         <div className="flex items-center gap-2">

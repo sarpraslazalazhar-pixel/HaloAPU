@@ -35,6 +35,9 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
   const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelBookingConfirm, setShowCancelBookingConfirm] = useState(false);
+  const [showCancelTicketConfirm, setShowCancelTicketConfirm] = useState(false);
+  const canCancelTicket = ticket.status === 'open'
+    && (auth?.is_super_admin || (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id));
   const [showKembaliModal, setShowKembaliModal] = useState(false);
   const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
   const [catatanKembali, setCatatanKembali] = useState('');
@@ -88,6 +91,13 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
     router.patch(route('admin.tiket.cancel-booking', ticket.id), {}, {
       preserveScroll: true,
       onSuccess: () => setShowCancelBookingConfirm(false),
+    });
+  };
+
+  const handleCancelTicket = () => {
+    router.patch(route('admin.tiket.cancel', ticket.id), {}, {
+      preserveScroll: true,
+      onSuccess: () => setShowCancelTicketConfirm(false),
     });
   };
 
@@ -278,9 +288,9 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
              <Card>
                <CardHeader><CardTitle>Data Pengaju</CardTitle></CardHeader>
                <CardContent className="grid grid-cols-2 gap-4">
-                 <div><span className="text-sm text-slate-500">Nama</span><p className="font-medium">{ticket.user?.username || '-'}</p></div>
-                 <div><span className="text-sm text-slate-500">Email</span><p className="font-medium">{ticket.user?.email || '-'}</p></div>
-                 <div><span className="text-sm text-slate-500">No. WA</span><p className="font-medium">{ticket.user?.no_wa || '-'}</p></div>
+                 <div><span className="text-sm text-slate-500">Nama</span><p className="font-medium">{ticket.user ? (ticket.user.username || '-') : (ticket.created_by_admin ? `${ticket.created_by_admin.name || ticket.created_by_admin.username} (Admin)` : '-')}</p></div>
+                 <div><span className="text-sm text-slate-500">Email</span><p className="font-medium">{(ticket.user ? ticket.user.email : ticket.created_by_admin?.email) || '-'}</p></div>
+                 <div><span className="text-sm text-slate-500">No. WA</span><p className="font-medium">{(ticket.user ? ticket.user.no_wa : ticket.created_by_admin?.no_wa) || '-'}</p></div>
                  <div><span className="text-sm text-slate-500">Divisi</span><p className="font-medium">{ticket.org_divisi?.nama_divisi || '-'}</p></div>
                  <div><span className="text-sm text-slate-500">Unit Organisasi</span><p className="font-medium">{ticket.org_unit?.nama_unit_organisasi || '-'}</p></div>
                  <div><span className="text-sm text-slate-500">Jabatan</span><p className="font-medium">{ticket.jabatan?.nama_jabatan || '-'}</p></div>
@@ -389,6 +399,28 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                 cancelText="Tutup"
                 onConfirm={handleCancelBooking}
               />
+
+              {canCancelTicket && (
+                <>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="w-full flex items-center justify-center gap-1.5"
+                    onClick={() => setShowCancelTicketConfirm(true)}
+                  >
+                    <XCircle className="w-4 h-4" /> Batalkan Tiket
+                  </Button>
+                  <ConfirmDialog
+                    open={showCancelTicketConfirm}
+                    onOpenChange={setShowCancelTicketConfirm}
+                    title="Batalkan Tiket?"
+                    message="Tiket yang dibatalkan tidak dapat diproses lagi oleh tim penangan. Yakin ingin membatalkan?"
+                    confirmText="Ya, Batalkan Tiket"
+                    cancelText="Tutup"
+                    onConfirm={handleCancelTicket}
+                  />
+                </>
+              )}
 
               {ticket.sub_unit?.wajib_kembali && (
                 <>

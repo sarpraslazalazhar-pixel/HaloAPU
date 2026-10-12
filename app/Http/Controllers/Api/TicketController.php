@@ -31,17 +31,7 @@ class TicketController extends Controller
         $query = Ticket::with(['subUnit', 'assignedAdmin', 'user']);
 
         if ($user instanceof \App\Models\Admin) {
-            if ($user->hasRole(['superadmin', 'super_admin', 'Super Admin'])) {
-                // Superadmin sees all tickets
-            } elseif ($user->hasRole('Operator')) {
-                $query->where('assigned_admin_id', $user->id);
-            } else {
-                $query->where(function($q) use ($user) {
-                    $subUnitIds = $user->subUnits()->pluck('sub_units.id')->toArray();
-                    $q->whereIn('sub_unit_id', $subUnitIds)
-                      ->orWhere('assigned_admin_id', $user->id);
-                });
-            }
+            $query->accessibleBy($user);
         } else {
             $query->where('user_id', $user->id);
         }
@@ -654,7 +644,7 @@ class TicketController extends Controller
             return response()->json(['message' => 'Hanya Admin yang dapat menugaskan operator tiket'], 403);
         }
 
-        if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin']) && !$user->hasPermissionTo('akses-assign-operator')) {
+        if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin']) && !$user->isCoordinator()) {
             return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk menugaskan operator'], 403);
         }
 

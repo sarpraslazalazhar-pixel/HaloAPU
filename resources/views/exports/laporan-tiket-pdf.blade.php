@@ -332,8 +332,8 @@
                     <td class="text-center">{{ $loop->iteration }}</td>
                     <td class="text-center text-nowrap">#{{ $ticket->formatted_id }}</td>
                     <td class="text-center text-nowrap">{{ $ticket->created_at->format('d-m-Y H:i') }}</td>
-                    <td>{{ $ticket->user->username ?? '-' }}</td>
-                    <td>{{ $ticket->user->divisi->nama_divisi ?? '-' }}</td>
+                    <td>{{ $ticket->user?->name ?? $ticket->createdByAdmin?->name ?? $ticket->user?->username ?? $ticket->createdByAdmin?->username ?? '-' }}</td>
+                    <td>{{ $ticket->user?->divisi?->nama_divisi ?? ($ticket->createdByAdmin ? 'Internal Admin' : '-') }}</td>
                     <td>{{ $ticket->unit->nama_unit ?? '-' }}</td>
                     <td>{{ $ticket->subUnit->nama_layanan ?? '-' }}</td>
                     <td class="text-center">

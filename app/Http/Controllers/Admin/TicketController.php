@@ -14,25 +14,29 @@ use App\Services\SlaCalculator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use App\Notifications\TicketStatusUpdatedNotification;
+use App\Notifications\TicketCreatedAdminNotification;
+use App\Models\Admin;
+use App\Models\RoomVehicleBooking;
+use App\Models\SubUnit;
+use App\Models\TicketSlaTracking;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Ticket::with(['user.divisi', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin']);
+        $query = Ticket::with(['user.divisi', 'createdByAdmin', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin']);
 
         $admin = auth('admin')->user();
-        if (!$admin->hasRole(['superadmin', 'Super Admin'])) {
-            if ($admin->hasRole('Operator')) {
-                $query->where('assigned_admin_id', $admin->id);
-            } else {
-                $query->where(function($q) use ($admin) {
-                    $subUnitIds = $admin->subUnits()->pluck('sub_units.id')->toArray();
-                    $q->whereIn('sub_unit_id', $subUnitIds)
-                      ->orWhere('assigned_admin_id', $admin->id);
-                });
-            }
+        $tab = $request->input('tab') === 'saya_ajukan' ? 'saya_ajukan' : 'masuk';
+        if ($tab === 'saya_ajukan') {
+            $query->submittedBy($admin);
+        } else {
+            $query->incomingFor($admin);
         }
 
         // Tiket selesai (solve/reject/dibatalkan) tidak tampil di daftar Tiketing utama, melainkan di Laporan Tiket
@@ -47,7 +51,7 @@ class TicketController extends Controller
         if ($request->filled('status')) {
             $statuses = is_array($request->status) ? $request->status : [$request->status];
             $query->whereIn('status', $statuses);
-        } else {
+        } elseif ($tab === 'masuk') {
             $query->whereIn('status', $activeStatuses);
         }
         if ($request->filled('date_from')) {
@@ -77,13 +81,200 @@ class TicketController extends Controller
         $divisiList = OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
         $orgUnitList = OrgUnit::select('id', 'nama_unit_organisasi')->orderBy('nama_unit_organisasi')->get();
 
+        $activeCount = fn ($scope) => Ticket::query()->$scope($admin)->whereIn('status', $activeStatuses)->count();
+
         return Inertia::render('Admin/Tiketing/Index', [
             'tickets' => $tickets,
             'filters' => $request->only(['unit_id', 'sub_unit_id', 'status', 'date_from', 'date_to', 'divisi_id', 'org_unit_id', 'search']),
             'units' => $units,
             'divisiList' => $divisiList,
             'orgUnitList' => $orgUnitList,
+            'currentTab' => $tab,
+            'tabCounts' => [
+                'masuk' => $activeCount('incomingFor'),
+                'saya_ajukan' => $activeCount('submittedBy'),
+            ],
         ]);
+    }
+
+    public function create()
+    {
+        return Inertia::render('Admin/Tiketing/Create', [
+            'unitList' => Unit::aktif()->orderBy('nama_unit')->get(),
+        ]);
+    }
+
+    public function store(Request $request, SlaCalculator $slaCalculator)
+    {
+        if (is_string($request->form_data)) {
+            $request->merge(['form_data' => json_decode($request->form_data, true) ?? []]);
+        }
+
+        $request->validate([
+            'unit_id' => 'required|exists:units,id',
+            'sub_unit_id' => 'required|exists:sub_units,id',
+            'form_data' => 'required|array',
+            'attachments' => 'nullable|array',
+            'attachments.*' => 'nullable|array|max:3',
+            'attachments.*.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'general_attachments' => 'nullable|array|max:3',
+            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+        ]);
+
+        $formFields = FormField::where('sub_unit_id', $request->sub_unit_id)->get();
+        foreach ($formFields as $field) {
+            if (!$field->wajib || $field->isUpload() || $field->tipe_field === 'info_peraturan') continue;
+            if ($field->parent_field_id) {
+                $parentValue = $request->form_data[(string) $field->parent_field_id] ?? null;
+                $normalize = fn(string $s): string => rtrim(strtolower(trim($s)), ': ');
+                $triggerNorm = $normalize((string) $field->trigger_value);
+                $isMatched = is_array($parentValue)
+                    ? collect($parentValue)->contains(fn($v) => $normalize((string) $v) === $triggerNorm)
+                    : $normalize((string) $parentValue) === $triggerNorm;
+                if (!$isMatched) continue;
+            }
+            $fieldKey = (string) $field->id;
+            if (empty($request->form_data[$fieldKey])) {
+                return back()->withErrors([
+                    'form_data.' . $fieldKey => "Field \"{$field->label}\" wajib diisi.",
+                ]);
+            }
+        }
+
+        $admin = auth('admin')->user();
+
+        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $admin) {
+            $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
+
+            $ticket = Ticket::create([
+                'user_id' => null,
+                'created_by_admin_id' => $admin->id,
+                'unit_id' => $request->unit_id,
+                'sub_unit_id' => $request->sub_unit_id,
+                'form_data' => $request->form_data,
+                'status' => $initialStatus,
+            ]);
+
+            $saveFile = function ($file, $fieldId, $wajib) use ($ticket) {
+                if (!$file instanceof \Illuminate\Http\UploadedFile || !$file->isValid()) return;
+                // Bypass getRealPath() bug di Windows: kirim path string
+                $path = Storage::disk('public')->putFileAs(
+                    "ticket-attachments/{$ticket->id}",
+                    $file->getPathname(),
+                    $file->hashName()
+                );
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'field_id' => $fieldId,
+                    'ticket_log_id' => null,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'wajib' => $wajib,
+                ]);
+            };
+
+            foreach ((array) $request->file('attachments') as $fieldId => $files) {
+                if (!is_array($files)) continue;
+                $field = $formFields->firstWhere('id', $fieldId);
+                foreach ($files as $file) {
+                    $saveFile($file, $fieldId, $field ? (bool) $field->wajib : false);
+                }
+            }
+            foreach ((array) $request->file('general_attachments') as $file) {
+                $saveFile($file, null, false);
+            }
+
+            if ($initialStatus === 'pending') {
+                TicketSlaTracking::create([
+                    'ticket_id' => $ticket->id,
+                    'sla_response_deadline' => null,
+                    'sla_resolution_deadline' => null,
+                    'current_tier' => 0,
+                    'paused_at' => now(),
+                ]);
+            } else {
+                TicketSlaTracking::create([
+                    'ticket_id' => $ticket->id,
+                    'sla_response_deadline' => $slaCalculator->calculateResponseDeadline($ticket),
+                    'sla_resolution_deadline' => $slaCalculator->calculateResolutionDeadline($ticket),
+                    'current_tier' => 0,
+                ]);
+            }
+
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => $admin->id,
+                'aksi' => 'dibuat',
+                'catatan' => 'Tiket diajukan oleh admin ' . ($admin->name ?? $admin->username),
+            ]);
+
+            $subUnit = SubUnit::find($request->sub_unit_id);
+            if ($subUnit && $subUnit->is_monitored) {
+                $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
+
+                $dateStr = $subUnit->monitor_date_field_id
+                    ? ($request->form_data[(string) $subUnit->monitor_date_field_id] ?? now()->format('Y-m-d'))
+                    : null;
+                $endDateStr = $subUnit->monitor_end_date_field_id
+                    ? ($request->form_data[(string) $subUnit->monitor_end_date_field_id] ?? $dateStr ?? now()->format('Y-m-d'))
+                    : $dateStr;
+
+                $startFieldVal = $request->form_data[(string) $subUnit->monitor_start_field_id] ?? now();
+                $endFieldVal = $request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
+
+                if ($dateStr) {
+                    $startDT = Carbon::parse($dateStr . ' ' . Carbon::parse($startFieldVal)->format('H:i:s'));
+                    $endDT = Carbon::parse(($endDateStr ?? $dateStr) . ' ' . Carbon::parse($endFieldVal)->format('H:i:s'));
+                } else {
+                    $startDT = Carbon::parse($startFieldVal);
+                    $endDT = Carbon::parse($endFieldVal);
+                }
+
+                $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)
+                    ->whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
+                    ->where('tanggal_mulai', '<', $endDT)
+                    ->where('tanggal_selesai', '>', $startDT)
+                    ->exists();
+
+                if ($bentrok) {
+                    throw ValidationException::withMessages([
+                        'form_data.' . $subUnit->monitor_asset_field_id => 'Aset ini sudah dipesan pada jam tersebut.',
+                    ]);
+                }
+
+                RoomVehicleBooking::create([
+                    'ticket_id' => $ticket->id,
+                    'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
+                    'nama_aset' => $assetName,
+                    'tanggal_mulai' => $startDT,
+                    'tanggal_selesai' => $endDT,
+                    'status' => 'open',
+                ]);
+            }
+
+            return $ticket;
+        });
+
+        try {
+            $ticket->load('subUnit');
+            $recipients = Admin::where('id', '!=', $admin->id)
+                ->where(function ($q) use ($ticket) {
+                    $q->whereHas('units', fn ($u) => $u->where('units.id', $ticket->unit_id))
+                      ->orWhereHas('roles', fn ($r) => $r->whereIn('name', ['Super Admin', 'superadmin']));
+                })
+                ->whereDoesntHave('roles', fn ($r) => $r->where('name', 'Operator'))
+                ->get();
+
+            if ($recipients->isNotEmpty()) {
+                Notification::send($recipients, new TicketCreatedAdminNotification($ticket));
+            }
+        } catch (\Exception $e) {
+            \Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: " . $e->getMessage());
+        }
+
+        return redirect()->route('admin.tiket.index')->with('success', 'Tiket berhasil diajukan!');
     }
 
     public function show(Ticket $ticket)
@@ -94,7 +285,7 @@ class TicketController extends Controller
         }
 
         $ticket->load([
-            'user', 'user.divisi', 'user.orgUnit', 'user.jabatan',
+            'user', 'user.divisi', 'user.orgUnit', 'user.jabatan', 'createdByAdmin',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
             'attachments.field', 'attachments.log', 'attachments.log.admin', 'slaTracking',
             'booking',
@@ -248,13 +439,16 @@ class TicketController extends Controller
             \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());
         }
 
-        // Notifikasi ke Operator (jika ada dan yang merubah bukan dia sendiri)
+        // Notifikasi ke Operator & Pengaju admin (jika bukan yang mengubah)
         try {
-            $ticket->load('assignedAdmin');
+            $ticket->load('assignedAdmin', 'createdByAdmin');
             $currentAdminId = auth('admin')->id();
-            if ($ticket->assignedAdmin && $ticket->assignedAdmin->id !== $currentAdminId) {
-                $pengubahName = auth('admin')->user()->name ?? auth('admin')->user()->username;
-                $ticket->assignedAdmin->notify(new \App\Notifications\TicketStatusUpdatedOperatorNotification($ticket, $request->catatan, $pengubahName));
+            $pengubahName = auth('admin')->user()->name ?? auth('admin')->user()->username;
+            $recipients = collect([$ticket->assignedAdmin, $ticket->createdByAdmin])
+                ->filter(fn ($a) => $a && (int) $a->id !== (int) $currentAdminId)
+                ->unique('id');
+            foreach ($recipients as $recipient) {
+                $recipient->notify(new \App\Notifications\TicketStatusUpdatedOperatorNotification($ticket, $request->catatan, $pengubahName));
             }
         } catch (\Exception $e) {
             \Log::error("Gagal mengirim notifikasi operator tiket #{$ticket->id}: " . $e->getMessage());
@@ -335,7 +529,7 @@ class TicketController extends Controller
     public function assignOperator(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (!$admin->hasRole(['superadmin', 'Super Admin']) && !$admin->hasPermissionTo('akses-assign-operator')) {
+        if (!$admin->hasRole(['superadmin', 'Super Admin']) && !$admin->isCoordinator()) {
             abort(403, 'Kamu tidak memiliki hak akses untuk menugaskan operator.');
         }
 
@@ -365,6 +559,34 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Operator berhasil ditugaskan.');
+    }
+
+    public function cancel(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin']);
+
+        if (!$isSuperAdmin && (int) $ticket->created_by_admin_id !== (int) $admin->id) {
+            abort(403, 'Hanya pengaju tiket yang dapat membatalkan tiket ini.');
+        }
+
+        if ($ticket->status !== 'open') {
+            return redirect()->back()->with('error', 'Tiket hanya dapat dibatalkan saat berstatus open.');
+        }
+
+        DB::transaction(function () use ($ticket, $admin) {
+            $ticket->update(['status' => 'dibatalkan']);
+            $ticket->booking?->update(['status' => 'dibatalkan']);
+
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => $admin->id,
+                'aksi' => 'dibatalkan',
+                'catatan' => 'Tiket dibatalkan oleh pengaju (' . $admin->name . ')',
+            ]);
+        });
+
+        return redirect()->back()->with('success', 'Tiket berhasil dibatalkan.');
     }
 
     public function cancelBooking(Request $request, Ticket $ticket)

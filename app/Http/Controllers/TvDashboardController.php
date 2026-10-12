@@ -44,14 +44,14 @@ class TvDashboardController extends Controller
         });
 
         // Tiket Terbaru (Live Feed)
-        $recentTickets = Ticket::with(['subUnit:id,nama_layanan', 'user:id,name', 'unit:id,nama_unit'])
+        $recentTickets = Ticket::with(['subUnit:id,nama_layanan', 'user:id,name', 'createdByAdmin:id,name', 'unit:id,nama_unit'])
             ->orderBy('created_at', 'desc')
             ->take(15)
             ->get();
 
         // Jadwal Booking Mendatang / Aktif (selesai dalam 1 jam terakhir atau di masa depan)
         $oneHourAgo = Carbon::now()->subHour();
-        $upcomingBookings = RoomVehicleBooking::with(['ticket:id,user_id', 'ticket.user:id,name'])
+        $upcomingBookings = RoomVehicleBooking::with(['ticket:id,user_id,created_by_admin_id', 'ticket.user:id,name', 'ticket.createdByAdmin:id,name'])
             ->where('tanggal_selesai', '>=', $oneHourAgo)
             ->whereIn('status', ['open', 'on_proses'])
             ->orderBy('tanggal_mulai', 'asc')

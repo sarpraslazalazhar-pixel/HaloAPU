@@ -25,7 +25,7 @@ class MonitorController extends Controller
         // Ambil semua booking yang relevan (selesai dalam 1 jam terakhir atau di masa depan)
         $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->where('tanggal_selesai', '>=', $oneHourAgo)
-            ->with(['ticket.user:id,username,name']);
+            ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name']);
 
         if ($tipe) {
             $query->where('tipe', $tipe);
@@ -105,7 +105,7 @@ class MonitorController extends Controller
             })->sortByDesc('tanggal_mulai')->first();
 
             if ($activeBooking) {
-                $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->user?->username ?? '-';
+                $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->createdByAdmin?->name ?? $activeBooking->ticket?->user?->username ?? $activeBooking->ticket?->createdByAdmin?->username ?? '-';
                 $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve']);
                 $statusLabel = $isApproved ? 'Sedang Dipakai' : 'Menunggu Persetujuan';
                 return [
@@ -126,7 +126,7 @@ class MonitorController extends Controller
 
             if ($imminentBooking) {
                 $displayStatus = $imminentBooking->status === 'open' ? 'Menunggu Persetujuan' : 'Dipesan';
-                $userStr = $imminentBooking->ticket?->user?->name ?? $imminentBooking->ticket?->user?->username ?? '-';
+                $userStr = $imminentBooking->ticket?->user?->name ?? $imminentBooking->ticket?->createdByAdmin?->name ?? $imminentBooking->ticket?->user?->username ?? $imminentBooking->ticket?->createdByAdmin?->username ?? '-';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
@@ -144,7 +144,7 @@ class MonitorController extends Controller
             })->sortByDesc('tanggal_selesai')->first();
 
             if ($recentlyFinishedBooking) {
-                $userStr = $recentlyFinishedBooking->ticket?->user?->name ?? $recentlyFinishedBooking->ticket?->user?->username ?? '-';
+                $userStr = $recentlyFinishedBooking->ticket?->user?->name ?? $recentlyFinishedBooking->ticket?->createdByAdmin?->name ?? $recentlyFinishedBooking->ticket?->user?->username ?? $recentlyFinishedBooking->ticket?->createdByAdmin?->username ?? '-';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
@@ -173,7 +173,7 @@ class MonitorController extends Controller
     {
         $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
-            ->with(['ticket.user:id,username'])
+            ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name'])
             ->orderBy('tanggal_mulai')
             ->get()
             ->groupBy(fn ($b) => Carbon::parse($b->tanggal_mulai)->format('Y-m-d'));
@@ -186,7 +186,7 @@ class MonitorController extends Controller
                 'tipe' => $b->tipe,
                 'jam_mulai' => Carbon::parse($b->tanggal_mulai)->format('H:i'),
                 'jam_selesai' => Carbon::parse($b->tanggal_selesai)->format('H:i'),
-                'user' => $b->ticket?->user?->username ?? '-',
+                'user' => $b->ticket?->user?->name ?? $b->ticket?->createdByAdmin?->name ?? $b->ticket?->user?->username ?? $b->ticket?->createdByAdmin?->username ?? '-',
                 'status' => $b->status,
             ]),
         ])->values();
@@ -231,7 +231,7 @@ class MonitorController extends Controller
             $q->whereNull('dikembalikan_at')
               ->orWhere('dikembalikan_at', '>=', $sevenDaysAgo);
         })
-        ->with(['user:id,name,username', 'subUnit:id,nama_layanan', 'subUnit.formFields'])
+        ->with(['user:id,name,username', 'user.divisi:id,nama_divisi', 'createdByAdmin:id,name,username', 'subUnit:id,nama_layanan', 'subUnit.formFields'])
         ->orderByRaw('CASE WHEN dikembalikan_at IS NULL THEN 0 ELSE 1 END ASC')
         ->orderBy('created_at', 'desc')
         ->limit(100)
@@ -264,7 +264,8 @@ class MonitorController extends Controller
 
         // 2. Map data tiket dan update ketersediaan alat
         $peminjaman = $tickets->map(function ($t) use ($now, $masterTools) {
-            $userStr = $t->user?->name ?: ($t->user?->username ?: '-');
+            $userStr = $t->user?->name ?? $t->createdByAdmin?->name ?? $t->user?->username ?? $t->createdByAdmin?->username ?? '-';
+            $divisiStr = $t->user?->divisi?->nama_divisi ?? ($t->createdByAdmin ? 'Internal Admin' : '-');
             $formData = is_array($t->form_data) ? $t->form_data : [];
 
             $fields = $t->subUnit?->formFields ?? collect();

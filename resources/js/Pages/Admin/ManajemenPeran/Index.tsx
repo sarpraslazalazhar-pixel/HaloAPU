@@ -41,7 +41,7 @@ export default function Index({ roles, permissions: _permissions }: Props) {
  { label: 'Konfigurasi (Form, SLA, Reminder, Sistem)', value: 'akses-konfigurasi' },
  { label: 'Laporan (CSAT, Tiket)', value: 'akses-laporan' },
  { label: 'Manajemen Akun (Peran, Operator, Pengguna)', value: 'akses-manajemen-akun' },
- { label: 'Penugasan (Menugaskan Tiket ke Operator)', value: 'akses-assign-operator' },
+ { label: 'Koordinator / Pengatur Tim (Menugaskan Tiket ke Operator)', value: 'akses-assign-operator' },
  ];
 
  const isSuperAdminRole = (name: string) => ['superadmin', 'Super Admin'].includes(name);

@@ -17,20 +17,7 @@ class DashboardApiController extends Controller
         $query = Ticket::query();
 
         if ($user instanceof \App\Models\Admin) {
-            $unitIds = $user->units()->pluck('units.id')->toArray();
-            $subUnitIds = $user->subUnits()->pluck('sub_units.id')->toArray();
-
-            // If not super_admin, filter by assigned units/subunits
-            if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin'])) {
-                $query->where(function ($q) use ($unitIds, $subUnitIds) {
-                    if (!empty($unitIds)) {
-                        $q->orWhereIn('unit_id', $unitIds);
-                    }
-                    if (!empty($subUnitIds)) {
-                        $q->orWhereIn('sub_unit_id', $subUnitIds);
-                    }
-                });
-            }
+            $query->accessibleBy($user);
         } elseif ($user) {
             $query->where('user_id', $user->id);
         }

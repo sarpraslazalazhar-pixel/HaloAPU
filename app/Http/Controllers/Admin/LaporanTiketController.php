@@ -132,7 +132,7 @@ class LaporanTiketController extends Controller
             ->get();
 
         // 5. Paginated Tickets
-        $tickets = (clone $baseQuery)->with(['user.divisi', 'subUnit.unit', 'slaTracking'])
+        $tickets = (clone $baseQuery)->with(['user.divisi', 'createdByAdmin', 'subUnit.unit', 'slaTracking'])
             ->latest('tickets.created_at')
             ->paginate(15)
             ->withQueryString();
@@ -187,7 +187,7 @@ class LaporanTiketController extends Controller
 
         // Get ticket data with eager load
         $tickets = (clone $query)
-            ->with(['user.divisi', 'subUnit.unit', 'slaTracking'])
+            ->with(['user.divisi', 'createdByAdmin', 'subUnit.unit', 'slaTracking'])
             ->latest('tickets.created_at')
             ->get();
 

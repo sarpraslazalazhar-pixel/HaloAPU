@@ -51,10 +51,20 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
         return $this->filterChannels($channels, $notifiable);
     }
 
+    private function pembuat(): string
+    {
+        $t = $this->ticket;
+        if ($t->user) {
+            return $t->user->name ?: $t->user->username;
+        }
+        $a = $t->createdByAdmin;
+        return $a ? ($a->name . ' (Admin)') : 'Admin';
+    }
+
     public function toFcm(object $notifiable): array
     {
         $layanan = $this->ticket->subUnit->nama_layanan ?? 'Umum';
-        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+        $pembuat = $this->pembuat();
 
         return [
             'title' => 'Tiket Baru Masuk #' . $this->ticket->id,
@@ -72,7 +82,7 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
     public function toBroadcast(object $notifiable): BroadcastMessage
     {
         $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
-        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+        $pembuat = $this->pembuat();
 
         return new BroadcastMessage([
             'type' => 'ticket_created',
@@ -86,7 +96,7 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
     public function toWebPush($notifiable, $notification)
     {
         $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
-        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+        $pembuat = $this->pembuat();
         return (new \NotificationChannels\WebPush\WebPushMessage)
             ->title('Tiket Baru Masuk')
             ->icon('/images/logo.png')
@@ -98,7 +108,7 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
     public function toArray(object $notifiable): array
     {
         $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
-        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+        $pembuat = $this->pembuat();
 
         return [
             'type' => 'ticket_created',
@@ -112,7 +122,7 @@ class TicketCreatedAdminNotification extends Notification implements ShouldBroad
     public function toWhatsApp(object $notifiable): array
     {
         $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
-        $pembuat = $this->ticket->user->name ?: $this->ticket->user->username;
+        $pembuat = $this->pembuat();
         $url = url('/admin/tiket/' . $this->ticket->id);
         
         $namaAdmin = $notifiable->name ?? ($notifiable->nama ?? 'Admin');

@@ -52,6 +52,7 @@ class Ticket extends Model
             $query->where(function ($q) use ($search) {
                 $q->where('tickets.id', 'like', "%{$search}%")
                   ->orWhereHas('user', fn ($u) => $u->where('username', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
+                  ->orWhereHas('createdByAdmin', fn ($a) => $a->where('username', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
                   ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"));
             });
         }
@@ -72,7 +73,7 @@ class Ticket extends Model
 
     }
     protected $fillable = [
-        'user_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
+        'user_id', 'created_by_admin_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
         'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id',
         'revision_count', 'waiting_approval_at', 'is_result_accepted', 'dikembalikan_at',
         'kondisi_kembali', 'catatan_kembali'
@@ -110,6 +111,11 @@ class Ticket extends Model
         'is_result_accepted' => 'boolean',
         'dikembalikan_at' => 'datetime',
     ];
+
+    public function createdByAdmin()
+    {
+        return $this->belongsTo(Admin::class, 'created_by_admin_id');
+    }
 
     public function user()
     {
@@ -171,18 +177,94 @@ class Ticket extends Model
         return $this->belongsTo(Admin::class, 'assigned_admin_id');
     }
 
+    /**
+     * Tiket masuk: ditugaskan ke admin, atau masuk ke unit/sub unit admin. Tidak termasuk tiket yang diajukan sendiri.
+     */
+    public function scopeIncomingFor($query, ?Admin $admin = null): void
+    {
+        $admin ??= auth('admin')->user();
+
+        if (!$admin) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        if ($admin->hasRole(['superadmin', 'Super Admin'])) {
+            return;
+        }
+
+        $query->where(fn ($q) => static::applyIncoming($q, $admin));
+    }
+
+    /**
+     * Tiket yang diajukan oleh admin ini.
+     */
+    public function scopeSubmittedBy($query, ?Admin $admin = null): void
+    {
+        $admin ??= auth('admin')->user();
+
+        if (!$admin) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $query->where('tickets.created_by_admin_id', $admin->id);
+    }
+
+    /**
+     * Tiket yang boleh dilihat: masuk tim ATAU diajukan oleh admin ini.
+     */
+    public function scopeAccessibleBy($query, ?Admin $admin = null): void
+    {
+        $admin ??= auth('admin')->user();
+
+        if (!$admin) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        if ($admin->hasRole(['superadmin', 'Super Admin'])) {
+            return;
+        }
+
+        $query->where(function ($q) use ($admin) {
+            $q->where('tickets.created_by_admin_id', $admin->id);
+            $q->orWhere(fn ($inner) => static::applyIncoming($inner, $admin));
+        });
+    }
+
+    private static function applyIncoming($q, Admin $admin): void
+    {
+        $q->where('tickets.assigned_admin_id', $admin->id);
+
+        if ($admin->isCoordinator()) {
+            $unitIds = $admin->units()->pluck('units.id');
+            if ($unitIds->isNotEmpty()) {
+                $q->orWhereIn('tickets.unit_id', $unitIds);
+                return;
+            }
+        }
+
+        // Operator biasa, atau koordinator tanpa unit: fallback ke sub unit miliknya.
+        $q->orWhereIn('tickets.sub_unit_id', $admin->subUnits()->pluck('sub_units.id'));
+    }
+
     public function isAccessibleBy(Admin $admin): bool
     {
         if ($admin->hasRole(['superadmin', 'Super Admin'])) {
             return true;
         }
 
-        if ($admin->hasRole('Operator')) {
-            return (int) $this->assigned_admin_id === (int) $admin->id;
+        if ((int) $this->assigned_admin_id === (int) $admin->id
+            || (int) $this->created_by_admin_id === (int) $admin->id) {
+            return true;
         }
 
-        return (int) $this->assigned_admin_id === (int) $admin->id
-            || $admin->subUnits()->where('sub_units.id', $this->sub_unit_id)->exists();
+        if ($admin->isCoordinator() && $admin->units()->exists()) {
+            return $admin->units()->where('units.id', $this->unit_id)->exists();
+        }
+
+        return $admin->subUnits()->where('sub_units.id', $this->sub_unit_id)->exists();
     }
 }
 

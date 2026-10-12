@@ -24,6 +24,7 @@ class CsatReminderCommand extends Command
         $cutoff = now()->subDays($thresholdDays);
 
         $tickets = Ticket::whereIn('status', ['solve', 'Solve', 'SOLVE', 'selesai', 'Selesai', 'SELESAI'])
+            ->whereNotNull('user_id')
             ->where('updated_at', '<', $cutoff)
             ->whereDoesntHave('csat')  // Belum ada rating
             ->with(['user'])

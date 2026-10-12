@@ -164,7 +164,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  .filter(t => added.has(t.id))
  .forEach(t => {
  toast.success(
-`Tiket baru: ${t.formatted_id} - ${t.user?.name || '-'}`,
+            `Tiket baru: ${t.formatted_id} - ${t.user?.name || t.created_by_admin?.name || '-'}`,
  { id:`tv-ticket-${t.id}`, duration: 4000 }
  );
  });
@@ -387,7 +387,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  </h3>
  <p className="text-slate-500 font-semibold text-lg md:text-xl mb-6 flex items-center gap-3">
  <User className="w-5 h-5 md:w-6 md:h-6 text-slate-400" />
- {booking.ticket?.user?.name || '-'}
+                    {booking.ticket?.user?.name || booking.ticket?.created_by_admin?.name || '-'}
  </p>
  </div>
  <div className="flex items-center gap-3 md:gap-4 text-base md:text-lg font-bold text-slate-500 bg-slate-50/80 p-4 md:p-5 rounded-xl border border-slate-100 justify-center mt-auto flex-wrap">

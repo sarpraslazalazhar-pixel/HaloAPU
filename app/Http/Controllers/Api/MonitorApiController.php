@@ -25,7 +25,7 @@ class MonitorApiController extends Controller
         // 1. Ambil booking relevan (selesai dalam 1 jam terakhir atau di masa depan)
         $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->where('tanggal_selesai', '>=', $oneHourAgo)
-            ->with(['ticket.user:id,username,name']);
+            ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name']);
 
         if ($tipe) {
             $query->where('tipe', $tipe);
@@ -107,7 +107,7 @@ class MonitorApiController extends Controller
             })->sortByDesc('tanggal_mulai')->first();
 
             if ($activeBooking) {
-                $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->user?->username ?? '-';
+                $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->createdByAdmin?->name ?? $activeBooking->ticket?->user?->username ?? $activeBooking->ticket?->createdByAdmin?->username ?? '-';
                 $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve']);
                 $statusLabel = $isApproved ? 'Sedang Dipakai' : 'Menunggu Persetujuan';
                 return [
@@ -128,7 +128,7 @@ class MonitorApiController extends Controller
 
             if ($imminentBooking) {
                 $displayStatus = $imminentBooking->status === 'open' ? 'Menunggu Persetujuan' : 'Dipesan';
-                $userStr = $imminentBooking->ticket?->user?->name ?? $imminentBooking->ticket?->user?->username ?? '-';
+                $userStr = $imminentBooking->ticket?->user?->name ?? $imminentBooking->ticket?->createdByAdmin?->name ?? $imminentBooking->ticket?->user?->username ?? $imminentBooking->ticket?->createdByAdmin?->username ?? '-';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
@@ -146,7 +146,7 @@ class MonitorApiController extends Controller
             })->sortByDesc('tanggal_selesai')->first();
 
             if ($recentlyFinishedBooking) {
-                $userStr = $recentlyFinishedBooking->ticket?->user?->name ?? $recentlyFinishedBooking->ticket?->user?->username ?? '-';
+                $userStr = $recentlyFinishedBooking->ticket?->user?->name ?? $recentlyFinishedBooking->ticket?->createdByAdmin?->name ?? $recentlyFinishedBooking->ticket?->user?->username ?? $recentlyFinishedBooking->ticket?->createdByAdmin?->username ?? '-';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
@@ -186,7 +186,7 @@ class MonitorApiController extends Controller
         $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->where('tanggal_mulai', '<=', $endDate)
-            ->with(['ticket.user:id,username,name'])
+            ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name'])
             ->orderBy('tanggal_mulai', 'asc')
             ->get();
 
@@ -209,7 +209,7 @@ class MonitorApiController extends Controller
             return [
                 'date' => $date,
                 'bookings' => $items->map(function ($b) use ($formatWaktu) {
-                    $userStr = $b->ticket?->user?->name ?? $b->ticket?->user?->username ?? '-';
+                    $userStr = $b->ticket?->user?->name ?? $b->ticket?->createdByAdmin?->name ?? $b->ticket?->user?->username ?? $b->ticket?->createdByAdmin?->username ?? '-';
                     return [
                         'id' => $b->id,
                         'nama_aset' => $b->nama_aset,

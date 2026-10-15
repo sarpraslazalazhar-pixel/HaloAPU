@@ -11,6 +11,7 @@ import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
+import { TicketChatBox } from '@/Components/TicketChatBox';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import Swal from 'sweetalert2';
@@ -68,12 +69,6 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
   const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
   const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
   const { data: assignData, setData: setAssignData, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
-  const { data: replyData, setData: setReplyData, post: postReply, processing: processingReply, errors: errorsReply, reset: resetReply } = useForm({
-    catatan: '',
-    general_attachments: [] as File[],
-    _method: 'post',
-  });
-
   // SAFETY: Look up ticket transitions by status using keyof; fallback to empty array if unknown.
   const transitions = (ticket?.status ? validTransitions[ticket.status as keyof typeof validTransitions] : undefined) || [];
 
@@ -272,21 +267,37 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
 
      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
        <div className="lg:col-span-2 space-y-6">
-         <Tabs defaultValue="informasi" className="w-full space-y-6">
-           <TabsList className="grid grid-cols-3 w-full max-w-md bg-zinc-100 p-1 rounded-xl mb-6">
-             <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg">
-               <Info className="h-3.5 w-3.5" />
-               <span>Informasi</span>
-             </TabsTrigger>
-             <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg">
-               <Clock className="h-3.5 w-3.5" />
-               <span>Jejak Tiket</span>
-             </TabsTrigger>
-             <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg">
-               <Paperclip className="h-3.5 w-3.5" />
-               <span>Lampiran</span>
-             </TabsTrigger>
-           </TabsList>
+        <Tabs defaultValue="chat" className="w-full space-y-6">
+          <TabsList className="grid grid-cols-4 w-full max-w-xl bg-zinc-100 p-1 rounded-xl mb-6">
+            <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
+              <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
+              <span>Chat Tiket</span>
+            </TabsTrigger>
+            <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
+              <Info className="h-3.5 w-3.5" />
+              <span>Informasi</span>
+            </TabsTrigger>
+            <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
+              <Clock className="h-3.5 w-3.5" />
+              <span>Jejak Status</span>
+            </TabsTrigger>
+            <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
+              <Paperclip className="h-3.5 w-3.5" />
+              <span>Lampiran</span>
+            </TabsTrigger>
+          </TabsList>
+
+          {/* TAB 0: CHAT & DISKUSI INTERAKTIF */}
+          <TabsContent value="chat" className="space-y-6 mt-0">
+            <TicketChatBox
+              ticket={ticket}
+              isAdmin={true}
+              replyRoute="admin.tiket.reply"
+              downloadRoute="admin.tiket.download"
+              canReply={['solve', 'reject', 'dibatalkan'].indexOf(ticket.status) === -1}
+              chatUrl={`/admin/chat?user_id=${ticket.user_id}&ticket_id=${ticket.id}`}
+            />
+          </TabsContent>
 
            {/* TAB 1: INFORMASI */}
            <TabsContent value="informasi" className="space-y-6 mt-0">
@@ -332,123 +343,6 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                </CardContent>
             </Card>
 
-            {/* Form Balasan Admin */}
-            <div className="flex items-center justify-between p-3 bg-sky-50 border border-sky-200 rounded-xl">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="w-4 h-4 text-sky-600 shrink-0" />
-                <span className="text-xs font-medium text-sky-900">
-                  Ingin diskusi langsung secara real-time dengan pengguna?
-                </span>
-              </div>
-              <a
-                href={`/admin/chat?user_id=${ticket.user_id}&ticket_id=${ticket.id}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold shadow-xs transition-colors shrink-0"
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                Buka Menu Chat Web
-              </a>
-            </div>
-
-            {['solve', 'reject', 'dibatalkan'].indexOf(ticket.status) === -1 && (
-              <Card className="border-sky-200 bg-sky-50/20">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base flex items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      <MessageSquare className="w-4 h-4 text-sky-600" />
-                      Balas Pesan / Diskusi Tiket
-                    </span>
-                    <span className="text-xs text-slate-500 font-normal">
-                      Tersinkron otomatis ke Mobile & Web Chat
-                    </span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      postReply(route('admin.tiket.reply', ticket.id), {
-                        onSuccess: () => resetReply(),
-                      });
-                    }}
-                    className="space-y-4"
-                  >
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Catatan / Pesan Balasan <span className="text-red-500">*</span></label>
-                      <textarea
-                        className="w-full rounded-md border border-input bg-white px-3 py-2 text-sm min-h-[90px] focus:outline-none focus:ring-1 focus:ring-sky-500"
-                        value={replyData.catatan}
-                        onChange={(e) => setReplyData('catatan', e.target.value)}
-                        placeholder="Tulis balasan pesan ke pengguna di sini (akan langsung masuk ke timeline tiket & tab chat mobile pengguna)..."
-                        required
-                      />
-                      {errorsReply.catatan && <p className="text-red-500 text-xs">{errorsReply.catatan}</p>}
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
-                      <div className="flex items-center gap-3">
-                        <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white text-slate-700 hover:bg-slate-100 text-xs font-medium cursor-pointer transition-colors border border-slate-200">
-                          <Paperclip className="w-3.5 h-3.5 text-slate-500" />
-                          <span>Pilih Berkas (Maks. 3)</span>
-                          <input
-                            type="file"
-                            multiple
-                            accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
-                            className="hidden"
-                            onChange={(e) => {
-                              const files = Array.from(e.target.files || []);
-                              if (replyData.general_attachments.length + files.length > 3) {
-                                alert('Maksimal hanya 3 lampiran.');
-                                return;
-                              }
-                              const validFiles = files.filter((f) => {
-                                if (f.size > 3 * 1024 * 1024) {
-                                  alert(`${f.name} melebihi 3MB.`);
-                                  return false;
-                                }
-                                return true;
-                              });
-                              setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
-                              e.target.value = '';
-                            }}
-                          />
-                        </label>
-                        <span className="text-xs text-slate-500">
-                          {replyData.general_attachments.length > 0
-                            ? `${replyData.general_attachments.length} berkas dipilih`
-                            : 'Belum ada berkas'}
-                        </span>
-                      </div>
-
-                      {replyData.general_attachments.length > 0 && (
-                        <div className="mt-2 space-y-1.5">
-                          {replyData.general_attachments.map((file, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-xs p-2 bg-white border rounded">
-                              <span className="truncate max-w-[220px]">{file.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => setReplyData('general_attachments', replyData.general_attachments.filter((_, i) => i !== idx))}
-                                className="text-red-500 hover:underline text-xs"
-                              >
-                                Hapus
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <Button
-                      type="submit"
-                      className="bg-sky-600 hover:bg-sky-700 text-white text-xs h-9 px-4 font-semibold"
-                      disabled={processingReply || !replyData.catatan.trim()}
-                    >
-                      {processingReply ? 'Mengirim...' : 'Kirim Balasan'}
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            )}
           </TabsContent>
 
            {/* TAB 3: LAMPIRAN */}

@@ -8,7 +8,8 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { XCircle, Eye, CheckCircle2, Edit2, Clock, Paperclip, Info } from 'lucide-react';
+import { XCircle, Eye, CheckCircle2, Edit2, Clock, Paperclip, Info, MessageSquare } from 'lucide-react';
+import { TicketChatBox } from '@/Components/TicketChatBox';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
@@ -452,22 +453,37 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
        </Dialog>
 
        {/* Tabs Navigation for Ticket Details */}
-       <Tabs defaultValue="informasi" className="w-full space-y-6">
+       <Tabs defaultValue="chat" className="w-full space-y-6">
          <TabsList className="grid grid-cols-4 w-full max-w-lg bg-zinc-100 p-1 rounded-xl">
-           <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg">
+           <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
+             <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
+             <span>Chat Tiket</span>
+           </TabsTrigger>
+           <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Info className="h-3.5 w-3.5" />
              <span>Informasi</span>
            </TabsTrigger>
-           <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg">
+           <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Clock className="h-3.5 w-3.5" />
              <span>Jejak Tiket</span>
            </TabsTrigger>
-           <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg">
+           <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Paperclip className="h-3.5 w-3.5" />
              <span>Lampiran</span>
            </TabsTrigger>
-
          </TabsList>
+
+         {/* TAB 0: CHAT & DISKUSI */}
+         <TabsContent value="chat" className="space-y-6">
+           <TicketChatBox
+             ticket={ticket}
+             isAdmin={false}
+             replyRoute="tiket.reply"
+             downloadRoute="tiket.download"
+             canReply={['solve', 'reject', 'dibatalkan', 'waiting_approval'].indexOf(ticket.status) === -1}
+             chatUrl="/chat"
+           />
+         </TabsContent>
 
          {/* TAB 1: INFORMASI */}
          <TabsContent value="informasi" className="space-y-6">

@@ -202,6 +202,7 @@ class TicketHistoryController extends Controller
             'admin_id' => null,
             'aksi' => 'balasan',
             'catatan' => $request->catatan,
+            'timestamp' => now(),
         ]);
 
         $generalFiles = $request->file('general_attachments');
@@ -227,6 +228,8 @@ class TicketHistoryController extends Controller
                 ]);
             }
         }
+        $log->load('attachments');
+        \App\Services\TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
 
         $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit->unit_id);

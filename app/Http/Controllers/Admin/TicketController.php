@@ -693,4 +693,71 @@ class TicketController extends Controller
 
         return redirect()->back()->with('success', 'Alat berhasil ditandai sudah dikembalikan.');
     }
+
+    public function reply(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (!$ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak membalas tiket ini.');
+        }
+
+        if (in_array($ticket->status, ['solve', 'reject', 'dibatalkan'])) {
+            return redirect()->back()->with('error', 'Tidak dapat membalas tiket yang sudah selesai atau dibatalkan.');
+        }
+
+        $request->validate([
+            'catatan' => 'required|string|max:1000',
+            'general_attachments' => 'nullable|array|max:3',
+            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+        ]);
+
+        $log = TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $admin->id,
+            'aksi' => 'balasan',
+            'catatan' => $request->catatan,
+            'timestamp' => now(),
+        ]);
+
+        $generalFiles = $request->file('general_attachments');
+        if (!empty($generalFiles) && is_array($generalFiles)) {
+            foreach ($generalFiles as $file) {
+                if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+
+                $path = Storage::disk('public')->putFileAs(
+                    "ticket-attachments/{$ticket->id}",
+                    $file->getPathname(),
+                    $file->hashName()
+                );
+
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'field_id' => null,
+                    'ticket_log_id' => $log->id,
+                    'file_path' => $path,
+                    'original_name' => $file->getClientOriginalName(),
+                    'mime_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                    'wajib' => false,
+                ]);
+            }
+        }
+
+        $log->load('attachments');
+        \App\Services\TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+
+        try {
+            if ($ticket->user) {
+                $ticket->user->notify(new \App\Notifications\BrowserNotification(
+                    "Balasan Baru Tiket #{$ticket->formatted_id}",
+                    "Admin " . ($admin->name ?? $admin->username) . " membalas tiket Anda: " . \Illuminate\Support\Str::limit($request->catatan, 80),
+                    "/tiket/{$ticket->id}"
+                ));
+            }
+        } catch (\Throwable $e) {
+            \Log::error("Gagal kirim notif balasan admin: " . $e->getMessage());
+        }
+
+        return redirect()->back()->with('success', 'Balasan berhasil dikirim.');
+    }
 }

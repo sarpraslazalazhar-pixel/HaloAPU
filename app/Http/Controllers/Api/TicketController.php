@@ -460,9 +460,21 @@ class TicketController extends Controller
             }
         }
 
-        // Notify admins
-        $this->notifyAdminsReply($ticket, $user, $request->catatan);
+        $log->load('attachments');
+        \App\Services\TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
 
+        // Notify admins / user
+        if (!$isAdmin) {
+            $this->notifyAdminsReply($ticket, $user, $request->catatan);
+        } else {
+            try {
+                $ticket->user?->notify(new \App\Notifications\BrowserNotification(
+                    "Balasan Tiket #{$ticket->formatted_id}",
+                    "Admin " . ($user->name ?? $user->username) . " membalas tiket Anda",
+                    "/tiket/{$ticket->id}"
+                ));
+            } catch (\Throwable $e) {}
+        }
         return response()->json([
             'data' => [
                 'id' => $log->id,

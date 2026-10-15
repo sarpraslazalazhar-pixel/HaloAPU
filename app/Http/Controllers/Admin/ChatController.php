@@ -125,6 +125,21 @@ class ChatController extends Controller
 
         $activeConversationId = $request->query('active');
 
+        if (!$activeConversationId && $request->filled('user_id')) {
+            $targetUserId = (int) $request->input('user_id');
+            $userConv = Conversation::firstOrCreate([
+                'type' => 'user_admin_direct',
+                'user_id' => $targetUserId,
+                'admin_one_id' => $admin->id,
+            ], [
+                'last_message_at' => now(),
+            ]);
+            $activeConversationId = $userConv->id;
+            if (!$rawConversations->contains('id', $userConv->id)) {
+                $rawConversations->prepend($userConv->load(['user', 'adminOne', 'adminTwo', 'latestMessage.sender', 'latestMessage.attachments']));
+            }
+        }
+
         if (!$activeConversationId && $rawConversations->isNotEmpty()) {
             $supportItem = $rawConversations->where('type', 'public_global')->first();
             $activeConversationId = $supportItem ? $supportItem->id : $rawConversations->first()->id;
@@ -387,11 +402,19 @@ class ChatController extends Controller
             return response()->json(['error' => 'Pesan tidak boleh kosong.'], 422);
         }
 
+        $ticketId = $request->ticket_id;
+        if (!$ticketId && $request->filled('reply_to_message_id')) {
+            $parent = Message::find($request->reply_to_message_id);
+            if ($parent && $parent->ticket_id) {
+                $ticketId = $parent->ticket_id;
+            }
+        }
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'sender_type' => Admin::class,
             'sender_id' => $admin->id,
-            'ticket_id' => $request->ticket_id,
+            'ticket_id' => $ticketId,
             'reply_to_message_id' => $request->reply_to_message_id,
             'body' => $request->body,
         ]);
@@ -419,6 +442,9 @@ class ChatController extends Controller
         $conversation->update(['last_message_at' => now()]);
 
         broadcast(new ChatMessageSent($message))->toOthers();
+
+        // Bridge to Ticket Timeline (Mobile & Web)
+        \App\Services\TicketChatBridgeService::syncChatMessageToTicket($message->load('attachments'));
 
         return response()->json(['success' => true, 'message' => $message->load(['sender', 'attachments', 'ticket', 'replyTo'])]);
     }

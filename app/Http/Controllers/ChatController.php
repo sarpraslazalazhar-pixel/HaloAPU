@@ -305,11 +305,19 @@ class ChatController extends Controller
             return response()->json(['error' => 'Pesan tidak boleh kosong.'], 422);
         }
 
+        $ticketId = $request->ticket_id;
+        if (!$ticketId && $request->filled('reply_to_message_id')) {
+            $parent = Message::find($request->reply_to_message_id);
+            if ($parent && $parent->ticket_id) {
+                $ticketId = $parent->ticket_id;
+            }
+        }
+
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'sender_type' => User::class,
             'sender_id' => $user->id,
-            'ticket_id' => $request->ticket_id,
+            'ticket_id' => $ticketId,
             'reply_to_message_id' => $request->reply_to_message_id,
             'body' => $request->body,
         ]);
@@ -337,6 +345,9 @@ class ChatController extends Controller
         $conversation->update(['last_message_at' => now()]);
 
         broadcast(new ChatMessageSent($message))->toOthers();
+
+        // Bridge to Ticket Timeline (Mobile & Web)
+        \App\Services\TicketChatBridgeService::syncChatMessageToTicket($message->load('attachments'));
 
         return response()->json(['success' => true, 'message' => $message->load(['sender', 'attachments', 'ticket', 'replyTo'])]);
     }

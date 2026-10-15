@@ -10,6 +10,11 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password;
 use App\Models\User;
 use App\Models\Admin;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Password as PasswordBroker;
+use App\Models\SystemConfig;
 
 class AuthController extends Controller
 {
@@ -216,8 +221,9 @@ class AuthController extends Controller
         $prefix = $isAdmin ? 'admin_' : 'user_';
 
         // Delete old avatar
-        if ($user->avatar_path && Storage::disk('public')->exists($user->avatar_path)) {
-            Storage::disk('public')->delete($user->avatar_path);
+        $oldPath = $user->avatar_path ?? ($user->avatar ?? null);
+        if ($oldPath && Storage::disk('public')->exists($oldPath)) {
+            Storage::disk('public')->delete($oldPath);
         }
 
         $file = $request->file('avatar');
@@ -227,7 +233,11 @@ class AuthController extends Controller
         Storage::disk('public')->makeDirectory('avatars');
         Storage::disk('public')->put('avatars/' . $filename, file_get_contents($file->getPathname()));
 
-        $user->avatar_path = 'avatars/' . $filename;
+        $avatarPath = 'avatars/' . $filename;
+        $user->avatar_path = $avatarPath;
+        if (\Illuminate\Support\Facades\Schema::hasColumn($user->getTable(), 'avatar')) {
+            $user->avatar = $avatarPath;
+        }
         $user->save();
 
         if (!$isAdmin) {
@@ -307,9 +317,10 @@ class AuthController extends Controller
      */
     private function formatUserProfile(User $user): array
     {
+        $path = $user->avatar_path ?? ($user->avatar ?? null);
         $avatarUrl = null;
-        if ($user->avatar_path) {
-            $avatarUrl = url('api/attachments/serve?path=' . $user->avatar_path);
+        if ($path) {
+            $avatarUrl = url('api/attachments/serve?path=' . $path);
         }
 
         return [
@@ -322,14 +333,18 @@ class AuthController extends Controller
             'division' => $user->divisi ? $user->divisi->nama_divisi : '',
             'position' => $user->jabatan ? $user->jabatan->nama_jabatan : '',
             'avatarUrl' => $avatarUrl ?? '',
+            'avatar_url' => $avatarUrl ?? '',
+            'avatar' => $avatarUrl ?? '',
+            'avatar_path' => $path,
         ];
     }
 
     private function formatAdminProfile(Admin $admin): array
     {
+        $path = $admin->avatar_path ?? ($admin->avatar ?? null);
         $avatarUrl = null;
-        if ($admin->avatar_path) {
-            $avatarUrl = url('api/attachments/serve?path=' . $admin->avatar_path);
+        if ($path) {
+            $avatarUrl = url('api/attachments/serve?path=' . $path);
         }
 
         $roleName = $admin->getRoleNames()->first() ?? 'Admin';
@@ -360,6 +375,9 @@ class AuthController extends Controller
             'isSuperAdmin' => (bool) $isSuperAdmin,
             'canAssignOperator' => (bool) $canAssignOperator,
             'avatarUrl' => $avatarUrl ?? '',
+            'avatar_url' => $avatarUrl ?? '',
+            'avatar' => $avatarUrl ?? '',
+            'avatar_path' => $path,
         ];
     }
 
@@ -494,6 +512,132 @@ class AuthController extends Controller
             'message' => $enabled 
                 ? 'Pembatasan 1 Akun 1 HP berhasil diaktifkan.' 
                 : 'Pembatasan 1 Akun 1 HP berhasil dinonaktifkan.',
+        ], 200);
+    }
+
+    /**
+     * Send password reset link to user or admin email.
+     */
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $email = $request->input('email');
+        $isUser = User::where('email', $email)->exists();
+        $isAdmin = Admin::where('email', $email)->exists();
+
+        if (!$isUser && !$isAdmin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Email tidak terdaftar dalam sistem',
+            ], 404);
+        }
+
+        // ponytail: fallback broker user/admin sekuensial; pisah endpoint jika flow registrasi/guard terpisah penuh.
+        $broker = $isUser ? 'users' : 'admins';
+        $status = PasswordBroker::broker($broker)->sendResetLink($request->only('email'));
+
+        if ($status === PasswordBroker::RESET_LINK_SENT) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Tautan reset password telah dikirim ke email Anda.',
+            ], 200);
+        }
+
+        return response()->json([
+            'success' => false,
+            'message' => 'Gagal mengirim email reset password.',
+        ], 422);
+    }
+
+    /**
+     * Send contact/support message to admin.
+     */
+    public function contactAdmin(Request $request)
+    {
+        $validated = $request->validate([
+            'message' => 'required|string|max:3000',
+            'subject' => 'nullable|string|max:200',
+            'email' => 'nullable|email',
+            'name' => 'nullable|string|max:100',
+        ]);
+
+        $authUser = $request->user('sanctum');
+        $senderName = $authUser ? ($authUser->name ?? $authUser->username) : (!empty($validated['name']) ? $validated['name'] : 'Pengguna');
+        $senderEmail = $authUser ? $authUser->email : (!empty($validated['email']) ? $validated['email'] : '-');
+        $subject = !empty($validated['subject']) ? $validated['subject'] : 'Pesan Bantuan';
+        $message = $validated['message'];
+
+        Log::info("Hubungi Admin dari {$senderName} ({$senderEmail}): [{$subject}] {$message}");
+
+        // ponytail: notifikasi synchronous via Mail::raw dan DB notification; ganti Mailable/Queue jika traffic bantuan melonjak.
+        try {
+            $adminEmail = SystemConfig::getValue('email_admin', 'sarpras@alazharpeduli.or.id');
+            if ($adminEmail) {
+                $emailBody = "Halo Tim Admin / Sarpras,\n\n"
+                    . "Terdapat pesan bantuan baru yang masuk melalui aplikasi Halo APU Mobile:\n\n"
+                    . "--------------------------------------------------\n"
+                    . "Pengirim : {$senderName}\n"
+                    . "Email    : {$senderEmail}\n"
+                    . "Subjek   : {$subject}\n"
+                    . "Waktu    : " . now()->format('d/m/Y H:i:s') . "\n"
+                    . "--------------------------------------------------\n\n"
+                    . "Pesan:\n"
+                    . "{$message}\n\n"
+                    . "--------------------------------------------------\n"
+                    . "Pesan ini dikirim otomatis oleh sistem Halo APU.";
+
+                $mailSubject = "[Halo APU] Pesan Bantuan: " . ($subject ?: 'Bantuan Mobile');
+
+                Mail::raw($emailBody, function ($mail) use ($adminEmail, $mailSubject, $senderEmail, $senderName) {
+                    $mail->to($adminEmail)
+                        ->subject($mailSubject);
+                    if ($senderEmail && filter_var($senderEmail, FILTER_VALIDATE_EMAIL)) {
+                        $mail->replyTo($senderEmail, $senderName);
+                    }
+                });
+            }
+
+            $admins = Admin::all();
+            if ($admins->isNotEmpty()) {
+                $notif = new class($senderName, $senderEmail, $subject, $message) extends \Illuminate\Notifications\Notification {
+                    public function __construct(
+                        public string $senderName,
+                        public string $senderEmail,
+                        public ?string $subject,
+                        public string $message
+                    ) {}
+
+                    public function via($notifiable): array
+                    {
+                        return ['database'];
+                    }
+
+                    public function toArray($notifiable): array
+                    {
+                        return [
+                            'type' => 'contact_admin',
+                            'title' => 'Pesan Bantuan: ' . ($this->subject ?: 'Bantuan'),
+                            'message' => "Dari {$this->senderName} ({$this->senderEmail}): " . \Illuminate\Support\Str::limit($this->message, 120),
+                            'sender_name' => $this->senderName,
+                            'sender_email' => $this->senderEmail,
+                            'subject' => $this->subject,
+                            'body' => $this->message,
+                        ];
+                    }
+                };
+
+                Notification::send($admins, $notif);
+            }
+        } catch (\Throwable $e) {
+            Log::warning("Gagal mengirim notifikasi/email contactAdmin: " . $e->getMessage());
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Pesan Anda telah berhasil dikirim ke Admin.',
         ], 200);
     }
 }

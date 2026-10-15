@@ -19,7 +19,7 @@ class SystemConfigController extends Controller
             'favicon_path' => SystemConfig::getValue('favicon_path'),
             'banner_path' => SystemConfig::getValue('banner_path'),
             'notification_sound_path' => SystemConfig::getValue('notification_sound_path'),
-            'email_admin' => SystemConfig::getValue('email_admin'),
+            'email_admin' => SystemConfig::getValue('email_admin', 'sarpras@alazharpeduli.or.id'),
             'wa_api_key' => SystemConfig::getValue('wa_api_key'),
             'wa_number_key' => SystemConfig::getValue('wa_number_key'),
             'wa_gateway_url' => SystemConfig::getValue('wa_gateway_url'),

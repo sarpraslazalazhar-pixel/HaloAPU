@@ -145,11 +145,11 @@ export default function KonfigurasiIndex({ configs }: any) {
  onCheckedChange={(checked) => setData('wa_notification_enabled', checked)}
  />
  </div>
- <div>
- <Label htmlFor="email_admin">Email Admin</Label>
- <Input id="email_admin" type="email" value={data.email_admin} onChange={(e) => setData('email_admin', e.target.value)} />
- {errors.email_admin && <div className="text-destructive text-xs mt-1">{errors.email_admin}</div>}
- </div>
+                <div>
+                  <Label htmlFor="email_admin">Email Penerima Pesan Bantuan / Admin</Label>
+                  <Input id="email_admin" type="email" placeholder="sarpras@alazharpeduli.or.id" value={data.email_admin} onChange={(e) => setData('email_admin', e.target.value)} />
+                  {errors.email_admin && <div className="text-destructive text-xs mt-1">{errors.email_admin}</div>}
+                </div>
  <div>
  <Label htmlFor="wa_api_key">API Key WhatsApp</Label>
  <Input id="wa_api_key" type="password" value={data.wa_api_key} onChange={(e) => setData('wa_api_key', e.target.value)} />

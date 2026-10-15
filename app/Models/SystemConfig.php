@@ -20,6 +20,11 @@ class SystemConfig extends Model
     public const CACHE_KEY = 'system_configs_all';
 
     /**
+     * Default fallback email for system admin / support messages.
+     */
+    public const DEFAULT_EMAIL_ADMIN = 'sarpras@alazharpeduli.or.id';
+
+    /**
      * In-memory cache for the current request lifecycle.
      *
      * @var array<string, mixed>|null
@@ -80,9 +85,13 @@ class SystemConfig extends Model
      */
     public static function getValue(string $key, mixed $default = null): mixed
     {
+        if ($default === null && $key === 'email_admin') {
+            $default = self::DEFAULT_EMAIL_ADMIN;
+        }
+
         $all = self::getAll();
 
-        if (!array_key_exists($key, $all) || $all[$key] === null) {
+        if (!array_key_exists($key, $all) || $all[$key] === null || ($key === 'email_admin' && trim((string) $all[$key]) === '')) {
             return $default;
         }
 
@@ -101,7 +110,7 @@ class SystemConfig extends Model
      */
     public static function setValue(string $key, mixed $value): void
     {
-        $storeValue = is_array($value) ? json_encode($value) : (string) $value;
+        $storeValue = $value === null ? null : (is_array($value) ? json_encode($value) : (string) $value);
 
         self::updateOrCreate(
             ['key' => $key],
@@ -118,6 +127,7 @@ class SystemConfig extends Model
     {
         return [
             'nama_sistem' => self::getValue('nama_sistem', 'Halo APU'),
+            'email_admin' => self::getValue('email_admin', self::DEFAULT_EMAIL_ADMIN),
             'logo_path' => self::getValue('logo_path'),
             'banner_path' => self::getValue('banner_path'),
             'favicon_path' => self::getValue('favicon_path'),

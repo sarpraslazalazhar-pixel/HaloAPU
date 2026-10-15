@@ -126,4 +126,57 @@ class TicketChatBridgeTest extends TestCase
             'catatan' => 'Siap, teknisi sedang meluncur membawa kabel baru.',
         ]);
     }
+
+    public function test_sync_chat_message_without_explicit_ticket_id_auto_detects_user_ticket(): void
+    {
+        $user = User::factory()->create();
+        $admin = Admin::create([
+            'name' => 'Operator IT',
+            'username' => 'operatorit2',
+            'email' => 'operator2@example.com',
+            'password' => bcrypt('password'),
+        ]);
+
+        $unit = Unit::create(['nama_unit' => 'IT', 'is_aktif' => true]);
+        $subUnit = SubUnit::create([
+            'unit_id' => $unit->id,
+            'nama_layanan' => 'Jaringan',
+            'is_aktif' => true,
+        ]);
+
+        $ticket = Ticket::create([
+            'user_id' => $user->id,
+            'unit_id' => $unit->id,
+            'sub_unit_id' => $subUnit->id,
+            'assigned_admin_id' => $admin->id,
+            'form_data' => [],
+            'status' => 'on_proses',
+            'priority' => 'Sedang',
+        ]);
+
+        $conversation = Conversation::create([
+            'type' => 'user_admin_direct',
+            'user_id' => $user->id,
+            'admin_one_id' => $admin->id,
+            'last_message_at' => now(),
+        ]);
+
+        // Message sent WITHOUT ticket_id (like admin just typing in chat input)
+        $message = Message::create([
+            'conversation_id' => $conversation->id,
+            'sender_type' => Admin::class,
+            'sender_id' => $admin->id,
+            'ticket_id' => null,
+            'body' => 'Halo user, pesan ini dikirim dari web chat tanpa tag tiket manual.',
+        ]);
+
+        $log = TicketChatBridgeService::syncChatMessageToTicket($message);
+
+        $this->assertNotNull($log);
+        $this->assertEquals($ticket->id, $log->ticket_id);
+        $this->assertEquals('balasan', $log->aksi);
+        $this->assertEquals('Halo user, pesan ini dikirim dari web chat tanpa tag tiket manual.', $log->catatan);
+        $this->assertEquals($admin->id, $log->admin_id);
+        $this->assertEquals($ticket->id, $message->fresh()->ticket_id);
+    }
 }

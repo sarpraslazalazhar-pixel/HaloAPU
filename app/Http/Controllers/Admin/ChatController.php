@@ -409,7 +409,19 @@ class ChatController extends Controller
                 $ticketId = $parent->ticket_id;
             }
         }
-
+        if (!$ticketId && $conversation && $conversation->user_id) {
+            $ticketId = Message::where('conversation_id', $conversation->id)
+                ->whereNotNull('ticket_id')
+                ->latest('id')
+                ->value('ticket_id')
+                ?: Ticket::where('user_id', $conversation->user_id)
+                    ->whereIn('status', ['open', 'on_proses', 'pending', 'need_revision'])
+                    ->latest('updated_at')
+                    ->value('id')
+                ?: Ticket::where('user_id', $conversation->user_id)
+                    ->latest('id')
+                    ->value('id');
+        }
         $message = Message::create([
             'conversation_id' => $conversation->id,
             'sender_type' => Admin::class,

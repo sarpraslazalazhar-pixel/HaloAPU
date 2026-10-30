@@ -46,6 +46,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/tickets/{id}/reply', [TicketController::class, 'reply']);
     Route::post('/tickets/{id}/assign', [TicketController::class, 'assignOperator']);
     Route::patch('/tickets/{id}/cancel', [TicketController::class, 'cancel']);
+    Route::patch('/tickets/{id}/cancel-booking', [TicketController::class, 'cancelBooking']);
     Route::post('/tickets/{id}/accept', [TicketController::class, 'acceptResult']);
     Route::post('/tickets/{id}/revision', [TicketController::class, 'requestRevision']);
     Route::post('/tickets/{id}/status', [TicketController::class, 'changeStatus']);

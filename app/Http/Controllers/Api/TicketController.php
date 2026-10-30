@@ -523,7 +523,12 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket || (int) $ticket->user_id !== (int) $user->id) {
+        $isAdmin = $user instanceof \App\Models\Admin;
+        $isOwner = $isAdmin
+            ? ((int) $ticket->created_by_admin_id === (int) $user->id || $ticket->isAccessibleBy($user))
+            : ((int) $ticket->user_id === (int) $user->id);
+
+        if (!$ticket || !$isOwner) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
@@ -547,6 +552,49 @@ class TicketController extends Controller
 
         return response()->json([
             'message' => 'Tiket berhasil dibatalkan',
+        ]);
+    }
+
+    /**
+     * Cancel room/vehicle booking by Admin.
+     */
+    public function cancelBooking(Request $request, string $id)
+    {
+        $admin = $request->user();
+        if (!$admin instanceof \App\Models\Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat membatalkan booking aset'], 403);
+        }
+
+        $ticket = Ticket::with(['subUnit', 'booking'])
+            ->where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (!$ticket || !$ticket->isAccessibleBy($admin)) {
+            return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
+        }
+
+        if (!$ticket->booking) {
+            return response()->json(['message' => 'Tidak ada data booking untuk tiket ini.'], 422);
+        }
+
+        $ticket->booking->update(['status' => 'dibatalkan']);
+        $ticket->update(['status' => 'dibatalkan']);
+
+        $catatan = $request->input('catatan') ?: 'Booking dibatalkan oleh Admin dan aset telah dibebaskan.';
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $admin->id,
+            'aksi' => 'dibatalkan',
+            'catatan' => $catatan,
+            'timestamp' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Booking berhasil dibatalkan. Aset seketika tersedia kembali di Live Monitor.',
+            'data' => $this->formatTicket($ticket->fresh()),
         ]);
     }
 

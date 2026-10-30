@@ -24,6 +24,9 @@ class MonitorApiController extends Controller
 
         // 1. Ambil booking relevan (selesai dalam 1 jam terakhir atau di masa depan)
         $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
+            ->whereHas('ticket', function ($tq) {
+                $tq->whereNotIn('status', ['reject', 'dibatalkan', 'solve']);
+            })
             ->where('tanggal_selesai', '>=', $oneHourAgo)
             ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name']);
 
@@ -108,7 +111,8 @@ class MonitorApiController extends Controller
 
             if ($activeBooking) {
                 $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->createdByAdmin?->name ?? $activeBooking->ticket?->user?->username ?? $activeBooking->ticket?->createdByAdmin?->username ?? '-';
-                $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve']);
+                $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve'])
+                    || in_array($activeBooking->ticket?->status, ['on_proses', 'solve']);
                 $statusLabel = $isApproved ? 'Sedang Dipakai' : 'Menunggu Persetujuan';
                 return [
                     'nama_aset' => $asset->nama_aset,
@@ -127,7 +131,9 @@ class MonitorApiController extends Controller
             })->sortBy('tanggal_mulai')->first();
 
             if ($imminentBooking) {
-                $displayStatus = $imminentBooking->status === 'open' ? 'Menunggu Persetujuan' : 'Dipesan';
+                $isApprovedImminent = in_array($imminentBooking->status, ['on_proses', 'disetujui', 'solve'])
+                    || in_array($imminentBooking->ticket?->status, ['on_proses', 'solve']);
+                $displayStatus = $isApprovedImminent ? 'Dipesan' : 'Menunggu Persetujuan';
                 $userStr = $imminentBooking->ticket?->user?->name ?? $imminentBooking->ticket?->createdByAdmin?->name ?? $imminentBooking->ticket?->user?->username ?? $imminentBooking->ticket?->createdByAdmin?->username ?? '-';
                 return [
                     'nama_aset' => $asset->nama_aset,
@@ -184,6 +190,9 @@ class MonitorApiController extends Controller
         $endDate = $now->copy()->addDays($days)->endOfDay();
 
         $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
+            ->whereHas('ticket', function ($tq) {
+                $tq->whereNotIn('status', ['reject', 'dibatalkan', 'solve']);
+            })
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->where('tanggal_mulai', '<=', $endDate)
             ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name'])

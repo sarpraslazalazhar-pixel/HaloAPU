@@ -49,6 +49,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/tickets/{id}/accept', [TicketController::class, 'acceptResult']);
     Route::post('/tickets/{id}/revision', [TicketController::class, 'requestRevision']);
     Route::post('/tickets/{id}/status', [TicketController::class, 'changeStatus']);
+    Route::post('/tickets/{id}/kembalikan-alat', [TicketController::class, 'kembalikanAlat']);
+    Route::patch('/tickets/{id}/priority', [TicketController::class, 'changePriority']);
 
     // CSAT / Ratings
     Route::post('/tickets/{id}/rate', [CsatApiController::class, 'store']);

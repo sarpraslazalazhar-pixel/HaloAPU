@@ -758,6 +758,19 @@ class TicketController extends Controller
 
         $ticket->update(['status' => $newStatus]);
 
+        // Sinkronisasi status booking kendaraan/ruangan jika tiket terkait reservasi aset
+        $ticket->load('booking');
+        if ($ticket->booking) {
+            if (in_array($newStatus, ['reject', 'dibatalkan'])) {
+                $ticket->booking->update(['status' => $newStatus]);
+            } elseif ($newStatus === 'solve') {
+                $ticket->booking->update(['status' => 'selesai']);
+            } elseif (in_array($newStatus, ['on_proses', 'disetujui'])) {
+                $ticket->booking->update(['status' => 'on_proses']);
+            } elseif ($newStatus === 'open') {
+                $ticket->booking->update(['status' => 'open']);
+            }
+        }
         $defaultCatatan = "Status tiket diubah dari {$oldStatus} menjadi {$newStatus} oleh {$user->name}";
         
         $log = TicketLog::create([
@@ -949,5 +962,121 @@ class TicketController extends Controller
         }
         
         return response()->json(['message' => 'File tidak ditemukan: ' . $cleanPath], 404);
+    }
+
+    /**
+     * Mark asset / equipment as returned.
+     */
+    public function kembalikanAlat(Request $request, string $id)
+    {
+        $admin = $request->user();
+
+        if (!$admin instanceof \App\Models\Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat menandai pengembalian aset/alat'], 403);
+        }
+
+        $ticket = Ticket::with(['subUnit', 'booking'])
+            ->where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (!$ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (!$ticket->isAccessibleBy($admin)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses ke tiket ini.'], 403);
+        }
+
+        $request->validate([
+            'kondisi_kembali' => 'nullable|string|in:baik,rusak,tidak_lengkap',
+            'catatan_kembali' => 'nullable|string|max:1000',
+        ]);
+
+        $kondisi = $request->kondisi_kembali ?? 'baik';
+        $catatan = !empty($request->catatan_kembali) ? trim($request->catatan_kembali) : null;
+
+        $ticket->update([
+            'dikembalikan_at' => now(),
+            'kondisi_kembali' => $kondisi,
+            'catatan_kembali' => $catatan,
+        ]);
+
+        // Jika ada booking kendaraan / ruangan, tandai selesai agar aset kembali Tersedia
+        if ($ticket->booking) {
+            $ticket->booking->update(['status' => 'selesai']);
+        }
+
+        $kondisiLabel = match($kondisi) {
+            'rusak' => 'Rusak',
+            'tidak_lengkap' => 'Tidak Lengkap (Aksesoris Kurang)',
+            default => 'Baik (Normal)',
+        };
+
+        $logCatatan = 'Alat/aset dikembalikan [Kondisi: ' . $kondisiLabel . '], ditandai oleh Admin ' . ($admin->name ?: $admin->username);
+        if ($catatan) {
+            $logCatatan .= ' — Catatan: ' . $catatan;
+        }
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $admin->id,
+            'aksi' => 'alat_dikembalikan',
+            'catatan' => $logCatatan,
+            'timestamp' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Alat/aset berhasil ditandai sudah dikembalikan',
+            'data' => $this->formatTicket($ticket->fresh()),
+        ], 200);
+    }
+
+    /**
+     * Change ticket priority.
+     */
+    public function changePriority(Request $request, string $id)
+    {
+        $admin = $request->user();
+
+        if (!$admin instanceof \App\Models\Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat mengubah prioritas tiket'], 403);
+        }
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (!$ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (!$ticket->isAccessibleBy($admin)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses ke tiket ini.'], 403);
+        }
+
+        $request->validate([
+            'priority' => 'required|string',
+        ]);
+
+        $oldPriority = $ticket->priority;
+        $newPriority = $request->priority;
+
+        $ticket->update(['priority' => $newPriority]);
+
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $admin->id,
+            'aksi' => 'update_priority',
+            'catatan' => "Prioritas diubah dari " . ($oldPriority ?? 'normal') . " menjadi $newPriority oleh Admin " . ($admin->name ?: $admin->username),
+            'timestamp' => now(),
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Prioritas berhasil diubah',
+            'data' => $this->formatTicket($ticket->fresh()),
+        ], 200);
     }
 }

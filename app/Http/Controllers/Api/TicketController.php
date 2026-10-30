@@ -31,7 +31,12 @@ class TicketController extends Controller
         $query = Ticket::with(['subUnit', 'assignedAdmin', 'user']);
 
         if ($user instanceof \App\Models\Admin) {
-            $query->accessibleBy($user);
+            $tab = $request->query('tab', 'masuk');
+            if ($tab === 'saya_ajukan' || $tab === 'mine') {
+                $query->submittedBy($user);
+            } else {
+                $query->incomingFor($user);
+            }
         } else {
             $query->where('user_id', $user->id);
         }

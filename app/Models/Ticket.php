@@ -189,11 +189,27 @@ class Ticket extends Model
             return;
         }
 
-        if ($admin->hasRole(['superadmin', 'Super Admin'])) {
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+
+        if ($isSuperAdmin) {
             return;
         }
 
-        $query->where(fn ($q) => static::applyIncoming($q, $admin));
+        $query->where(function ($q) use ($admin) {
+            $q->where('tickets.assigned_admin_id', $admin->id);
+
+            $unitIds = $admin->units()->pluck('units.id')->filter()->all();
+            if (!empty($unitIds)) {
+                $q->orWhereIn('tickets.unit_id', $unitIds)
+                  ->orWhereHas('subUnit', fn ($sq) => $sq->whereIn('unit_id', $unitIds));
+            }
+
+            $subUnitIds = $admin->subUnits()->pluck('sub_units.id')->filter()->all();
+            if (!empty($subUnitIds)) {
+                $q->orWhereIn('tickets.sub_unit_id', $subUnitIds);
+            }
+        });
     }
 
     /**

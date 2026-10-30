@@ -17,7 +17,7 @@ class DashboardApiController extends Controller
         $query = Ticket::query();
 
         if ($user instanceof \App\Models\Admin) {
-            $query->accessibleBy($user);
+            $query->incomingFor($user);
         } elseif ($user) {
             $query->where('user_id', $user->id);
         }

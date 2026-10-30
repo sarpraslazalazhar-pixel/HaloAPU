@@ -120,9 +120,6 @@ class TicketController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        if ($user instanceof \App\Models\Admin) {
-            return response()->json(['message' => 'Admin tidak dapat membuat tiket. Silakan login sebagai User.'], 403);
-        }
 
         // form_data might be a JSON string if sent via FormData
         $formData = $request->input('form_data');
@@ -138,7 +135,13 @@ class TicketController extends Controller
         $ticket = new Ticket();
         $subUnit = \App\Models\SubUnit::find($validated['sub_unit_id']);
         
-        $ticket->user_id = $user->id;
+        if ($user instanceof \App\Models\Admin) {
+            $ticket->user_id = null;
+            $ticket->created_by_admin_id = $user->id;
+        } else {
+            $ticket->user_id = $user->id;
+            $ticket->created_by_admin_id = null;
+        }
         $ticket->divisi_id = $user->divisi_id ?? null;
         $ticket->org_unit_id = $user->org_unit_id ?? null;
         $ticket->jabatan_id = $user->jabatan_id ?? null;
@@ -189,7 +192,7 @@ class TicketController extends Controller
         // Create initial log
         TicketLog::create([
             'ticket_id' => $ticket->id,
-            'admin_id' => null,
+            'admin_id' => $user instanceof \App\Models\Admin ? $user->id : null,
             'aksi' => 'dibuat',
             'catatan' => 'Tiket dibuat oleh ' . ($user->name ?? $user->username),
             'timestamp' => now(),
@@ -257,13 +260,15 @@ class TicketController extends Controller
 
         // Notify admins and user
         try {
-            $ticket->user->notify(new \App\Notifications\TicketCreatedUserNotification($ticket));
+            if ($ticket->user) {
+                $ticket->user->notify(new \App\Notifications\TicketCreatedUserNotification($ticket));
+            }
         } catch (\Exception $e) {
             // Silently ignore notification errors
         }
         $this->notifyAdminsNewTicket($ticket);
 
-        $ticket->load(['subUnit', 'assignedAdmin', 'user']);
+        $ticket->load(['subUnit', 'assignedAdmin', 'user', 'createdByAdmin']);
 
         return response()->json([
             'data' => $this->formatTicket($ticket),
@@ -283,6 +288,7 @@ class TicketController extends Controller
             'unit',
             'assignedAdmin',
             'user',
+            'createdByAdmin',
             'attachments',
             'csat',
             'logs' => function ($q) {
@@ -850,7 +856,7 @@ class TicketController extends Controller
             'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : 'General',
             'status' => $flutterStatus,
             'createdAt' => $ticket->created_at->toIso8601String(),
-            'requesterName' => $ticket->user ? $ticket->user->name : '',
+            'requesterName' => $ticket->user ? ($ticket->user->name ?? $ticket->user->username ?? '') : ($ticket->createdByAdmin ? ($ticket->createdByAdmin->name ?? $ticket->createdByAdmin->username ?? 'Admin') : ''),
             'assignedTo' => $ticket->assignedAdmin ? $ticket->assignedAdmin->name : null,
             'replies' => [],
         ];

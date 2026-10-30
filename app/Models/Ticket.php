@@ -223,35 +223,36 @@ class Ticket extends Model
             return;
         }
 
-        if ($admin->hasRole(['superadmin', 'Super Admin'])) {
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+
+        if ($isSuperAdmin) {
             return;
         }
 
         $query->where(function ($q) use ($admin) {
             $q->where('tickets.created_by_admin_id', $admin->id);
-            $q->orWhere(fn ($inner) => static::applyIncoming($inner, $admin));
-        });
-    }
+            $q->orWhere('tickets.assigned_admin_id', $admin->id);
 
-    private static function applyIncoming($q, Admin $admin): void
-    {
-        $q->where('tickets.assigned_admin_id', $admin->id);
-
-        if ($admin->isCoordinator()) {
-            $unitIds = $admin->units()->pluck('units.id');
-            if ($unitIds->isNotEmpty()) {
-                $q->orWhereIn('tickets.unit_id', $unitIds);
-                return;
+            $unitIds = $admin->units()->pluck('units.id')->filter()->all();
+            if (!empty($unitIds)) {
+                $q->orWhereIn('tickets.unit_id', $unitIds)
+                  ->orWhereHas('subUnit', fn ($sq) => $sq->whereIn('unit_id', $unitIds));
             }
-        }
 
-        // Operator biasa, atau koordinator tanpa unit: fallback ke sub unit miliknya.
-        $q->orWhereIn('tickets.sub_unit_id', $admin->subUnits()->pluck('sub_units.id'));
+            $subUnitIds = $admin->subUnits()->pluck('sub_units.id')->filter()->all();
+            if (!empty($subUnitIds)) {
+                $q->orWhereIn('tickets.sub_unit_id', $subUnitIds);
+            }
+        });
     }
 
     public function isAccessibleBy(Admin $admin): bool
     {
-        if ($admin->hasRole(['superadmin', 'Super Admin'])) {
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+
+        if ($isSuperAdmin) {
             return true;
         }
 
@@ -260,11 +261,22 @@ class Ticket extends Model
             return true;
         }
 
-        if ($admin->isCoordinator() && $admin->units()->exists()) {
-            return $admin->units()->where('units.id', $this->unit_id)->exists();
+        $unitIds = $admin->units()->pluck('units.id')->filter()->all();
+        if (!empty($unitIds)) {
+            if (in_array((int) $this->unit_id, $unitIds)) {
+                return true;
+            }
+            if ($this->subUnit && in_array((int) $this->subUnit->unit_id, $unitIds)) {
+                return true;
+            }
         }
 
-        return $admin->subUnits()->where('sub_units.id', $this->sub_unit_id)->exists();
+        $subUnitIds = $admin->subUnits()->pluck('sub_units.id')->filter()->all();
+        if (!empty($subUnitIds) && in_array((int) $this->sub_unit_id, $subUnitIds)) {
+            return true;
+        }
+
+        return false;
     }
 }
 

@@ -763,10 +763,8 @@ class TicketController extends Controller
         if ($ticket->booking) {
             if (in_array($newStatus, ['reject', 'dibatalkan'])) {
                 $ticket->booking->update(['status' => $newStatus]);
-            } elseif ($newStatus === 'solve') {
-                $ticket->booking->update(['status' => 'selesai']);
-            } elseif (in_array($newStatus, ['on_proses', 'disetujui'])) {
-                $ticket->booking->update(['status' => 'on_proses']);
+            } elseif (in_array($newStatus, ['solve', 'on_proses', 'disetujui'])) {
+                $ticket->booking->update(['status' => 'disetujui']);
             } elseif ($newStatus === 'open') {
                 $ticket->booking->update(['status' => 'open']);
             }

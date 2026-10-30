@@ -189,6 +189,25 @@ class Ticket extends Model
             return;
         }
 
+        $matchedUserIds = \App\Models\User::where('username', $admin->username)
+            ->orWhere('email', $admin->email)
+            ->pluck('id')
+            ->filter()
+            ->all();
+
+        // Exclude tiket yang diajukan sendiri
+        $query->where(function ($notOwn) use ($admin) {
+            $notOwn->whereNull('tickets.created_by_admin_id')
+                   ->orWhere('tickets.created_by_admin_id', '!=', $admin->id);
+        });
+
+        if (!empty($matchedUserIds)) {
+            $query->where(function ($notUser) use ($matchedUserIds) {
+                $notUser->whereNull('tickets.user_id')
+                        ->orWhereNotIn('tickets.user_id', $matchedUserIds);
+            });
+        }
+
         $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
             || str_contains(strtolower($admin->username ?? ''), 'superadmin');
 
@@ -213,7 +232,7 @@ class Ticket extends Model
     }
 
     /**
-     * Tiket yang diajukan oleh admin ini.
+     * Tiket yang diajukan oleh admin ini (baik sebagai Admin maupun User terkait).
      */
     public function scopeSubmittedBy($query, ?Admin $admin = null): void
     {
@@ -224,7 +243,19 @@ class Ticket extends Model
             return;
         }
 
-        $query->where('tickets.created_by_admin_id', $admin->id);
+        $query->where(function ($q) use ($admin) {
+            $q->where('tickets.created_by_admin_id', $admin->id);
+
+            $matchedUserIds = \App\Models\User::where('username', $admin->username)
+                ->orWhere('email', $admin->email)
+                ->pluck('id')
+                ->filter()
+                ->all();
+
+            if (!empty($matchedUserIds)) {
+                $q->orWhereIn('tickets.user_id', $matchedUserIds);
+            }
+        });
     }
 
     /**

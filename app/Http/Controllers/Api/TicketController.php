@@ -38,7 +38,17 @@ class TicketController extends Controller
                 $query->incomingFor($user);
             }
         } else {
-            $query->where('user_id', $user->id);
+            $query->where(function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+                $matchedAdminIds = \App\Models\Admin::where('username', $user->username)
+                    ->orWhere('email', $user->email)
+                    ->pluck('id')
+                    ->filter()
+                    ->all();
+                if (!empty($matchedAdminIds)) {
+                    $q->orWhereIn('created_by_admin_id', $matchedAdminIds);
+                }
+            });
         }
 
         // Filter by search keyword
@@ -141,7 +151,10 @@ class TicketController extends Controller
         $subUnit = \App\Models\SubUnit::find($validated['sub_unit_id']);
         
         if ($user instanceof \App\Models\Admin) {
-            $ticket->user_id = null;
+            $matchedUser = \App\Models\User::where('username', $user->username)
+                ->orWhere('email', $user->email)
+                ->first();
+            $ticket->user_id = $matchedUser?->id;
             $ticket->created_by_admin_id = $user->id;
         } else {
             $ticket->user_id = $user->id;

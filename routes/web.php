@@ -22,7 +22,7 @@ Route::get('/tv', [\App\Http\Controllers\TvDashboardController::class, 'index'])
 Route::get('/system/notification-sound', [\App\Http\Controllers\Admin\SystemConfigController::class, 'serveNotificationSound'])->name('system.notification-sound');
 
 // Storage fallback when public/storage symlink is missing on Windows
-Route::get('/storage/{path}', function ($path) {
+Route::withoutMiddleware(['web'])->get('/storage/{path}', function ($path) {
     $basePath = realpath(storage_path('app/public'));
     $targetPath = storage_path('app/public/' . $path);
     $realPath = realpath($targetPath);
@@ -35,6 +35,39 @@ Route::get('/storage/{path}', function ($path) {
         'Cache-Control' => 'public, max-age=86400',
     ]);
 })->where('path', '.*')->name('storage.local');
+
+// Build asset fallback when web server document root differs from public directory on shared hosting
+Route::withoutMiddleware(['web'])->get('/build/{path}', function ($path) {
+    $basePath = realpath(public_path('build'));
+    $targetPath = public_path('build/' . $path);
+    $realPath = realpath($targetPath);
+
+    if (!$realPath || !$basePath || !str_starts_with($realPath, $basePath) || is_dir($realPath)) {
+        abort(404);
+    }
+
+    $extension = strtolower(pathinfo($realPath, PATHINFO_EXTENSION));
+    $mimeTypes = [
+        'css' => 'text/css; charset=utf-8',
+        'js' => 'application/javascript; charset=utf-8',
+        'json' => 'application/json',
+        'woff2' => 'font/woff2',
+        'woff' => 'font/woff',
+        'ttf' => 'font/ttf',
+        'svg' => 'image/svg+xml',
+        'png' => 'image/png',
+        'jpg' => 'image/jpeg',
+        'jpeg' => 'image/jpeg',
+        'webp' => 'image/webp',
+    ];
+    $contentType = $mimeTypes[$extension] ?? (mime_content_type($realPath) ?: 'application/octet-stream');
+
+    return new \Symfony\Component\HttpFoundation\BinaryFileResponse($realPath, 200, [
+        'Content-Type' => $contentType,
+        'Cache-Control' => 'public, max-age=31536000, immutable',
+        'Access-Control-Allow-Origin' => '*',
+    ]);
+})->where('path', '.*')->name('build.asset');
 
 
 Route::middleware('guest')->group(function () {

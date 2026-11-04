@@ -923,7 +923,7 @@ class TicketController extends Controller
 
         // Notifikasi ke User Pembuat Tiket (Push FCM, In-App Database, & WhatsApp)
         try {
-            $ticket->load('user', 'subUnit');
+            $ticket->load(['user', 'subUnit', 'assignedAdmin']);
             if ($ticket->user) {
                 $ticket->user->notify(new \App\Notifications\TicketStatusUpdatedNotification($ticket, $request->catatan));
                 
@@ -932,6 +932,16 @@ class TicketController extends Controller
                     $url = route('tiket.show', $ticket->id);
                     $ticket->user->notify(new \App\Notifications\TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
                 }
+            }
+
+            // Notifikasi & broadcast ke Operator yang Ditugaskan (jika bukan dia yang mengubah)
+            $pengubahName = $user->name ?? $user->username;
+            $recipients = collect();
+            if ($ticket->assignedAdmin && (int) $ticket->assignedAdmin->id !== (int) $user->id) {
+                $recipients->push($ticket->assignedAdmin);
+            }
+            foreach ($recipients as $recipient) {
+                $recipient->notify(new \App\Notifications\TicketStatusUpdatedOperatorNotification($ticket, $request->catatan, $pengubahName));
             }
         } catch (\Exception $e) {
             \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());

@@ -15,6 +15,7 @@ use App\Models\RoomVehicleBooking;
 use App\Models\TicketSlaTracking;
 use App\Services\SlaCalculator;
 use Illuminate\Validation\ValidationException;
+use Carbon\Carbon;
 
 class TicketController extends Controller
 {
@@ -28,7 +29,7 @@ class TicketController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $query = Ticket::with(['subUnit', 'assignedAdmin', 'user']);
+        $query = Ticket::with(['subUnit', 'assignedAdmin', 'user', 'slaTracking', 'createdByAdmin']);
 
         if ($user instanceof \App\Models\Admin) {
             $tab = $request->query('tab', 'masuk');
@@ -165,8 +166,9 @@ class TicketController extends Controller
         $ticket->jabatan_id = $user->jabatan_id ?? null;
         $ticket->sub_unit_id = $validated['sub_unit_id'];
         $ticket->unit_id = $subUnit ? $subUnit->unit_id : null;
-        $ticket->form_data = $formData ?? [];
-        $ticket->status = 'open';
+        $slaCalculator = new SlaCalculator();
+        $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
+        $ticket->status = $initialStatus;
         $ticket->priority = $validated['priority'] ?? 'normal';
         // Validate file attachments before saving
         if ($request->hasFile('attachments')) {
@@ -217,17 +219,23 @@ class TicketController extends Controller
         ]);
 
         // SLA Tracking
-        $slaCalculator = new SlaCalculator();
-        $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
-        $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
-
-        TicketSlaTracking::create([
-            'ticket_id' => $ticket->id,
-            'sla_response_deadline' => $responseDeadline,
-            'sla_resolution_deadline' => $resolutionDeadline,
-            'current_tier' => 0,
-        ]);
-
+        if ($initialStatus === 'pending') {
+            TicketSlaTracking::create([
+                'ticket_id' => $ticket->id,
+                'sla_response_deadline' => null,
+                'sla_resolution_deadline' => null,
+                'paused_at' => now(),
+                'total_paused_minutes' => 0,
+                'current_tier' => 0,
+            ]);
+        } else {
+            TicketSlaTracking::create([
+                'ticket_id' => $ticket->id,
+                'sla_response_deadline' => $slaCalculator->calculateResponseDeadline($ticket),
+                'sla_resolution_deadline' => $slaCalculator->calculateResolutionDeadline($ticket),
+                'current_tier' => 0,
+            ]);
+        }
         // Integrasi Live Monitor (Booking Aset Generik)
         if ($subUnit && $subUnit->is_monitored) {
             $assetName = $formData[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
@@ -309,6 +317,7 @@ class TicketController extends Controller
             'createdByAdmin',
             'attachments',
             'csat',
+            'slaTracking',
             'logs' => function ($q) {
                 $q->orderBy('timestamp', 'desc');
             },
@@ -821,9 +830,52 @@ class TicketController extends Controller
         if ($oldStatus === $newStatus) {
             return response()->json(['message' => 'Status sudah ' . $newStatus], 422);
         }
+        // Update SLA Tracking sesuai status tiket
+        $ticket->loadMissing('slaTracking');
+        $sla = $ticket->slaTracking;
+        $slaCalculator = new SlaCalculator();
+
+        if ($oldStatus === 'open' && $newStatus === 'on_proses') {
+            if ($sla && !$sla->responded_at) {
+                $respondedAt = now();
+                $sla->update([
+                    'responded_at' => $respondedAt,
+                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
+                ]);
+            }
+        }
+
+        if ($newStatus === 'pending' && $oldStatus !== 'pending') {
+            if ($sla) {
+                $slaCalculator->pauseSla($sla);
+            }
+        }
+
+        if ($oldStatus === 'pending' && $newStatus === 'on_proses') {
+            if ($sla) {
+                $slaCalculator->resumeSla($sla);
+            }
+            if ($sla && !$sla->responded_at) {
+                $respondedAt = now();
+                $sla->update([
+                    'responded_at' => $respondedAt,
+                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
+                ]);
+            }
+        }
+
+        if ($newStatus === 'solve') {
+            if ($sla && !$sla->resolved_at) {
+                $resolvedAt = now();
+                $sla->update([
+                    'resolved_at' => $resolvedAt,
+                    'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
+                ]);
+            }
+            $ticket->update(['is_result_accepted' => false]);
+        }
 
         $ticket->update(['status' => $newStatus]);
-
         // Sinkronisasi status booking kendaraan/ruangan jika tiket terkait reservasi aset
         $ticket->load('booking');
         if ($ticket->booking) {
@@ -925,6 +977,20 @@ class TicketController extends Controller
         } else {
             $resolvedFormData = $formData;
         }
+        $ticket->loadMissing(['subUnit', 'slaTracking']);
+        $sla = $ticket->slaTracking;
+
+        $responseDeadlineStr = $sla?->sla_response_deadline
+            ? Carbon::parse($sla->sla_response_deadline)->translatedFormat('d M Y, H:i')
+            : null;
+        $resolutionDeadlineStr = $sla?->sla_resolution_deadline
+            ? Carbon::parse($sla->sla_resolution_deadline)->translatedFormat('d M Y, H:i')
+            : null;
+
+        $isResponseBreached = (bool) ($sla && ($sla->is_response_breached || ($sla->sla_response_deadline && !$sla->responded_at && now()->gt($sla->sla_response_deadline))));
+        $isResolutionBreached = (bool) ($sla && ($sla->is_resolution_breached || ($sla->sla_resolution_deadline && !$sla->resolved_at && now()->gt($sla->sla_resolution_deadline))));
+        $isSlaBreached = $isResponseBreached || $isResolutionBreached;
+        $isSlaPaused = (bool) ($sla && $sla->paused_at !== null) || strtolower($ticket->status) === 'pending';
 
         return [
             'id' => $ticket->formatted_id ?? (string) $ticket->id,
@@ -935,6 +1001,17 @@ class TicketController extends Controller
             'createdAt' => $ticket->created_at->toIso8601String(),
             'requesterName' => $ticket->user ? ($ticket->user->name ?? $ticket->user->username ?? '') : ($ticket->createdByAdmin ? ($ticket->createdByAdmin->name ?? $ticket->createdByAdmin->username ?? 'Admin') : ''),
             'assignedTo' => $ticket->assignedAdmin ? $ticket->assignedAdmin->name : null,
+            'priority' => $ticket->priority,
+            'sla_response_time' => $responseDeadlineStr,
+            'sla_resolution_time' => $resolutionDeadlineStr,
+            'sla_response_deadline' => $sla?->sla_response_deadline ? (is_string($sla->sla_response_deadline) ? $sla->sla_response_deadline : $sla->sla_response_deadline->toIso8601String()) : null,
+            'sla_resolution_deadline' => $sla?->sla_resolution_deadline ? (is_string($sla->sla_resolution_deadline) ? $sla->sla_resolution_deadline : $sla->sla_resolution_deadline->toIso8601String()) : null,
+            'is_sla_breached' => $isSlaBreached,
+            'is_sla_paused' => $isSlaPaused,
+            'dikembalikan_at' => $ticket->dikembalikan_at ? $ticket->dikembalikan_at->format('d M Y, H:i') : null,
+            'kondisi_kembali' => $ticket->kondisi_kembali,
+            'catatan_kembali' => $ticket->catatan_kembali,
+            'wajib_kembali' => (bool) ($ticket->subUnit?->wajib_kembali || str_contains(strtolower($ticket->subUnit?->nama_layanan ?? ''), 'alat') || str_contains(strtolower($ticket->subUnit?->nama_layanan ?? ''), 'kendaraan')),
             'replies' => [],
         ];
     }
@@ -1129,6 +1206,18 @@ class TicketController extends Controller
 
         $ticket->update(['priority' => $newPriority]);
 
+        // Hitung ulang deadline SLA jika prioritas diubah saat tiket masih aktif
+        $ticket->loadMissing('slaTracking');
+        if ($ticket->slaTracking && !in_array($ticket->status, ['solve', 'reject', 'dibatalkan'])) {
+            $slaCalculator = new SlaCalculator();
+            $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
+            $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
+
+            $ticket->slaTracking->update([
+                'sla_response_deadline' => $responseDeadline,
+                'sla_resolution_deadline' => $resolutionDeadline,
+            ]);
+        }
         TicketLog::create([
             'ticket_id' => $ticket->id,
             'admin_id' => $admin->id,

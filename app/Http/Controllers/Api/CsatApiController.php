@@ -89,8 +89,16 @@ class CsatApiController extends Controller
     {
         $user = $request->user();
 
-        $csats = Csat::where('user_id', $user->id)
-            ->with(['ticket' => function ($q) {
+        $query = Csat::query();
+        if ($user instanceof \App\Models\Admin) {
+            $query->whereHas('ticket', function ($tq) use ($user) {
+                $tq->accessibleBy($user);
+            });
+        } else {
+            $query->where('user_id', $user->id);
+        }
+
+        $csats = $query->with(['ticket' => function ($q) {
                 $q->select('id', 'status', 'sub_unit_id', 'form_data', 'created_at')
                     ->with('subUnit:id,nama_layanan');
             }])
@@ -126,6 +134,10 @@ class CsatApiController extends Controller
     public function pending(Request $request)
     {
         $user = $request->user();
+
+        if ($user instanceof \App\Models\Admin) {
+            return response()->json(['data' => []], 200);
+        }
 
         $pendingTickets = Ticket::where('user_id', $user->id)
             ->whereIn('status', ['solve', 'selesai'])

@@ -85,8 +85,8 @@ class ForgotPasswordController extends Controller
             }
         );
 
-        if ($status === Password::INVALID_USER) {
-            $status = Password::broker('admins')->reset(
+        if ($status === Password::INVALID_USER || $status === Password::INVALID_TOKEN) {
+            $adminStatus = Password::broker('admins')->reset(
                 $credentials,
                 function ($admin, $password) {
                     $admin->forceFill([
@@ -96,6 +96,9 @@ class ForgotPasswordController extends Controller
                     $admin->save();
                 }
             );
+            if ($adminStatus === Password::PASSWORD_RESET) {
+                $status = $adminStatus;
+            }
         }
 
         return $status === Password::PASSWORD_RESET

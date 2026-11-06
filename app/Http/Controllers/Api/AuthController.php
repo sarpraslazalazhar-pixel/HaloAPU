@@ -521,34 +521,75 @@ class AuthController extends Controller
     public function forgotPassword(Request $request)
     {
         $request->validate([
-            'email' => 'required|email',
+            'email' => 'required|string',
+            'is_admin' => 'nullable|boolean',
         ]);
 
-        $email = $request->input('email');
-        $isUser = User::where('email', $email)->exists();
-        $isAdmin = Admin::where('email', $email)->exists();
+        $input = trim((string) $request->input('email'));
+        $isAdminReq = $request->boolean('is_admin');
+        $isEmail = filter_var($input, FILTER_VALIDATE_EMAIL);
 
-        if (!$isUser && !$isAdmin) {
+        $user = null;
+        $admin = null;
+
+        if ($isAdminReq) {
+            $admin = $isEmail
+                ? Admin::where('email', $input)->first()
+                : Admin::where('username', $input)->first();
+        } else {
+            $user = $isEmail
+                ? User::where('email', $input)->first()
+                : User::where('username', $input)->first();
+
+            // Fallback cari di admin jika tidak ditemukan di user
+            if (! $user) {
+                $admin = $isEmail
+                    ? Admin::where('email', $input)->first()
+                    : Admin::where('username', $input)->first();
+            }
+        }
+
+        if (! $user && ! $admin) {
             return response()->json([
                 'success' => false,
-                'message' => 'Email tidak terdaftar dalam sistem',
+                'message' => 'Akun dengan email/username tersebut tidak ditemukan dalam sistem.',
             ], 404);
         }
 
-        // ponytail: fallback broker user/admin sekuensial; pisah endpoint jika flow registrasi/guard terpisah penuh.
-        $broker = $isUser ? 'users' : 'admins';
-        $status = PasswordBroker::broker($broker)->sendResetLink($request->only('email'));
+        $sent = false;
+        $targetEmail = '';
 
-        if ($status === PasswordBroker::RESET_LINK_SENT) {
+        if ($admin) {
+            $targetEmail = $admin->email;
+            $status = PasswordBroker::broker('admins')->sendResetLink(['email' => $admin->email]);
+            if ($status === PasswordBroker::RESET_LINK_SENT) {
+                $sent = true;
+            }
+        } elseif ($user) {
+            $targetEmail = $user->email;
+            $status = PasswordBroker::broker('users')->sendResetLink(['email' => $user->email]);
+            if ($status === PasswordBroker::RESET_LINK_SENT) {
+                $sent = true;
+            }
+        }
+
+        if ($sent) {
+            $parts = explode('@', $targetEmail);
+            $maskedEmail = $targetEmail;
+            if (count($parts) === 2 && strlen($parts[0]) > 2) {
+                $name = $parts[0];
+                $maskedEmail = substr($name, 0, 2).str_repeat('*', max(1, strlen($name) - 3)).substr($name, -1).'@'.$parts[1];
+            }
+
             return response()->json([
                 'success' => true,
-                'message' => 'Tautan reset password telah dikirim ke email Anda.',
+                'message' => "Tautan reset password telah dikirim ke email {$maskedEmail}.",
             ], 200);
         }
 
         return response()->json([
             'success' => false,
-            'message' => 'Gagal mengirim email reset password.',
+            'message' => 'Gagal mengirim email reset password. Pastikan server email/WA telah dikonfigurasi.',
         ], 422);
     }
 

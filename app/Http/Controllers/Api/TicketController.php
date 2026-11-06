@@ -3,19 +3,32 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
-use App\Models\Ticket;
-use App\Models\TicketLog;
-use App\Models\TicketAttachment;
+use App\Models\Admin;
 use App\Models\FormField;
-use App\Models\SystemConfig;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
 use App\Models\RoomVehicleBooking;
+use App\Models\SubUnit;
+use App\Models\SystemConfig;
+use App\Models\Ticket;
+use App\Models\TicketAttachment;
+use App\Models\TicketLog;
 use App\Models\TicketSlaTracking;
+use App\Models\User;
+use App\Notifications\BrowserNotification;
+use App\Notifications\RevisionRequestedNotification;
+use App\Notifications\TicketAssignedOperatorNotification;
+use App\Notifications\TicketCommentPushNotification;
+use App\Notifications\TicketCreatedAdminNotification;
+use App\Notifications\TicketCreatedUserNotification;
 use App\Services\SlaCalculator;
-use Illuminate\Validation\ValidationException;
+use App\Services\SparcIntegrationService;
+use App\Services\TicketChatBridgeService;
+use App\Services\TicketStatusService;
 use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 
 class TicketController extends Controller
 {
@@ -25,13 +38,13 @@ class TicketController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
         $query = Ticket::with(['subUnit', 'assignedAdmin', 'user', 'slaTracking', 'createdByAdmin']);
 
-        if ($user instanceof \App\Models\Admin) {
+        if ($user instanceof Admin) {
             $tab = $request->query('tab', 'masuk');
             if ($tab === 'saya_ajukan' || $tab === 'mine') {
                 $query->submittedBy($user);
@@ -41,53 +54,53 @@ class TicketController extends Controller
         } else {
             $query->where(function ($q) use ($user) {
                 $q->where('user_id', $user->id);
-                $matchedAdminIds = \App\Models\Admin::where('username', $user->username)
+                $matchedAdminIds = Admin::where('username', $user->username)
                     ->orWhere('email', $user->email)
                     ->pluck('id')
                     ->filter()
                     ->all();
-                if (!empty($matchedAdminIds)) {
+                if (! empty($matchedAdminIds)) {
                     $q->orWhereIn('created_by_admin_id', $matchedAdminIds);
                 }
             });
         }
 
         // Filter by search keyword
-        if ($request->has('search') && !empty($request->search)) {
+        if ($request->has('search') && ! empty($request->search)) {
             $keyword = trim($request->search);
             $cleanId = str_replace(['#', '-', ' '], '', $keyword);
 
             $query->where(function ($q) use ($keyword, $cleanId) {
-                if (!empty($cleanId)) {
+                if (! empty($cleanId)) {
                     $q->where('id', 'like', "%{$cleanId}%");
                 }
                 $q->orWhere('form_data', 'like', "%{$keyword}%")
                   // Jenis Layanan (SubUnit)
-                  ->orWhereHas('subUnit', function ($subQuery) use ($keyword) {
-                      $subQuery->where('nama_layanan', 'like', "%{$keyword}%")
-                               ->orWhere('deskripsi', 'like', "%{$keyword}%")
-                               ->orWhere('monitor_kategori', 'like', "%{$keyword}%");
-                  })
+                    ->orWhereHas('subUnit', function ($subQuery) use ($keyword) {
+                        $subQuery->where('nama_layanan', 'like', "%{$keyword}%")
+                            ->orWhere('deskripsi', 'like', "%{$keyword}%")
+                            ->orWhere('monitor_kategori', 'like', "%{$keyword}%");
+                    })
                   // Kanal Layanan (Unit)
-                  ->orWhereHas('unit', function ($unitQuery) use ($keyword) {
-                      $unitQuery->where('nama_unit', 'like', "%{$keyword}%")
-                                ->orWhere('deskripsi', 'like', "%{$keyword}%");
-                  })
+                    ->orWhereHas('unit', function ($unitQuery) use ($keyword) {
+                        $unitQuery->where('nama_unit', 'like', "%{$keyword}%")
+                            ->orWhere('deskripsi', 'like', "%{$keyword}%");
+                    })
                   // Pemohon Tiket
-                  ->orWhereHas('user', function ($userQuery) use ($keyword) {
-                      $userQuery->where('name', 'like', "%{$keyword}%")
-                                ->orWhere('username', 'like', "%{$keyword}%");
-                  })
+                    ->orWhereHas('user', function ($userQuery) use ($keyword) {
+                        $userQuery->where('name', 'like', "%{$keyword}%")
+                            ->orWhere('username', 'like', "%{$keyword}%");
+                    })
                   // Operator / Admin Ditugaskan
-                  ->orWhereHas('assignedAdmin', function ($adminQuery) use ($keyword) {
-                      $adminQuery->where('name', 'like', "%{$keyword}%")
-                                 ->orWhere('username', 'like', "%{$keyword}%");
-                  });
+                    ->orWhereHas('assignedAdmin', function ($adminQuery) use ($keyword) {
+                        $adminQuery->where('name', 'like', "%{$keyword}%")
+                            ->orWhere('username', 'like', "%{$keyword}%");
+                    });
             });
         }
 
         // Filter by status
-        if ($request->has('status') && !empty($request->status)) {
+        if ($request->has('status') && ! empty($request->status)) {
             $status = $request->status;
             if (is_string($status)) {
                 $status = str_contains($status, ',') ? explode(',', $status) : [$status];
@@ -132,10 +145,9 @@ class TicketController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
-
 
         // form_data might be a JSON string if sent via FormData
         $formData = $request->input('form_data');
@@ -148,11 +160,11 @@ class TicketController extends Controller
             'priority' => 'nullable|string',
         ]);
 
-        $ticket = new Ticket();
-        $subUnit = \App\Models\SubUnit::find($validated['sub_unit_id']);
-        
-        if ($user instanceof \App\Models\Admin) {
-            $matchedUser = \App\Models\User::where('username', $user->username)
+        $ticket = new Ticket;
+        $subUnit = SubUnit::find($validated['sub_unit_id']);
+
+        if ($user instanceof Admin) {
+            $matchedUser = User::where('username', $user->username)
                 ->orWhere('email', $user->email)
                 ->first();
             $ticket->user_id = $matchedUser?->id;
@@ -166,7 +178,7 @@ class TicketController extends Controller
         $ticket->jabatan_id = $user->jabatan_id ?? null;
         $ticket->sub_unit_id = $validated['sub_unit_id'];
         $ticket->unit_id = $subUnit ? $subUnit->unit_id : null;
-        $slaCalculator = new SlaCalculator();
+        $slaCalculator = new SlaCalculator;
         $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
         $ticket->status = $initialStatus;
         $ticket->priority = $validated['priority'] ?? 'normal';
@@ -175,10 +187,12 @@ class TicketController extends Controller
             $flatFiles = [];
             foreach ($request->file('attachments') as $files) {
                 foreach (is_array($files) ? $files : [$files] as $f) {
-                    if ($f) $flatFiles[] = $f;
+                    if ($f) {
+                        $flatFiles[] = $f;
+                    }
                 }
             }
-            \Illuminate\Support\Facades\Validator::make(
+            Validator::make(
                 ['files' => $flatFiles],
                 ['files.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx']
             )->validate();
@@ -193,8 +207,8 @@ class TicketController extends Controller
                 foreach ($filesArr as $file) {
                     $originalName = $file->getClientOriginalName() ?: 'attachment';
                     $ext = $file->getClientOriginalExtension() ?: ($file->guessExtension() ?: 'jpg');
-                    if (!str_contains($originalName, '.')) {
-                        $originalName = ($originalName === 'attachment' ? 'foto_' . time() : $originalName) . '.' . $ext;
+                    if (! str_contains($originalName, '.')) {
+                        $originalName = ($originalName === 'attachment' ? 'foto_'.time() : $originalName).'.'.$ext;
                     }
                     $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
                     TicketAttachment::create([
@@ -212,9 +226,9 @@ class TicketController extends Controller
         // Create initial log
         TicketLog::create([
             'ticket_id' => $ticket->id,
-            'admin_id' => $user instanceof \App\Models\Admin ? $user->id : null,
+            'admin_id' => $user instanceof Admin ? $user->id : null,
             'aksi' => 'dibuat',
-            'catatan' => 'Tiket dibuat oleh ' . ($user->name ?? $user->username),
+            'catatan' => 'Tiket dibuat oleh '.($user->name ?? $user->username),
             'timestamp' => now(),
         ]);
 
@@ -239,11 +253,11 @@ class TicketController extends Controller
         // Integrasi Live Monitor (Booking Aset Generik)
         if ($subUnit && $subUnit->is_monitored) {
             $assetName = $formData[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
-            
-            $dateStr = $subUnit->monitor_date_field_id 
+
+            $dateStr = $subUnit->monitor_date_field_id
                 ? ($formData[(string) $subUnit->monitor_date_field_id] ?? now()->format('Y-m-d'))
                 : null;
-                
+
             $endDateStr = $subUnit->monitor_end_date_field_id
                 ? ($formData[(string) $subUnit->monitor_end_date_field_id] ?? $dateStr ?? now()->format('Y-m-d'))
                 : $dateStr;
@@ -252,11 +266,11 @@ class TicketController extends Controller
             $endFieldVal = $formData[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
 
             if ($dateStr) {
-                $startDT = \Carbon\Carbon::parse($dateStr . ' ' . \Carbon\Carbon::parse($startFieldVal)->format('H:i:s'));
-                $endDT = \Carbon\Carbon::parse(($endDateStr ?? $dateStr) . ' ' . \Carbon\Carbon::parse($endFieldVal)->format('H:i:s'));
+                $startDT = Carbon::parse($dateStr.' '.Carbon::parse($startFieldVal)->format('H:i:s'));
+                $endDT = Carbon::parse(($endDateStr ?? $dateStr).' '.Carbon::parse($endFieldVal)->format('H:i:s'));
             } else {
-                $startDT = \Carbon\Carbon::parse($startFieldVal);
-                $endDT = \Carbon\Carbon::parse($endFieldVal);
+                $startDT = Carbon::parse($startFieldVal);
+                $endDT = Carbon::parse($endFieldVal);
             }
 
             // Cek bentrok
@@ -270,7 +284,7 @@ class TicketController extends Controller
                 // Return error response directly since API
                 return response()->json([
                     'message' => 'Gagal membuat tiket',
-                    'errors' => ['form_data.' . $subUnit->monitor_asset_field_id => ['Aset ini sudah dipesan pada jam tersebut.']]
+                    'errors' => ['form_data.'.$subUnit->monitor_asset_field_id => ['Aset ini sudah dipesan pada jam tersebut.']],
                 ], 422);
             }
 
@@ -287,18 +301,19 @@ class TicketController extends Controller
         // Notify admins and user
         try {
             if ($ticket->user) {
-                $ticket->user->notify(new \App\Notifications\TicketCreatedUserNotification($ticket));
+                $ticket->user->notify(new TicketCreatedUserNotification($ticket));
             }
         } catch (\Exception $e) {
             // Silently ignore notification errors
         }
         $this->notifyAdminsNewTicket($ticket);
 
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.created');
         $ticket->load(['subUnit', 'assignedAdmin', 'user', 'createdByAdmin']);
 
         return response()->json([
             'data' => $this->formatTicket($ticket),
-            'message' => 'Tiket berhasil dibuat'
+            'message' => 'Tiket berhasil dibuat',
         ], 201);
     }
 
@@ -328,13 +343,13 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
         // Verify ownership
-        $isAdmin = $user instanceof \App\Models\Admin;
-        if (!$isAdmin && (int) $ticket->user_id !== (int) $user->id) {
+        $isAdmin = $user instanceof Admin;
+        if (! $isAdmin && (int) $ticket->user_id !== (int) $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
 
@@ -358,7 +373,7 @@ class TicketController extends Controller
             ];
         });
 
-        $operators = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+        $operators = Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit?->unit_id ?? $ticket->unit_id);
         })->get(['id', 'name', 'username']);
 
@@ -373,22 +388,23 @@ class TicketController extends Controller
 
         $responseData['attachments'] = $ticket->attachments->map(function ($att) {
             $name = $att->original_name ?: 'attachment';
-            if (!str_contains($name, '.')) {
-                $ext = match(strtolower($att->mime_type ?? '')) {
+            if (! str_contains($name, '.')) {
+                $ext = match (strtolower($att->mime_type ?? '')) {
                     'image/png' => 'png',
                     'application/pdf' => 'pdf',
                     default => 'jpg'
                 };
-                $name = $name . '.' . $ext;
+                $name = $name.'.'.$ext;
             }
+
             return [
                 'id' => $att->id,
                 'fieldId' => $att->field_id,
                 'fileName' => $name,
                 'mimeType' => $att->mime_type ?: 'image/jpeg',
                 'fileSize' => $att->file_size,
-                'path' => 'storage/' . $att->file_path,
-                'url' => url('storage/' . $att->file_path),
+                'path' => 'storage/'.$att->file_path,
+                'url' => url('storage/'.$att->file_path),
             ];
         });
 
@@ -402,19 +418,20 @@ class TicketController extends Controller
                 'isFromAdmin' => $log->admin_id !== null,
                 'attachments' => $log->attachments->map(function ($att) {
                     $name = $att->original_name ?: 'attachment';
-                    if (!str_contains($name, '.')) {
-                        $ext = match(strtolower($att->mime_type ?? '')) {
+                    if (! str_contains($name, '.')) {
+                        $ext = match (strtolower($att->mime_type ?? '')) {
                             'image/png' => 'png',
                             'application/pdf' => 'pdf',
                             default => 'jpg'
                         };
-                        $name = $name . '.' . $ext;
+                        $name = $name.'.'.$ext;
                     }
+
                     return [
                         'id' => $att->id,
                         'fileName' => $name,
-                        'path' => 'storage/' . $att->file_path,
-                        'url' => url('storage/' . $att->file_path),
+                        'path' => 'storage/'.$att->file_path,
+                        'url' => url('storage/'.$att->file_path),
                     ];
                 }),
             ];
@@ -441,17 +458,17 @@ class TicketController extends Controller
     {
         $user = $request->user();
 
-        $isAdmin = $user instanceof \App\Models\Admin;
+        $isAdmin = $user instanceof Admin;
 
         $ticket = Ticket::where('id', str_replace('-', '', $id))
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
-        
-        if (!$isAdmin && (int) $ticket->user_id !== (int) $user->id) {
+
+        if (! $isAdmin && (int) $ticket->user_id !== (int) $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
 
@@ -476,7 +493,9 @@ class TicketController extends Controller
         // Handle attachments
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
-                if (!$file || !$file->isValid()) continue;
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
 
                 $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
 
@@ -494,20 +513,24 @@ class TicketController extends Controller
         }
 
         $log->load('attachments');
-        \App\Services\TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+        TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
 
         // Notify admins / user
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $this->notifyAdminsReply($ticket, $user, $request->catatan);
         } else {
             try {
-                $ticket->user?->notify(new \App\Notifications\BrowserNotification(
+                $ticket->user?->notify(new BrowserNotification(
                     "Balasan Tiket #{$ticket->formatted_id}",
-                    "Admin " . ($user->name ?? $user->username) . " membalas tiket Anda",
+                    'Admin '.($user->name ?? $user->username).' membalas tiket Anda',
                     "/tiket/{$ticket->id}"
                 ));
-            } catch (\Throwable $e) {}
+            } catch (\Throwable $e) {
+            }
         }
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.replied');
+
         return response()->json([
             'data' => [
                 'id' => $log->id,
@@ -532,12 +555,12 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        $isAdmin = $user instanceof \App\Models\Admin;
+        $isAdmin = $user instanceof Admin;
         $isOwner = $isAdmin
             ? ((int) $ticket->created_by_admin_id === (int) $user->id || $ticket->isAccessibleBy($user))
             : ((int) $ticket->user_id === (int) $user->id);
 
-        if (!$ticket || !$isOwner) {
+        if (! $ticket || ! $isOwner) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
@@ -555,9 +578,11 @@ class TicketController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => null,
             'aksi' => 'dibatalkan',
-            'catatan' => 'Tiket dibatalkan oleh ' . ($user->name ?? $user->username),
+            'catatan' => 'Tiket dibatalkan oleh '.($user->name ?? $user->username),
             'timestamp' => now(),
         ]);
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.cancelled');
 
         return response()->json([
             'message' => 'Tiket berhasil dibatalkan',
@@ -570,7 +595,7 @@ class TicketController extends Controller
     public function cancelBooking(Request $request, string $id)
     {
         $admin = $request->user();
-        if (!$admin instanceof \App\Models\Admin) {
+        if (! $admin instanceof Admin) {
             return response()->json(['message' => 'Hanya Admin yang dapat membatalkan booking aset'], 403);
         }
 
@@ -579,11 +604,11 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket || !$ticket->isAccessibleBy($admin)) {
+        if (! $ticket || ! $ticket->isAccessibleBy($admin)) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
-        if (!$ticket->booking) {
+        if (! $ticket->booking) {
             return response()->json(['message' => 'Tidak ada data booking untuk tiket ini.'], 422);
         }
 
@@ -619,7 +644,7 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket || (int) $ticket->user_id !== (int) $user->id) {
+        if (! $ticket || (int) $ticket->user_id !== (int) $user->id) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
@@ -636,6 +661,8 @@ class TicketController extends Controller
             'catatan' => 'Hasil akhir diterima oleh user.',
             'timestamp' => now(),
         ]);
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.result_accepted');
 
         return response()->json([
             'message' => 'Hasil telah diterima',
@@ -654,7 +681,7 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket || (int) $ticket->user_id !== (int) $user->id) {
+        if (! $ticket || (int) $ticket->user_id !== (int) $user->id) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
@@ -662,7 +689,7 @@ class TicketController extends Controller
             return response()->json(['message' => 'Tiket tidak dalam status selesai'], 422);
         }
 
-        if ($ticket->subUnit && !$ticket->subUnit->is_revision_enabled) {
+        if ($ticket->subUnit && ! $ticket->subUnit->is_revision_enabled) {
             return response()->json(['message' => 'Fitur revisi tidak diaktifkan untuk jenis layanan ini'], 422);
         }
 
@@ -670,7 +697,7 @@ class TicketController extends Controller
 
         if ($ticket->revision_count >= $maxRevisions) {
             return response()->json([
-                'message' => 'Kamu telah mencapai batas maksimal revisi (' . $maxRevisions . ' kali)'
+                'message' => 'Kamu telah mencapai batas maksimal revisi ('.$maxRevisions.' kali)',
             ], 422);
         }
 
@@ -696,7 +723,9 @@ class TicketController extends Controller
         // Handle attachments
         if ($request->hasFile('attachments')) {
             foreach ($request->file('attachments') as $file) {
-                if (!$file || !$file->isValid()) continue;
+                if (! $file || ! $file->isValid()) {
+                    continue;
+                }
 
                 $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
 
@@ -714,13 +743,15 @@ class TicketController extends Controller
         }
 
         // Notify admins
-        $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+        $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit->unit_id);
         })->get();
 
         if ($notifiedAdmins->isNotEmpty()) {
-            \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\RevisionRequestedNotification($ticket, $request->catatan));
+            Notification::send($notifiedAdmins, new RevisionRequestedNotification($ticket, $request->catatan));
         }
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.revision_requested');
 
         return response()->json([
             'message' => 'Permintaan revisi berhasil dikirim',
@@ -733,11 +764,11 @@ class TicketController extends Controller
     public function assignOperator(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user instanceof \App\Models\Admin) {
+        if (! $user instanceof Admin) {
             return response()->json(['message' => 'Hanya Admin yang dapat menugaskan operator tiket'], 403);
         }
 
-        if (!$user->hasRole(['superadmin', 'super_admin', 'Super Admin']) && !$user->isCoordinator()) {
+        if (! $user->hasRole(['superadmin', 'super_admin', 'Super Admin']) && ! $user->isCoordinator()) {
             return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk menugaskan operator'], 403);
         }
 
@@ -745,7 +776,7 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
@@ -756,21 +787,21 @@ class TicketController extends Controller
         $adminId = $validated['admin_id'] ?? null;
 
         if ($adminId) {
-            $admin = \App\Models\Admin::find($adminId);
+            $admin = Admin::find($adminId);
             $ticket->update(['assigned_admin_id' => $admin->id]);
 
             TicketLog::create([
                 'ticket_id' => $ticket->id,
                 'admin_id' => $user->id,
                 'aksi' => 'assign_operator',
-                'catatan' => 'Tiket ditugaskan ke operator: ' . ($admin->name ?? $admin->username),
+                'catatan' => 'Tiket ditugaskan ke operator: '.($admin->name ?? $admin->username),
                 'timestamp' => now(),
             ]);
 
             try {
-                $admin->notify(new \App\Notifications\TicketAssignedOperatorNotification($ticket));
+                $admin->notify(new TicketAssignedOperatorNotification($ticket));
             } catch (\Throwable $e) {
-                \Log::error("Gagal mengirim notifikasi penugasan operator untuk tiket #{$ticket->id}: " . $e->getMessage());
+                \Log::error("Gagal mengirim notifikasi penugasan operator untuk tiket #{$ticket->id}: ".$e->getMessage());
             }
 
             return response()->json([
@@ -802,7 +833,7 @@ class TicketController extends Controller
     {
         $user = $request->user();
 
-        if (!$user instanceof \App\Models\Admin) {
+        if (! $user instanceof Admin) {
             return response()->json(['message' => 'Hanya Admin yang dapat mengubah status tiket'], 403);
         }
 
@@ -810,11 +841,11 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
-        if (!$ticket->isAccessibleBy($user)) {
+        if (! $ticket->isAccessibleBy($user)) {
             return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk mengubah status tiket ini.'], 403);
         }
         $request->validate([
@@ -824,127 +855,16 @@ class TicketController extends Controller
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
-        $oldStatus = $ticket->status;
-        $newStatus = $request->status;
-
-        if ($oldStatus === $newStatus) {
-            return response()->json(['message' => 'Status sudah ' . $newStatus], 422);
-        }
-        // Update SLA Tracking sesuai status tiket
-        $ticket->loadMissing('slaTracking');
-        $sla = $ticket->slaTracking;
-        $slaCalculator = new SlaCalculator();
-
-        if ($oldStatus === 'open' && $newStatus === 'on_proses') {
-            if ($sla && !$sla->responded_at) {
-                $respondedAt = now();
-                $sla->update([
-                    'responded_at' => $respondedAt,
-                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
-                ]);
-            }
-        }
-
-        if ($newStatus === 'pending' && $oldStatus !== 'pending') {
-            if ($sla) {
-                $slaCalculator->pauseSla($sla);
-            }
-        }
-
-        if ($oldStatus === 'pending' && $newStatus === 'on_proses') {
-            if ($sla) {
-                $slaCalculator->resumeSla($sla);
-            }
-            if ($sla && !$sla->responded_at) {
-                $respondedAt = now();
-                $sla->update([
-                    'responded_at' => $respondedAt,
-                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
-                ]);
-            }
-        }
-
-        if ($newStatus === 'solve') {
-            if ($sla && !$sla->resolved_at) {
-                $resolvedAt = now();
-                $sla->update([
-                    'resolved_at' => $resolvedAt,
-                    'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
-                ]);
-            }
-            $ticket->update(['is_result_accepted' => false]);
-        }
-
-        $ticket->update(['status' => $newStatus]);
-        // Sinkronisasi status booking kendaraan/ruangan jika tiket terkait reservasi aset
-        $ticket->load('booking');
-        if ($ticket->booking) {
-            if (in_array($newStatus, ['reject', 'dibatalkan'])) {
-                $ticket->booking->update(['status' => $newStatus]);
-            } elseif (in_array($newStatus, ['solve', 'on_proses', 'disetujui'])) {
-                $ticket->booking->update(['status' => 'disetujui']);
-            } elseif ($newStatus === 'open') {
-                $ticket->booking->update(['status' => 'open']);
-            }
-        }
-        $defaultCatatan = "Status tiket diubah dari {$oldStatus} menjadi {$newStatus} oleh {$user->name}";
-        
-        $log = TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => $user->id,
-            'aksi' => 'update_status',
-            'catatan' => $request->catatan ?? $defaultCatatan,
-            'timestamp' => now(),
-        ]);
-
-        $generalFiles = $request->file('general_attachments');
-        if (!empty($generalFiles) && is_array($generalFiles)) {
-            foreach ($generalFiles as $file) {
-                if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
-
-                $path = Storage::disk('public')->putFileAs(
-                    "ticket-attachments/{$ticket->id}",
-                    $file->getPathname(),
-                    $file->hashName()
-                );
-
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'field_id' => null,
-                    'ticket_log_id' => $log->id,
-                    'file_path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getMimeType(),
-                    'file_size' => $file->getSize(),
-                    'wajib' => false,
-                ]);
-            }
-        }
-
-        // Notifikasi ke User Pembuat Tiket (Push FCM, In-App Database, & WhatsApp)
         try {
-            $ticket->load(['user', 'subUnit', 'assignedAdmin']);
-            if ($ticket->user) {
-                $ticket->user->notify(new \App\Notifications\TicketStatusUpdatedNotification($ticket, $request->catatan));
-                
-                if (!empty($request->catatan)) {
-                    $senderName = $user->name ?? $user->username;
-                    $url = route('tiket.show', $ticket->id);
-                    $ticket->user->notify(new \App\Notifications\TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
-                }
-            }
-
-            // Notifikasi & broadcast ke Operator yang Ditugaskan (jika bukan dia yang mengubah)
-            $pengubahName = $user->name ?? $user->username;
-            $recipients = collect();
-            if ($ticket->assignedAdmin && (int) $ticket->assignedAdmin->id !== (int) $user->id) {
-                $recipients->push($ticket->assignedAdmin);
-            }
-            foreach ($recipients as $recipient) {
-                $recipient->notify(new \App\Notifications\TicketStatusUpdatedOperatorNotification($ticket, $request->catatan, $pengubahName));
-            }
-        } catch (\Exception $e) {
-            \Log::error("Gagal mengirim notifikasi status update tiket #{$ticket->id}: " . $e->getMessage());
+            TicketStatusService::applyTransition(
+                $ticket,
+                $request->status,
+                $request->catatan,
+                $user,
+                $request->file('general_attachments') ?? []
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
 
         return response()->json([
@@ -958,7 +878,7 @@ class TicketController extends Controller
      */
     private function formatTicket(Ticket $ticket): array
     {
-        $flutterStatus = match(strtolower($ticket->status)) {
+        $flutterStatus = match (strtolower($ticket->status)) {
             'open' => 'open',
             'on_proses' => 'on_proses',
             'solve', 'selesai' => 'solve',
@@ -972,7 +892,7 @@ class TicketController extends Controller
         // Eager-load or resolve form field labels if available
         $formData = $ticket->form_data ?? [];
         $resolvedFormData = [];
-        if (is_array($formData) && !empty($formData)) {
+        if (is_array($formData) && ! empty($formData)) {
             $ticket->loadMissing('subUnit.formFields');
             $formFields = $ticket->subUnit?->formFields;
             if ($formFields && $formFields->isNotEmpty()) {
@@ -987,8 +907,42 @@ class TicketController extends Controller
         } else {
             $resolvedFormData = $formData;
         }
-        $ticket->loadMissing(['subUnit', 'slaTracking']);
+        $ticket->loadMissing(['subUnit', 'slaTracking', 'booking']);
         $sla = $ticket->slaTracking;
+
+        $endDT = null;
+        if ($ticket->booking && $ticket->booking->tanggal_selesai) {
+            $endDT = Carbon::parse($ticket->booking->tanggal_selesai);
+        } else {
+            $formData = $ticket->form_data ?? [];
+            if (is_array($formData)) {
+                $dateVal = null;
+                $timeVal = null;
+                foreach ($formData as $k => $v) {
+                    if (!is_string($v)) continue;
+                    $vTrim = trim($v);
+                    if (!$dateVal && preg_match('/^\d{4}-\d{2}-\d{2}$/', $vTrim)) {
+                        $dateVal = $vTrim;
+                    }
+                    if (preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $vTrim)) {
+                        $timeVal = $vTrim;
+                    }
+                }
+                if ($dateVal) {
+                    try {
+                        $endDT = Carbon::parse($dateVal . ' ' . ($timeVal ?? '23:59:59'));
+                    } catch (\Throwable $e) {}
+                }
+            }
+        }
+        $isBookingPast = $endDT ? now()->gt($endDT) : false;
+        $isKendaraan = str_contains(strtolower($ticket->subUnit?->nama_layanan ?? ''), 'kendaraan')
+            || str_contains(strtolower($ticket->subUnit?->monitor_kategori ?? ''), 'kendaraan');
+
+        $wajibKembali = (bool) ($ticket->subUnit?->wajib_kembali || str_contains(strtolower($ticket->subUnit?->nama_layanan ?? ''), 'alat'));
+        if ($isKendaraan) {
+            $wajibKembali = !$isBookingPast || $ticket->dikembalikan_at !== null;
+        }
 
         $responseDeadlineStr = $sla?->sla_response_deadline
             ? Carbon::parse($sla->sla_response_deadline)->translatedFormat('d M Y, H:i')
@@ -997,8 +951,8 @@ class TicketController extends Controller
             ? Carbon::parse($sla->sla_resolution_deadline)->translatedFormat('d M Y, H:i')
             : null;
 
-        $isResponseBreached = (bool) ($sla && ($sla->is_response_breached || ($sla->sla_response_deadline && !$sla->responded_at && now()->gt($sla->sla_response_deadline))));
-        $isResolutionBreached = (bool) ($sla && ($sla->is_resolution_breached || ($sla->sla_resolution_deadline && !$sla->resolved_at && now()->gt($sla->sla_resolution_deadline))));
+        $isResponseBreached = (bool) ($sla && ($sla->is_response_breached || ($sla->sla_response_deadline && ! $sla->responded_at && now()->gt($sla->sla_response_deadline))));
+        $isResolutionBreached = (bool) ($sla && ($sla->is_resolution_breached || ($sla->sla_resolution_deadline && ! $sla->resolved_at && now()->gt($sla->sla_resolution_deadline))));
         $isSlaBreached = $isResponseBreached || $isResolutionBreached;
         $isSlaPaused = (bool) ($sla && $sla->paused_at !== null) || strtolower($ticket->status) === 'pending';
 
@@ -1021,7 +975,9 @@ class TicketController extends Controller
             'dikembalikan_at' => $ticket->dikembalikan_at ? $ticket->dikembalikan_at->format('d M Y, H:i') : null,
             'kondisi_kembali' => $ticket->kondisi_kembali,
             'catatan_kembali' => $ticket->catatan_kembali,
-            'wajib_kembali' => (bool) ($ticket->subUnit?->wajib_kembali || str_contains(strtolower($ticket->subUnit?->nama_layanan ?? ''), 'alat') || str_contains(strtolower($ticket->subUnit?->nama_layanan ?? ''), 'kendaraan')),
+            'wajib_kembali' => (bool) $wajibKembali,
+            'is_booking_past' => (bool) $isBookingPast,
+            'booking_end_time' => $endDT?->toIso8601String(),
             'replies' => [],
         ];
     }
@@ -1033,7 +989,7 @@ class TicketController extends Controller
     {
         try {
             $ticket->loadMissing(['subUnit', 'user']);
-            $notifiedAdmins = \App\Models\Admin::where(function ($q) use ($ticket) {
+            $notifiedAdmins = Admin::where(function ($q) use ($ticket) {
                 $q->whereHas('units', function ($query) use ($ticket) {
                     $query->where('units.id', $ticket->unit_id ?? $ticket->subUnit?->unit_id);
                 })->orWhereHas('roles', function ($roleQuery) {
@@ -1044,12 +1000,12 @@ class TicketController extends Controller
             })->get();
 
             if ($notifiedAdmins->isNotEmpty()) {
-                \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketCreatedAdminNotification($ticket));
+                Notification::send($notifiedAdmins, new TicketCreatedAdminNotification($ticket));
             } else {
-                \Illuminate\Support\Facades\Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new \App\Notifications\TicketCreatedAdminNotification($ticket));
+                Notification::send(new AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
             }
         } catch (\Exception $e) {
-            \Illuminate\Support\Facades\Log::error("Gagal mengirim notifikasi admin tiket baru #{$ticket->id}: " . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error("Gagal mengirim notifikasi admin tiket baru #{$ticket->id}: ".$e->getMessage());
         }
     }
 
@@ -1060,16 +1016,16 @@ class TicketController extends Controller
     {
         try {
             $ticket->loadMissing('subUnit');
-            $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+            $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {
                 $query->where('units.id', $ticket->subUnit?->unit_id);
             })->orWhereHas('roles', function ($q) {
                 $q->whereIn('name', ['superadmin', 'Super Admin']);
             })->get();
 
-            if ($notifiedAdmins->isNotEmpty() && class_exists(\App\Notifications\TicketCommentPushNotification::class)) {
+            if ($notifiedAdmins->isNotEmpty() && class_exists(TicketCommentPushNotification::class)) {
                 $senderName = $user->name ?? $user->username;
                 $url = route('admin.tiket.show', $ticket->id);
-                \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketCommentPushNotification($ticket, $senderName, $message, $url));
+                Notification::send($notifiedAdmins, new TicketCommentPushNotification($ticket, $senderName, $message, $url));
             }
         } catch (\Exception $e) {
             // Silently ignore notification errors
@@ -1082,7 +1038,7 @@ class TicketController extends Controller
     public function serveAttachment(Request $request)
     {
         $path = $request->query('path');
-        if (!$path) {
+        if (! $path) {
             return response()->json(['message' => 'Path file tidak disertakan'], 400);
         }
 
@@ -1104,15 +1060,15 @@ class TicketController extends Controller
             return response()->file(Storage::disk('public')->path($cleanPath), $headers);
         }
 
-        if (file_exists(storage_path('app/public/' . $cleanPath))) {
-            return response()->file(storage_path('app/public/' . $cleanPath), $headers);
+        if (file_exists(storage_path('app/public/'.$cleanPath))) {
+            return response()->file(storage_path('app/public/'.$cleanPath), $headers);
         }
 
-        if (file_exists(public_path('storage/' . $cleanPath))) {
-            return response()->file(public_path('storage/' . $cleanPath), $headers);
+        if (file_exists(public_path('storage/'.$cleanPath))) {
+            return response()->file(public_path('storage/'.$cleanPath), $headers);
         }
-        
-        return response()->json(['message' => 'File tidak ditemukan: ' . $cleanPath], 404);
+
+        return response()->json(['message' => 'File tidak ditemukan: '.$cleanPath], 404);
     }
 
     /**
@@ -1122,7 +1078,7 @@ class TicketController extends Controller
     {
         $admin = $request->user();
 
-        if (!$admin instanceof \App\Models\Admin) {
+        if (! $admin instanceof Admin) {
             return response()->json(['message' => 'Hanya Admin yang dapat menandai pengembalian aset/alat'], 403);
         }
 
@@ -1131,11 +1087,11 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
-        if (!$ticket->isAccessibleBy($admin)) {
+        if (! $ticket->isAccessibleBy($admin)) {
             return response()->json(['message' => 'Kamu tidak memiliki hak akses ke tiket ini.'], 403);
         }
 
@@ -1145,7 +1101,7 @@ class TicketController extends Controller
         ]);
 
         $kondisi = $request->kondisi_kembali ?? 'baik';
-        $catatan = !empty($request->catatan_kembali) ? trim($request->catatan_kembali) : null;
+        $catatan = ! empty($request->catatan_kembali) ? trim($request->catatan_kembali) : null;
 
         $ticket->update([
             'dikembalikan_at' => now(),
@@ -1158,15 +1114,15 @@ class TicketController extends Controller
             $ticket->booking->update(['status' => 'selesai']);
         }
 
-        $kondisiLabel = match($kondisi) {
+        $kondisiLabel = match ($kondisi) {
             'rusak' => 'Rusak',
             'tidak_lengkap' => 'Tidak Lengkap (Aksesoris Kurang)',
             default => 'Baik (Normal)',
         };
 
-        $logCatatan = 'Alat/aset dikembalikan [Kondisi: ' . $kondisiLabel . '], ditandai oleh Admin ' . ($admin->name ?: $admin->username);
+        $logCatatan = 'Alat/aset dikembalikan [Kondisi: '.$kondisiLabel.'], ditandai oleh Admin '.($admin->name ?: $admin->username);
         if ($catatan) {
-            $logCatatan .= ' — Catatan: ' . $catatan;
+            $logCatatan .= ' — Catatan: '.$catatan;
         }
 
         TicketLog::create([
@@ -1191,7 +1147,7 @@ class TicketController extends Controller
     {
         $admin = $request->user();
 
-        if (!$admin instanceof \App\Models\Admin) {
+        if (! $admin instanceof Admin) {
             return response()->json(['message' => 'Hanya Admin yang dapat mengubah prioritas tiket'], 403);
         }
 
@@ -1199,11 +1155,11 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (!$ticket) {
+        if (! $ticket) {
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
-        if (!$ticket->isAccessibleBy($admin)) {
+        if (! $ticket->isAccessibleBy($admin)) {
             return response()->json(['message' => 'Kamu tidak memiliki hak akses ke tiket ini.'], 403);
         }
 
@@ -1218,8 +1174,8 @@ class TicketController extends Controller
 
         // Hitung ulang deadline SLA jika prioritas diubah saat tiket masih aktif
         $ticket->loadMissing('slaTracking');
-        if ($ticket->slaTracking && !in_array($ticket->status, ['solve', 'reject', 'dibatalkan'])) {
-            $slaCalculator = new SlaCalculator();
+        if ($ticket->slaTracking && ! in_array($ticket->status, ['solve', 'reject', 'dibatalkan'])) {
+            $slaCalculator = new SlaCalculator;
             $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
             $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
 
@@ -1232,7 +1188,7 @@ class TicketController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => $admin->id,
             'aksi' => 'update_priority',
-            'catatan' => "Prioritas diubah dari " . ($oldPriority ?? 'normal') . " menjadi $newPriority oleh Admin " . ($admin->name ?: $admin->username),
+            'catatan' => 'Prioritas diubah dari '.($oldPriority ?? 'normal')." menjadi $newPriority oleh Admin ".($admin->name ?: $admin->username),
             'timestamp' => now(),
         ]);
 

@@ -39,16 +39,16 @@ return [
 
         'smtp' => [
             'transport' => 'smtp',
-            'scheme' => env('MAIL_SCHEME'),
+            'scheme' => (!empty(env('MAIL_SCHEME')) && env('MAIL_SCHEME') !== 'null') ? env('MAIL_SCHEME') : null,
             'url' => env('MAIL_URL'),
             'host' => env('MAIL_HOST', '127.0.0.1'),
             'port' => env('MAIL_PORT', 2525),
+            'encryption' => (!empty(env('MAIL_ENCRYPTION')) && env('MAIL_ENCRYPTION') !== 'null') ? env('MAIL_ENCRYPTION') : null,
             'username' => env('MAIL_USERNAME'),
             'password' => env('MAIL_PASSWORD'),
             'timeout' => null,
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
-
         'ses' => [
             'transport' => 'ses',
         ],

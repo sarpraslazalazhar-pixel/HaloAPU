@@ -557,20 +557,31 @@ class AuthController extends Controller
         }
 
         $sent = false;
+        $lastStatus = null;
         $targetEmail = '';
 
-        if ($admin) {
-            $targetEmail = $admin->email;
-            $status = PasswordBroker::broker('admins')->sendResetLink(['email' => $admin->email]);
-            if ($status === PasswordBroker::RESET_LINK_SENT) {
-                $sent = true;
+        try {
+            if ($admin) {
+                $targetEmail = $admin->email;
+                $status = PasswordBroker::broker('admins')->sendResetLink(['email' => $admin->email]);
+                $lastStatus = $status;
+                if ($status === PasswordBroker::RESET_LINK_SENT) {
+                    $sent = true;
+                }
+            } elseif ($user) {
+                $targetEmail = $user->email;
+                $status = PasswordBroker::broker('users')->sendResetLink(['email' => $user->email]);
+                $lastStatus = $status;
+                if ($status === PasswordBroker::RESET_LINK_SENT) {
+                    $sent = true;
+                }
             }
-        } elseif ($user) {
-            $targetEmail = $user->email;
-            $status = PasswordBroker::broker('users')->sendResetLink(['email' => $user->email]);
-            if ($status === PasswordBroker::RESET_LINK_SENT) {
-                $sent = true;
-            }
+        } catch (\Throwable $e) {
+            Log::error('Gagal mengirim email reset password: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mengirim email reset password: ' . $e->getMessage(),
+            ], 500);
         }
 
         if ($sent) {
@@ -587,9 +598,16 @@ class AuthController extends Controller
             ], 200);
         }
 
+        if ($lastStatus === PasswordBroker::RESET_THROTTLED) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Permintaan reset password terlalu sering. Harap tunggu 1 menit sebelum mencoba lagi.',
+            ], 429);
+        }
+
         return response()->json([
             'success' => false,
-            'message' => 'Gagal mengirim email reset password. Pastikan server email/WA telah dikonfigurasi.',
+            'message' => 'Gagal mengirim email reset password. Pastikan server email telah dikonfigurasi.',
         ], 422);
     }
 

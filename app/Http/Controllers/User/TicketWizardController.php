@@ -3,22 +3,27 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\FormField;
-use App\Models\OrgDivisi;
-use App\Models\OrgJabatan;
 use App\Models\RoomVehicleBooking;
+use App\Models\SubUnit;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\TicketSlaTracking;
 use App\Models\Unit;
+use App\Notifications\TicketCreatedAdminNotification;
+use App\Notifications\TicketCreatedUserNotification;
 use App\Services\SlaCalculator;
+use App\Services\SparcIntegrationService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
-use App\Notifications\TicketCreatedUserNotification;
-use App\Notifications\TicketCreatedAdminNotification;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TicketWizardController extends Controller
@@ -54,21 +59,25 @@ class TicketWizardController extends Controller
         // Validasi form_data berdasarkan form_fields yang wajib (hanya yg visible)
         $formFields = FormField::where('sub_unit_id', $request->sub_unit_id)->get();
         foreach ($formFields as $field) {
-            if (!$field->wajib || $field->isUpload() || $field->tipe_field === 'info_peraturan') continue;
+            if (! $field->wajib || $field->isUpload() || $field->tipe_field === 'info_peraturan') {
+                continue;
+            }
             // Skip hidden conditional fields
             if ($field->parent_field_id) {
                 $parentValue = $request->form_data[(string) $field->parent_field_id] ?? null;
-                $normalize = fn(string $s): string => rtrim(strtolower(trim($s)), ': ');
+                $normalize = fn (string $s): string => rtrim(strtolower(trim($s)), ': ');
                 $triggerNorm = $normalize((string) $field->trigger_value);
                 $isMatched = is_array($parentValue)
-                    ? collect($parentValue)->contains(fn($v) => $normalize((string) $v) === $triggerNorm)
+                    ? collect($parentValue)->contains(fn ($v) => $normalize((string) $v) === $triggerNorm)
                     : $normalize((string) $parentValue) === $triggerNorm;
-                if (!$isMatched) continue;
+                if (! $isMatched) {
+                    continue;
+                }
             }
             $fieldKey = (string) $field->id;
-            if (!isset($request->form_data[$fieldKey]) || empty($request->form_data[$fieldKey])) {
+            if (! isset($request->form_data[$fieldKey]) || empty($request->form_data[$fieldKey])) {
                 return back()->withErrors([
-                    'form_data.' . $fieldKey => "Field \"{$field->label}\" wajib diisi.",
+                    'form_data.'.$fieldKey => "Field \"{$field->label}\" wajib diisi.",
                 ]);
             }
         }
@@ -93,22 +102,25 @@ class TicketWizardController extends Controller
 
             // 2. Simpan attachments
             $uploadedFiles = $request->file('attachments');
-            if (!empty($uploadedFiles) && is_array($uploadedFiles)) {
+            if (! empty($uploadedFiles) && is_array($uploadedFiles)) {
                 foreach ($uploadedFiles as $fieldId => $filesArray) {
-                    if (!is_array($filesArray)) continue;
+                    if (! is_array($filesArray)) {
+                        continue;
+                    }
                     $field = $formFields->firstWhere('id', $fieldId);
-                    
+
                     foreach ($filesArray as $file) {
-                        if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) {
+                        if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
                             \Log::error("Invalid file upload for field $fieldId", [
-                                'is_file' => $file ? is_a($file, \Illuminate\Http\UploadedFile::class) : false,
-                                'valid' => $file ? $file->isValid() : false
+                                'is_file' => $file ? is_a($file, UploadedFile::class) : false,
+                                'valid' => $file ? $file->isValid() : false,
                             ]);
+
                             continue;
                         }
 
                         // Bypass getRealPath() bug in Windows by passing string path
-                        $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                        $path = Storage::disk('public')->putFileAs(
                             "ticket-attachments/{$ticket->id}",
                             $file->getPathname(),
                             $file->hashName()
@@ -129,11 +141,13 @@ class TicketWizardController extends Controller
 
             // Simpan general attachments
             $generalFiles = $request->file('general_attachments');
-            if (!empty($generalFiles) && is_array($generalFiles)) {
+            if (! empty($generalFiles) && is_array($generalFiles)) {
                 foreach ($generalFiles as $file) {
-                    if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+                    if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
+                        continue;
+                    }
 
-                    $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                    $path = Storage::disk('public')->putFileAs(
                         "ticket-attachments/{$ticket->id}",
                         $file->getPathname(),
                         $file->hashName()
@@ -180,19 +194,19 @@ class TicketWizardController extends Controller
                 'ticket_id' => $ticket->id,
                 'admin_id' => null,
                 'aksi' => 'dibuat',
-                'catatan' => 'Tiket dibuat oleh ' . auth()->user()->username,
+                'catatan' => 'Tiket dibuat oleh '.auth()->user()->username,
             ]);
 
             // 5. Integrasi Live Monitor (Booking Aset Generik)
-            $subUnit = \App\Models\SubUnit::find($request->sub_unit_id);
+            $subUnit = SubUnit::find($request->sub_unit_id);
             if ($subUnit && $subUnit->is_monitored) {
                 $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
-                
+
                 // Ambil tanggal terpisah jika ada, atau gunakan default hari ini
-                $dateStr = $subUnit->monitor_date_field_id 
+                $dateStr = $subUnit->monitor_date_field_id
                     ? ($request->form_data[(string) $subUnit->monitor_date_field_id] ?? now()->format('Y-m-d'))
                     : null;
-                    
+
                 $endDateStr = $subUnit->monitor_end_date_field_id
                     ? ($request->form_data[(string) $subUnit->monitor_end_date_field_id] ?? $dateStr ?? now()->format('Y-m-d'))
                     : $dateStr;
@@ -202,11 +216,11 @@ class TicketWizardController extends Controller
 
                 // Jika ada field tanggal terpisah, gabungkan tanggal dan jam
                 if ($dateStr) {
-                    $startDT = \Carbon\Carbon::parse($dateStr . ' ' . \Carbon\Carbon::parse($startFieldVal)->format('H:i:s'));
-                    $endDT = \Carbon\Carbon::parse(($endDateStr ?? $dateStr) . ' ' . \Carbon\Carbon::parse($endFieldVal)->format('H:i:s'));
+                    $startDT = Carbon::parse($dateStr.' '.Carbon::parse($startFieldVal)->format('H:i:s'));
+                    $endDT = Carbon::parse(($endDateStr ?? $dateStr).' '.Carbon::parse($endFieldVal)->format('H:i:s'));
                 } else {
-                    $startDT = \Carbon\Carbon::parse($startFieldVal);
-                    $endDT = \Carbon\Carbon::parse($endFieldVal);
+                    $startDT = Carbon::parse($startFieldVal);
+                    $endDT = Carbon::parse($endFieldVal);
                 }
 
                 // Cek bentrok aset (hanya abaikan jika ditolak, dibatalkan, atau sudah selesai)
@@ -218,7 +232,7 @@ class TicketWizardController extends Controller
 
                 if ($bentrok) {
                     throw ValidationException::withMessages([
-                        'form_data.' . $subUnit->monitor_asset_field_id => 'Aset ini sudah dipesan pada jam tersebut.',
+                        'form_data.'.$subUnit->monitor_asset_field_id => 'Aset ini sudah dipesan pada jam tersebut.',
                     ]);
                 }
 
@@ -241,13 +255,13 @@ class TicketWizardController extends Controller
             // Notifikasi ke User (database + WA jika punya no_wa)
             $ticket->user->notify(new TicketCreatedUserNotification($ticket));
             // Notifikasi ke Admin yang berlangganan Kanal Layanan (Unit) atau memiliki role superadmin
-            $notifiedAdmins = \App\Models\Admin::where(function ($q) use ($ticket) {
+            $notifiedAdmins = Admin::where(function ($q) use ($ticket) {
                 $q->whereHas('units', function ($query) use ($ticket) {
                     $query->where('units.id', $ticket->unit_id);
-                })->orWhereHas('roles', function($roleQuery) {
+                })->orWhereHas('roles', function ($roleQuery) {
                     $roleQuery->whereIn('name', ['Super Admin', 'superadmin']);
                 });
-            })->whereDoesntHave('roles', function($q) {
+            })->whereDoesntHave('roles', function ($q) {
                 $q->where('name', 'Operator');
             })->get();
 
@@ -255,11 +269,13 @@ class TicketWizardController extends Controller
                 Notification::send($notifiedAdmins, new TicketCreatedAdminNotification($ticket));
             } else {
                 // Fallback: kirim WA ke nomor_wa_utama via AnonymousNotifiable
-                Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
+                Notification::send(new AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
             }
         } catch (\Exception $e) {
-            \Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: " . $e->getMessage());
+            \Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: ".$e->getMessage());
         }
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.created');
 
         return redirect()->route('tiket.riwayat')->with('success', 'Tiket berhasil diajukan!');
     }

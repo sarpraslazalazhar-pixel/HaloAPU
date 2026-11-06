@@ -3,12 +3,22 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\FormField;
+use App\Models\SystemConfig;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
-use App\Models\SystemConfig;
+use App\Notifications\BrowserNotification;
+use App\Notifications\RevisionRequestedNotification;
+use App\Notifications\TicketCommentPushNotification;
+use App\Services\SparcIntegrationService;
+use App\Services\TicketChatBridgeService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
@@ -39,8 +49,8 @@ class TicketHistoryController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('tickets.id', 'like', "%{$search}%")
-                  ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"))
-                  ->orWhereHas('unit', fn ($u) => $u->where('nama_unit', 'like', "%{$search}%"));
+                    ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"))
+                    ->orWhereHas('unit', fn ($u) => $u->where('nama_unit', 'like', "%{$search}%"));
             });
         }
 
@@ -62,7 +72,7 @@ class TicketHistoryController extends Controller
             abort(403);
         }
 
-        if (!Storage::disk('public')->exists($attachment->file_path)) {
+        if (! Storage::disk('public')->exists($attachment->file_path)) {
             abort(404, 'File tidak ditemukan.');
         }
 
@@ -76,13 +86,13 @@ class TicketHistoryController extends Controller
             abort(403);
         }
 
-        if (!Storage::disk('public')->exists($attachment->file_path)) {
+        if (! Storage::disk('public')->exists($attachment->file_path)) {
             abort(404, 'File tidak ditemukan.');
         }
 
         $headers = [
             'Content-Type' => $attachment->mime_type,
-            'Content-Disposition' => 'inline; filename="' . $attachment->original_name . '"'
+            'Content-Disposition' => 'inline; filename="'.$attachment->original_name.'"',
         ];
 
         return response()->file(Storage::disk('public')->path($attachment->file_path), $headers);
@@ -91,10 +101,9 @@ class TicketHistoryController extends Controller
     public function show(Ticket $ticket)
     {
         // Pastikan tiket milik user yang login
-        if ((int)$ticket->user_id !== (int)auth()->id()) {
+        if ((int) $ticket->user_id !== (int) auth()->id()) {
             abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
         }
-
 
         $ticket->load([
             'unit',
@@ -119,7 +128,7 @@ class TicketHistoryController extends Controller
             ->orderBy('urutan')
             ->get();
 
-        $maxRevisions = (int) \App\Models\SystemConfig::getValue('max_revisions', 5);
+        $maxRevisions = (int) SystemConfig::getValue('max_revisions', 5);
 
         return Inertia::render('User/Tiket/Detail', [
             'ticket' => $ticket,
@@ -143,10 +152,10 @@ class TicketHistoryController extends Controller
         if ($isBooking) {
             // Bisa dibatalkan jika belum mulai atau belum lewat tanggal_selesai
             $canCancelBooking = now()->lt($ticket->booking->tanggal_mulai)
-                && !in_array($ticket->booking->status, ['dibatalkan', 'reject', 'selesai']);
+                && ! in_array($ticket->booking->status, ['dibatalkan', 'reject', 'selesai']);
         }
 
-        if ($ticket->status !== 'open' && !$canCancelBooking) {
+        if ($ticket->status !== 'open' && ! $canCancelBooking) {
             return redirect()->back()->with('error', 'Hanya tiket berstatus Open atau peminjaman yang belum dimulai yang bisa dibatalkan.');
         }
 
@@ -160,7 +169,7 @@ class TicketHistoryController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => null,
             'aksi' => 'dibatalkan',
-            'catatan' => 'Tiket/peminjaman dibatalkan oleh user ' . auth()->user()->username,
+            'catatan' => 'Tiket/peminjaman dibatalkan oleh user '.auth()->user()->username,
         ]);
 
         // Notifikasi ke Admin unit terkait
@@ -168,15 +177,17 @@ class TicketHistoryController extends Controller
             $ticket->load('subUnit.unit.admins');
             $admins = $ticket->subUnit?->unit?->admins ?? collect();
             foreach ($admins as $admin) {
-                $admin->notify(new \App\Notifications\BrowserNotification(
-                    "Peminjaman Dibatalkan",
-                    "User " . (auth()->user()->name ?? auth()->user()->username) . " membatalkan tiket/booking #{$ticket->formatted_id}",
+                $admin->notify(new BrowserNotification(
+                    'Peminjaman Dibatalkan',
+                    'User '.(auth()->user()->name ?? auth()->user()->username)." membatalkan tiket/booking #{$ticket->formatted_id}",
                     "/admin/tiketing/{$ticket->id}"
                 ));
             }
         } catch (\Exception $e) {
-            \Log::error("Gagal kirim notif batal user: " . $e->getMessage());
+            \Log::error('Gagal kirim notif batal user: '.$e->getMessage());
         }
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.cancelled');
 
         return redirect()->route('tiket.riwayat')->with('success', 'Tiket dan jadwal peminjaman berhasil dibatalkan. Aset kini tersedia kembali.');
     }
@@ -206,11 +217,13 @@ class TicketHistoryController extends Controller
         ]);
 
         $generalFiles = $request->file('general_attachments');
-        if (!empty($generalFiles) && is_array($generalFiles)) {
+        if (! empty($generalFiles) && is_array($generalFiles)) {
             foreach ($generalFiles as $file) {
-                if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+                if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
+                    continue;
+                }
 
-                $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                $path = Storage::disk('public')->putFileAs(
                     "ticket-attachments/{$ticket->id}",
                     $file->getPathname(),
                     $file->hashName()
@@ -229,19 +242,21 @@ class TicketHistoryController extends Controller
             }
         }
         $log->load('attachments');
-        \App\Services\TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+        TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
 
-        $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+        $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit->unit_id);
-        })->orWhereHas('roles', function($q) {
+        })->orWhereHas('roles', function ($q) {
             $q->whereIn('name', ['superadmin', 'Super Admin']);
         })->get();
 
         if ($notifiedAdmins->isNotEmpty()) {
             $senderName = auth()->user()->name ?? auth()->user()->username;
             $url = route('admin.tiket.show', $ticket->id);
-            \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
+            Notification::send($notifiedAdmins, new TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
         }
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.replied');
 
         return redirect()->back()->with('success', 'Balasan berhasil dikirim.');
     }
@@ -256,7 +271,7 @@ class TicketHistoryController extends Controller
             return redirect()->back()->with('error', 'Tiket tidak dalam status selesai.');
         }
 
-        if (!$ticket->subUnit->is_revision_enabled) {
+        if (! $ticket->subUnit->is_revision_enabled) {
             return redirect()->back()->with('error', 'Fitur revisi tidak diaktifkan untuk jenis layanan ini.');
         }
 
@@ -268,6 +283,8 @@ class TicketHistoryController extends Controller
             'aksi' => 'accepted',
             'catatan' => 'Hasil akhir diterima oleh user.',
         ]);
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.result_accepted');
 
         return redirect()->back()->with('success', 'Hasil telah kamu terima.');
     }
@@ -282,14 +299,14 @@ class TicketHistoryController extends Controller
             return redirect()->back()->with('error', 'Tiket tidak dalam status selesai.');
         }
 
-        if (!$ticket->subUnit->is_revision_enabled) {
+        if (! $ticket->subUnit->is_revision_enabled) {
             return redirect()->back()->with('error', 'Fitur revisi tidak diaktifkan untuk jenis layanan ini.');
         }
 
         $maxRevisions = (int) SystemConfig::getValue('max_revisions', 5);
 
         if ($ticket->revision_count >= $maxRevisions) {
-            return redirect()->back()->with('error', 'Kamu telah mencapai batas maksimal revisi (' . $maxRevisions . ' kali).');
+            return redirect()->back()->with('error', 'Kamu telah mencapai batas maksimal revisi ('.$maxRevisions.' kali).');
         }
 
         $request->validate([
@@ -311,11 +328,13 @@ class TicketHistoryController extends Controller
         ]);
 
         $generalFiles = $request->file('general_attachments');
-        if (!empty($generalFiles) && is_array($generalFiles)) {
+        if (! empty($generalFiles) && is_array($generalFiles)) {
             foreach ($generalFiles as $file) {
-                if (!$file || !is_a($file, \Illuminate\Http\UploadedFile::class) || !$file->isValid()) continue;
+                if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
+                    continue;
+                }
 
-                $path = \Illuminate\Support\Facades\Storage::disk('public')->putFileAs(
+                $path = Storage::disk('public')->putFileAs(
                     "ticket-attachments/{$ticket->id}",
                     $file->getPathname(),
                     $file->hashName()
@@ -334,33 +353,34 @@ class TicketHistoryController extends Controller
             }
         }
 
-        $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {
+        $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit->unit_id);
         })->get();
 
         if ($notifiedAdmins->isNotEmpty()) {
-            \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\RevisionRequestedNotification($ticket, $request->catatan));
+            Notification::send($notifiedAdmins, new RevisionRequestedNotification($ticket, $request->catatan));
         } else {
-            \Illuminate\Support\Facades\Notification::send(new \Illuminate\Notifications\AnonymousNotifiable, new \App\Notifications\RevisionRequestedNotification($ticket, $request->catatan));
+            Notification::send(new AnonymousNotifiable, new RevisionRequestedNotification($ticket, $request->catatan));
         }
+
+        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.revision_requested');
 
         return redirect()->back()->with('success', 'Permintaan revisi berhasil dikirim.');
     }
 
     public function kembalikanAlat(Request $request, Ticket $ticket)
     {
-        if ((int)$ticket->user_id !== (int)auth()->id()) {
+        if ((int) $ticket->user_id !== (int) auth()->id()) {
             abort(403);
         }
 
-
         // Pastikan sub unit wajib_kembali aktif
-        if ($ticket->subUnit && !$ticket->subUnit->wajib_kembali) {
+        if ($ticket->subUnit && ! $ticket->subUnit->wajib_kembali) {
             $ticket->subUnit->update(['wajib_kembali' => true]);
         }
 
-        $statusNormalized = strtolower(trim((string)$ticket->status));
-        if (!in_array($statusNormalized, ['solve', 'selesai'])) {
+        $statusNormalized = strtolower(trim((string) $ticket->status));
+        if (! in_array($statusNormalized, ['solve', 'selesai'])) {
             return redirect()->back()->with('error', 'Status tiket harus selesai terlebih dahulu.');
         }
 
@@ -370,27 +390,27 @@ class TicketHistoryController extends Controller
         ]);
 
         $kondisi = $validated['kondisi_kembali'] ?? 'baik';
-        $catatan = !empty($validated['catatan_kembali']) ? trim($validated['catatan_kembali']) : null;
+        $catatan = ! empty($validated['catatan_kembali']) ? trim($validated['catatan_kembali']) : null;
 
         $now = now();
         $ticket->dikembalikan_at = $now;
-        if (\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'kondisi_kembali')) {
+        if (Schema::hasColumn('tickets', 'kondisi_kembali')) {
             $ticket->kondisi_kembali = $kondisi;
         }
-        if (\Illuminate\Support\Facades\Schema::hasColumn('tickets', 'catatan_kembali')) {
+        if (Schema::hasColumn('tickets', 'catatan_kembali')) {
             $ticket->catatan_kembali = $catatan;
         }
         $ticket->save();
 
-        $kondisiLabel = match($kondisi) {
+        $kondisiLabel = match ($kondisi) {
             'rusak' => 'Rusak',
             'tidak_lengkap' => 'Tidak Lengkap (Aksesoris Kurang)',
             default => 'Baik (Normal)',
         };
 
-        $logCatatan = 'Alat dikembalikan [Kondisi: ' . $kondisiLabel . '], ditandai oleh user ' . auth()->user()->username;
+        $logCatatan = 'Alat dikembalikan [Kondisi: '.$kondisiLabel.'], ditandai oleh user '.auth()->user()->username;
         if ($catatan) {
-            $logCatatan .= ' — Catatan: ' . $catatan;
+            $logCatatan .= ' — Catatan: '.$catatan;
         }
 
         try {
@@ -402,7 +422,7 @@ class TicketHistoryController extends Controller
                 'timestamp' => $now,
             ]);
         } catch (\Exception $e) {
-            \Log::error("Log error: " . $e->getMessage());
+            \Log::error('Log error: '.$e->getMessage());
         }
 
         return redirect()->back()->with('success', 'Alat berhasil ditandai sudah dikembalikan.');

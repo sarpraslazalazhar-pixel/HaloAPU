@@ -14,6 +14,11 @@ const DAY_LABELS = {
  senin: 'Senin', selasa: 'Selasa', rabu: 'Rabu', kamis: 'Kamis',
  jumat: 'Jumat', sabtu: 'Sabtu', minggu: 'Minggu',
 } satisfies Record<string, string>;
+interface HumasAdminItem {
+ id: number | string;
+ name: string;
+ username: string;
+}
 
 export default function KonfigurasiIndex({ configs }: any) {
  const { data, setData, put, processing, errors } = useForm({
@@ -78,6 +83,79 @@ export default function KonfigurasiIndex({ configs }: any) {
  preserveScroll: true,
  });
  };
+ const [sparcState, setSparcState] = React.useState({
+ sparc_integration_enabled: Boolean(configs.sparc_integration_enabled),
+ sparc_base_url: configs.sparc_base_url || '',
+ sparc_api_token: configs.sparc_api_token || '',
+ sparc_webhook_secret: configs.sparc_webhook_secret || '',
+ sparc_default_admin_id: configs.sparc_default_admin_id || '',
+ });
+ const [isSavingSparc, setIsSavingSparc] = React.useState(false);
+ const [isGeneratingCreds, setIsGeneratingCreds] = React.useState(false);
+ const [isTestingSparc, setIsTestingSparc] = React.useState(false);
+ const [testSparcResult, setTestSparcResult] = React.useState<{ success: boolean; message: string } | null>(null);
+
+ const handleGenerateCreds = async () => {
+ setIsGeneratingCreds(true);
+ try {
+ const res = await fetch(route('admin.konfigurasi.generate-sparc-credentials'), {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+ },
+ });
+ const json = await res.json();
+ if (json.success && json.data) {
+ setSparcState((prev) => ({
+ ...prev,
+ sparc_api_token: json.data.api_token,
+ sparc_webhook_secret: json.data.webhook_secret,
+ }));
+ }
+ } finally {
+ setIsGeneratingCreds(false);
+ }
+ };
+
+ const handleTestSparc = async () => {
+ setIsTestingSparc(true);
+ setTestSparcResult(null);
+ try {
+ const res = await fetch(route('admin.konfigurasi.test-sparc'), {
+ method: 'POST',
+ headers: {
+ 'Content-Type': 'application/json',
+ 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+ },
+ body: JSON.stringify({
+ sparc_base_url: sparcState.sparc_base_url,
+ sparc_webhook_secret: sparcState.sparc_webhook_secret,
+ }),
+ });
+ const json = await res.json();
+ setTestSparcResult({ success: json.success, message: json.message });
+ } catch (e: unknown) {
+ const msg = e instanceof Error ? e.message : 'Gagal menghubungi server.';
+ setTestSparcResult({ success: false, message: msg });
+ setIsTestingSparc(false);
+ }
+ };
+
+ const handleSaveSparc = () => {
+ setIsSavingSparc(true);
+ router.put(
+ route('admin.konfigurasi.update'),
+ {
+ ...data,
+ ...sparcState,
+ },
+ {
+ preserveScroll: true,
+ onFinish: () => setIsSavingSparc(false),
+ }
+ );
+ };
 
  return (
  <AdminLayout title="Konfigurasi Sistem">
@@ -90,6 +168,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  <TabsTrigger value="branding">Branding</TabsTrigger>
  <TabsTrigger value="notifikasi">Notifikasi</TabsTrigger>
  <TabsTrigger value="operasional">Operasional</TabsTrigger>
+ <TabsTrigger value="sparc">Integrasi SPARC</TabsTrigger>
  <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
  </TabsList>
 
@@ -287,6 +366,125 @@ export default function KonfigurasiIndex({ configs }: any) {
  <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
  </div>
  </form>
+
+ <TabsContent value="sparc" className="space-y-4 mt-4">
+ <Card>
+ <CardHeader>
+ <CardTitle>Integrasi Ruang Kerja HUMAS SPARC v3</CardTitle>
+ </CardHeader>
+ <CardContent className="space-y-5">
+ <p className="text-sm text-muted-foreground">
+ Menghubungkan HaloAPU dengan SPARC v3 untuk menyinkronkan pengajuan tiket Humas (Reels &amp; Desain Feed/Meme) dua arah.
+ Tiket otomatis terkirim via Webhook saat diajukan, dan pembaruan dari SPARC diterima melalui REST API.
+ </p>
+
+ <div className="flex items-center justify-between p-3.5 rounded-lg border bg-muted/30">
+ <div className="space-y-0.5">
+ <Label className="text-base font-semibold">Aktifkan Integrasi SPARC</Label>
+ <p className="text-xs text-muted-foreground">Kirimkan webhook otomatis ke SPARC saat tiket Humas dibuat atau diubah.</p>
+ </div>
+ <Switch
+ checked={sparcState.sparc_integration_enabled}
+ onCheckedChange={(val) => setSparcState((prev) => ({ ...prev, sparc_integration_enabled: val }))}
+ />
+ </div>
+
+ <div className="space-y-2">
+ <Label>Base URL SPARC</Label>
+ <Input
+ placeholder="http://localhost:8000 atau https://sparc.alazharpeduli.or.id"
+ value={sparcState.sparc_base_url}
+ onChange={(e) => setSparcState((prev) => ({ ...prev, sparc_base_url: e.target.value }))}
+ />
+ <p className="text-xs text-muted-foreground">URL root instansi SPARC v3 (tanpa trailing slash).</p>
+ </div>
+
+ <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+ <div className="space-y-2">
+ <Label>SPARC API Bearer Token</Label>
+ <Input
+ readOnly
+ value={sparcState.sparc_api_token || 'Belum di-generate'}
+ className="font-mono text-xs bg-muted/40"
+ />
+ <p className="text-xs text-muted-foreground">Token untuk memvalidasi request S2S dari SPARC ke HaloAPU.</p>
+ </div>
+ <div className="space-y-2">
+ <Label>Webhook HMAC Secret</Label>
+ <Input
+ readOnly
+ value={sparcState.sparc_webhook_secret || 'Belum di-generate'}
+ className="font-mono text-xs bg-muted/40"
+ />
+ <p className="text-xs text-muted-foreground">Kunci rahasia untuk menyegel payload webhook HMAC-SHA256 ke SPARC.</p>
+ </div>
+ </div>
+
+ <div className="flex flex-wrap items-center gap-2">
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ onClick={handleGenerateCreds}
+ disabled={isGeneratingCreds}
+ >
+ {isGeneratingCreds ? 'Memproses...' : '🔑 Generate / Perbarui Kredensial'}
+ </Button>
+ </div>
+
+ <div className="space-y-2">
+ <Label>Operator Default Humas</Label>
+ <select
+ className="w-full border rounded-md px-3 py-2 text-sm bg-background"
+ value={sparcState.sparc_default_admin_id}
+ onChange={(e) => setSparcState((prev) => ({ ...prev, sparc_default_admin_id: e.target.value }))}
+ >
+ <option value="">-- Pilih Operator Humas --</option>
+ {(configs.humasAdmins || []).map((adm: HumasAdminItem) => (
+ <option key={adm.id} value={adm.id}>
+ {adm.name} ({adm.username})
+ </option>
+ ))}
+ </select>
+ <p className="text-xs text-muted-foreground">Admin default yang dicatat pada TicketLog jika nama PIC SPARC tidak cocok dengan akun admin HaloAPU.</p>
+ </div>
+
+ <div className="p-3.5 rounded-lg border bg-muted/20 space-y-2 text-xs">
+ <p className="font-semibold text-foreground">Endpoint S2S HaloAPU (Didaftarkan di Settings SPARC):</p>
+ <code className="block p-2 rounded bg-muted font-mono text-[11px] select-all">
+ {typeof window !== 'undefined' ? `${window.location.origin}/api/integrations/sparc` : '/api/integrations/sparc'}
+ </code>
+ <p className="text-muted-foreground">
+ Salin <strong>SPARC API Bearer Token</strong> dan <strong>Webhook Secret</strong> di atas ke menu <em>Settings → HALO APU</em> di aplikasi SPARC.
+ </p>
+ </div>
+
+ {testSparcResult && (
+ <div className={`p-3 rounded-lg text-xs border ${testSparcResult.success ? 'bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-300' : 'bg-destructive/10 border-destructive/30 text-destructive'}`}>
+ {testSparcResult.message}
+ </div>
+ )}
+
+ <div className="flex flex-wrap items-center justify-between pt-4 border-t gap-2">
+ <Button
+ type="button"
+ variant="outline"
+ onClick={handleTestSparc}
+ disabled={isTestingSparc || !sparcState.sparc_base_url}
+ >
+ {isTestingSparc ? 'Menguji...' : '🔌 Tes Koneksi Webhook ke SPARC'}
+ </Button>
+ <Button
+ type="button"
+ onClick={handleSaveSparc}
+ disabled={isSavingSparc}
+ >
+ {isSavingSparc ? 'Menyimpan...' : 'Simpan Integrasi SPARC'}
+ </Button>
+ </div>
+ </CardContent>
+ </Card>
+ </TabsContent>
 
  <TabsContent value="scheduler" className="space-y-4 mt-4">
  <Card>

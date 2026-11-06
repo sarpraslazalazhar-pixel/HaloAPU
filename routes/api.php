@@ -1,14 +1,14 @@
 <?php
 
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\AuthController;
-use App\Http\Controllers\Api\TicketController;
-use App\Http\Controllers\Api\ServiceController;
-use App\Http\Controllers\Api\DashboardApiController;
 use App\Http\Controllers\Api\CsatApiController;
-use App\Http\Controllers\Api\NotificationApiController;
+use App\Http\Controllers\Api\DashboardApiController;
 use App\Http\Controllers\Api\MonitorApiController;
+use App\Http\Controllers\Api\NotificationApiController;
+use App\Http\Controllers\Api\ServiceController;
+use App\Http\Controllers\Api\SparcIntegrationController;
+use App\Http\Controllers\Api\TicketController;
+use Illuminate\Support\Facades\Route;
 
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
@@ -72,3 +72,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/settings/device-lock', [AuthController::class, 'getDeviceLockSetting']);
     Route::post('/admin/settings/device-lock', [AuthController::class, 'toggleDeviceLockSetting']);
 });
+
+// =====================================================================
+// SPARC v3 Server-to-Server Integration API
+// =====================================================================
+Route::prefix('integrations/sparc')
+    ->middleware('sparc.token')
+    ->group(function () {
+        Route::get('ping', [SparcIntegrationController::class, 'ping']);
+        Route::get('tickets', [SparcIntegrationController::class, 'index']);
+        Route::get('tickets/{id}', [SparcIntegrationController::class, 'show']);
+        Route::post('tickets/{id}/status', [SparcIntegrationController::class, 'updateStatus']);
+        Route::post('tickets/{id}/reply', [SparcIntegrationController::class, 'reply']);
+        Route::get('attachments/{attachment}', [SparcIntegrationController::class, 'streamAttachment']);
+    });

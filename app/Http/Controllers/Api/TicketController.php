@@ -26,6 +26,7 @@ use App\Services\TicketStatusService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -152,7 +153,13 @@ class TicketController extends Controller
         // form_data might be a JSON string if sent via FormData
         $formData = $request->input('form_data');
         if (is_string($formData)) {
-            $formData = json_decode($formData, true);
+            $decoded = json_decode($formData, true);
+            if (is_array($decoded)) {
+                $formData = $decoded;
+            }
+        }
+        if (! is_array($formData)) {
+            $formData = [];
         }
 
         $validated = $request->validate([
@@ -160,98 +167,16 @@ class TicketController extends Controller
             'priority' => 'nullable|string',
         ]);
 
-        $ticket = new Ticket;
         $subUnit = SubUnit::find($validated['sub_unit_id']);
-
-        if ($user instanceof Admin) {
-            $matchedUser = User::where('username', $user->username)
-                ->orWhere('email', $user->email)
-                ->first();
-            $ticket->user_id = $matchedUser?->id;
-            $ticket->created_by_admin_id = $user->id;
-        } else {
-            $ticket->user_id = $user->id;
-            $ticket->created_by_admin_id = null;
-        }
-        $ticket->divisi_id = $user->divisi_id ?? null;
-        $ticket->org_unit_id = $user->org_unit_id ?? null;
-        $ticket->jabatan_id = $user->jabatan_id ?? null;
-        $ticket->sub_unit_id = $validated['sub_unit_id'];
-        $ticket->unit_id = $subUnit ? $subUnit->unit_id : null;
-        $slaCalculator = new SlaCalculator;
-        $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
-        $ticket->status = $initialStatus;
-        $ticket->priority = $validated['priority'] ?? 'normal';
-        // Validate file attachments before saving
-        if ($request->hasFile('attachments')) {
-            $flatFiles = [];
-            foreach ($request->file('attachments') as $files) {
-                foreach (is_array($files) ? $files : [$files] as $f) {
-                    if ($f) {
-                        $flatFiles[] = $f;
-                    }
-                }
-            }
-            Validator::make(
-                ['files' => $flatFiles],
-                ['files.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx']
-            )->validate();
+        if (! $subUnit) {
+            return response()->json(['message' => 'Layanan (sub unit) tidak ditemukan.'], 404);
         }
 
-        $ticket->save();
-
-        // Handle file attachments
-        if ($request->hasFile('attachments')) {
-            foreach ($request->file('attachments') as $fieldId => $files) {
-                $filesArr = is_array($files) ? $files : [$files];
-                foreach ($filesArr as $file) {
-                    $originalName = $file->getClientOriginalName() ?: 'attachment';
-                    $ext = $file->getClientOriginalExtension() ?: ($file->guessExtension() ?: 'jpg');
-                    if (! str_contains($originalName, '.')) {
-                        $originalName = ($originalName === 'attachment' ? 'foto_'.time() : $originalName).'.'.$ext;
-                    }
-                    $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
-                    TicketAttachment::create([
-                        'ticket_id' => $ticket->id,
-                        'field_id' => $fieldId,
-                        'file_path' => $path,
-                        'original_name' => $originalName,
-                        'mime_type' => $file->getMimeType() ?: ($file->getClientMimeType() ?: 'image/jpeg'),
-                        'file_size' => $file->getSize(),
-                    ]);
-                }
-            }
-        }
-
-        // Create initial log
-        TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => $user instanceof Admin ? $user->id : null,
-            'aksi' => 'dibuat',
-            'catatan' => 'Tiket dibuat oleh '.($user->name ?? $user->username),
-            'timestamp' => now(),
-        ]);
-
-        // SLA Tracking
-        if ($initialStatus === 'pending') {
-            TicketSlaTracking::create([
-                'ticket_id' => $ticket->id,
-                'sla_response_deadline' => null,
-                'sla_resolution_deadline' => null,
-                'paused_at' => now(),
-                'total_paused_minutes' => 0,
-                'current_tier' => 0,
-            ]);
-        } else {
-            TicketSlaTracking::create([
-                'ticket_id' => $ticket->id,
-                'sla_response_deadline' => $slaCalculator->calculateResponseDeadline($ticket),
-                'sla_resolution_deadline' => $slaCalculator->calculateResolutionDeadline($ticket),
-                'current_tier' => 0,
-            ]);
-        }
-        // Integrasi Live Monitor (Booking Aset Generik)
-        if ($subUnit && $subUnit->is_monitored) {
+        // Check asset schedule conflict BEFORE creating ticket if monitored
+        $startDT = null;
+        $endDT = null;
+        $assetName = null;
+        if ($subUnit->is_monitored) {
             $assetName = $formData[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
 
             $dateStr = $subUnit->monitor_date_field_id
@@ -281,24 +206,133 @@ class TicketController extends Controller
                 ->exists();
 
             if ($bentrok) {
-                // Return error response directly since API
                 return response()->json([
                     'message' => 'Gagal membuat tiket',
                     'errors' => ['form_data.'.$subUnit->monitor_asset_field_id => ['Aset ini sudah dipesan pada jam tersebut.']],
                 ], 422);
             }
-
-            RoomVehicleBooking::create([
-                'ticket_id' => $ticket->id,
-                'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
-                'nama_aset' => $assetName,
-                'tanggal_mulai' => $startDT,
-                'tanggal_selesai' => $endDT,
-                'status' => 'open',
-            ]);
         }
 
-        // Notify admins and user
+        // Validate file attachments before saving
+        if ($request->hasFile('attachments')) {
+            $flatFiles = [];
+            foreach ($request->file('attachments') as $files) {
+                foreach (is_array($files) ? $files : [$files] as $f) {
+                    if ($f) {
+                        $flatFiles[] = $f;
+                    }
+                }
+            }
+            Validator::make(
+                ['files' => $flatFiles],
+                ['files.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx']
+            )->validate();
+        }
+
+        $slaCalculator = new SlaCalculator;
+        $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
+
+        $ticket = DB::transaction(function () use (
+            $request,
+            $user,
+            $validated,
+            $subUnit,
+            $formData,
+            $initialStatus,
+            $slaCalculator,
+            $startDT,
+            $endDT,
+            $assetName
+        ) {
+            $ticket = new Ticket;
+
+            if ($user instanceof Admin) {
+                $matchedUser = User::where('username', $user->username)
+                    ->orWhere('email', $user->email)
+                    ->first();
+                $ticket->user_id = $matchedUser?->id;
+                $ticket->created_by_admin_id = $user->id;
+            } else {
+                $ticket->user_id = $user->id;
+                $ticket->created_by_admin_id = null;
+            }
+            $ticket->divisi_id = $user->divisi_id ?? null;
+            $ticket->org_unit_id = $user->org_unit_id ?? null;
+            $ticket->jabatan_id = $user->jabatan_id ?? null;
+            $ticket->sub_unit_id = $validated['sub_unit_id'];
+            $ticket->unit_id = $subUnit->unit_id;
+            $ticket->form_data = $formData;
+            $ticket->status = $initialStatus;
+            $ticket->priority = $validated['priority'] ?? 'normal';
+            $ticket->save();
+
+            // Handle file attachments
+            if ($request->hasFile('attachments')) {
+                foreach ($request->file('attachments') as $fieldId => $files) {
+                    $filesArr = is_array($files) ? $files : [$files];
+                    foreach ($filesArr as $file) {
+                        $originalName = $file->getClientOriginalName() ?: 'attachment';
+                        $ext = $file->getClientOriginalExtension() ?: ($file->guessExtension() ?: 'jpg');
+                        if (! str_contains($originalName, '.')) {
+                            $originalName = ($originalName === 'attachment' ? 'foto_'.time() : $originalName).'.'.$ext;
+                        }
+                        $path = $file->store("ticket-attachments/{$ticket->id}", 'public');
+                        TicketAttachment::create([
+                            'ticket_id' => $ticket->id,
+                            'field_id' => is_numeric($fieldId) ? (int) $fieldId : null,
+                            'file_path' => $path,
+                            'original_name' => $originalName,
+                            'mime_type' => $file->getMimeType() ?: ($file->getClientMimeType() ?: 'image/jpeg'),
+                            'file_size' => $file->getSize(),
+                        ]);
+                    }
+                }
+            }
+
+            // Create initial log
+            TicketLog::create([
+                'ticket_id' => $ticket->id,
+                'admin_id' => $user instanceof Admin ? $user->id : null,
+                'aksi' => 'dibuat',
+                'catatan' => 'Tiket dibuat oleh '.($user->name ?? $user->username),
+                'timestamp' => now(),
+            ]);
+
+            // SLA Tracking
+            if ($initialStatus === 'pending') {
+                TicketSlaTracking::create([
+                    'ticket_id' => $ticket->id,
+                    'sla_response_deadline' => null,
+                    'sla_resolution_deadline' => null,
+                    'paused_at' => now(),
+                    'total_paused_minutes' => 0,
+                    'current_tier' => 0,
+                ]);
+            } else {
+                TicketSlaTracking::create([
+                    'ticket_id' => $ticket->id,
+                    'sla_response_deadline' => $slaCalculator->calculateResponseDeadline($ticket),
+                    'sla_resolution_deadline' => $slaCalculator->calculateResolutionDeadline($ticket),
+                    'current_tier' => 0,
+                ]);
+            }
+
+            // Integrasi Live Monitor (Booking Aset Generik)
+            if ($subUnit && $subUnit->is_monitored && $startDT && $endDT) {
+                RoomVehicleBooking::create([
+                    'ticket_id' => $ticket->id,
+                    'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
+                    'nama_aset' => $assetName ?? 'Aset Tidak Diketahui',
+                    'tanggal_mulai' => $startDT,
+                    'tanggal_selesai' => $endDT,
+                    'status' => 'open',
+                ]);
+            }
+
+            return $ticket;
+        });
+
+        // Notify admins and user (outside transaction)
         try {
             if ($ticket->user) {
                 $ticket->user->notify(new TicketCreatedUserNotification($ticket));

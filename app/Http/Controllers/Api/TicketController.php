@@ -190,12 +190,43 @@ class TicketController extends Controller
             $startFieldVal = $formData[(string) $subUnit->monitor_start_field_id] ?? now();
             $endFieldVal = $formData[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
 
-            if ($dateStr) {
-                $startDT = Carbon::parse($dateStr.' '.Carbon::parse($startFieldVal)->format('H:i:s'));
-                $endDT = Carbon::parse(($endDateStr ?? $dateStr).' '.Carbon::parse($endFieldVal)->format('H:i:s'));
-            } else {
-                $startDT = Carbon::parse($startFieldVal);
-                $endDT = Carbon::parse($endFieldVal);
+            try {
+                if ($dateStr) {
+                    $startDT = Carbon::parse($dateStr.' '.Carbon::parse($startFieldVal)->format('H:i:s'));
+                    $endDT = Carbon::parse(($endDateStr ?? $dateStr).' '.Carbon::parse($endFieldVal)->format('H:i:s'));
+                } else {
+                    $startDT = Carbon::parse($startFieldVal);
+                    $endDT = Carbon::parse($endFieldVal);
+                }
+            } catch (\Throwable $e) {
+                return response()->json([
+                    'message' => 'Format tanggal atau waktu peminjaman tidak valid.',
+                    'errors' => ['form_data' => ['Format tanggal atau waktu peminjaman tidak valid.']],
+                ], 422);
+            }
+
+            if ($dateStr && $endDateStr && Carbon::parse($endDateStr)->lt(Carbon::parse($dateStr))) {
+                $errField = $subUnit->monitor_end_date_field_id ?: $subUnit->monitor_date_field_id;
+                return response()->json([
+                    'message' => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
+                    'errors' => ['form_data.'.$errField => ['Tanggal selesai tidak boleh sebelum tanggal mulai.']],
+                ], 422);
+            }
+
+            if ($endDT->lte($startDT)) {
+                $errField = $subUnit->monitor_end_field_id ?: $subUnit->monitor_start_field_id;
+                return response()->json([
+                    'message' => 'Waktu selesai harus lebih besar dari waktu mulai.',
+                    'errors' => ['form_data.'.$errField => ['Waktu selesai harus lebih besar dari waktu mulai.']],
+                ], 422);
+            }
+
+            if ($startDT->lt(now()->subMinutes(5))) {
+                $errField = $subUnit->monitor_date_field_id ?: $subUnit->monitor_start_field_id;
+                return response()->json([
+                    'message' => 'Tanggal atau waktu mulai tidak boleh di masa lalu.',
+                    'errors' => ['form_data.'.$errField => ['Tanggal atau waktu mulai tidak boleh di masa lalu.']],
+                ], 422);
             }
 
             // Cek bentrok
@@ -204,7 +235,6 @@ class TicketController extends Controller
                 ->where('tanggal_mulai', '<', $endDT)
                 ->where('tanggal_selesai', '>', $startDT)
                 ->exists();
-
             if ($bentrok) {
                 return response()->json([
                     'message' => 'Gagal membuat tiket',

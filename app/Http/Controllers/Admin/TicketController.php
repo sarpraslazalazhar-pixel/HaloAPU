@@ -247,12 +247,32 @@ class TicketController extends Controller
                     $endDT = Carbon::parse($endFieldVal);
                 }
 
+                if ($dateStr && $endDateStr && Carbon::parse($endDateStr)->lt(Carbon::parse($dateStr))) {
+                    $errField = $subUnit->monitor_end_date_field_id ?: $subUnit->monitor_date_field_id;
+                    throw ValidationException::withMessages([
+                        'form_data.'.$errField => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
+                    ]);
+                }
+
+                if ($endDT->lte($startDT)) {
+                    $errField = $subUnit->monitor_end_field_id ?: $subUnit->monitor_start_field_id;
+                    throw ValidationException::withMessages([
+                        'form_data.'.$errField => 'Waktu selesai harus lebih besar dari waktu mulai.',
+                    ]);
+                }
+
+                if ($startDT->lt(now()->subMinutes(5))) {
+                    $errField = $subUnit->monitor_date_field_id ?: $subUnit->monitor_start_field_id;
+                    throw ValidationException::withMessages([
+                        'form_data.'.$errField => 'Tanggal atau waktu mulai tidak boleh di masa lalu.',
+                    ]);
+                }
+
                 $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)
                     ->whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
                     ->where('tanggal_mulai', '<', $endDT)
                     ->where('tanggal_selesai', '>', $startDT)
                     ->exists();
-
                 if ($bentrok) {
                     throw ValidationException::withMessages([
                         'form_data.'.$subUnit->monitor_asset_field_id => 'Aset ini sudah dipesan pada jam tersebut.',

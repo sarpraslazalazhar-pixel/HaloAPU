@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
 import { TicketTimeline } from '@/Components/TicketTimeline';
-import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
+import { TicketAttachmentList, type Attachment } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
@@ -27,9 +27,61 @@ const statusLabels = {
   open: 'Baru', on_proses: 'Diproses', pending: 'Tertunda', solve: 'Selesai', reject: 'Ditolak', dibatalkan: 'Dibatalkan', need_revision: 'Butuh Revisi', accepted: 'Diterima User',
 } satisfies Record<string, string>;
 
-export default function TicketDetail({ ticket, formFields, operators }: any) {
+interface TicketDetailData {
+  id: number;
+  formatted_id?: string;
+  status: string;
+  priority?: string | null;
+  user_id?: number | null;
+  created_by_admin_id?: number | null;
+  assigned_admin_id?: number | null;
+  dikembalikan_at?: string | null;
+  kondisi_kembali?: string | null;
+  catatan_kembali?: string | null;
+  form_data?: Record<string, string | number | boolean | null | undefined>;
+  user?: { id?: number; username?: string; name?: string; email?: string; no_wa?: string } | null;
+  created_by_admin?: { id?: number; username?: string; name?: string; email?: string; no_wa?: string } | null;
+  assigned_admin?: { id?: number; username?: string; name?: string } | null;
+  unit?: { id?: number; nama_unit?: string } | null;
+  sub_unit?: { id?: number; nama_layanan?: string; wajib_kembali?: boolean } | null;
+  org_divisi?: { nama_divisi?: string } | null;
+  org_unit?: { nama_unit_organisasi?: string } | null;
+  jabatan?: { nama_jabatan?: string } | null;
+  booking?: {
+    id?: number;
+    status: string;
+    tipe?: string;
+    nama_aset?: string;
+    tanggal_mulai: string;
+    tanggal_selesai: string;
+  } | null;
+  attachments?: Attachment[];
+  logs?: Array<{ id: number; ticket_id: number; admin_id?: number | null; aksi: string; catatan?: string | null; timestamp: string }>;
+  sla_tracking?: {
+    sla_response_deadline?: string | null;
+    sla_resolution_deadline?: string | null;
+    responded_at?: string | null;
+    resolved_at?: string | null;
+    is_response_breached?: boolean;
+    is_resolution_breached?: boolean;
+    paused_at?: string | null;
+    total_paused_minutes: number;
+  } | null;
+}
+
+interface TicketDetailProps {
+  ticket: TicketDetailData;
+  formFields?: Array<{ id: number; label: string; tipe_field: string; [key: string]: unknown }>;
+  operators?: Array<{ id: number; name?: string; username?: string }>;
+  isSubmittedByMe?: boolean;
+}
+
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
-  const { auth, errors: pageErrors } = usePage().props as any;
+  const { auth, errors: pageErrors } = usePage().props as unknown as {
+    auth?: { is_super_admin?: boolean; permissions?: string[]; admin?: { id?: number } };
+    errors?: Record<string, string>;
+  };
   const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
 
   const [editorOpen, setEditorOpen] = useState(false);
@@ -37,8 +89,11 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelBookingConfirm, setShowCancelBookingConfirm] = useState(false);
   const [showCancelTicketConfirm, setShowCancelTicketConfirm] = useState(false);
+  const isCreator = typeof isSubmittedByMe === 'boolean'
+    ? isSubmittedByMe
+    : (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id);
   const canCancelTicket = ticket.status === 'open'
-    && (auth?.is_super_admin || (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id));
+    && (auth?.is_super_admin || isCreator);
   const [showKembaliModal, setShowKembaliModal] = useState(false);
   const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
   const [catatanKembali, setCatatanKembali] = useState('');
@@ -335,9 +390,9 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
              <Card>
                <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
                <CardContent>
-                 {ticket.logs?.length > 0 ? (
-                   <TicketTimeline logs={ticket.logs} downloadRoute="admin.tiket.download" />
-                 ) : (
+                {ticket.logs && ticket.logs.length > 0 ? (
+                  <TicketTimeline logs={ticket.logs} downloadRoute="admin.tiket.download" />
+                ) : (
                    <p className="text-xs text-slate-500">Belum ada aktivitas timeline.</p>
                  )}
                </CardContent>
@@ -350,9 +405,9 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
              <Card>
                <CardHeader><CardTitle className="flex items-center gap-2"><Paperclip className="w-5 h-5" /> Daftar Lampiran Tiket</CardTitle></CardHeader>
                <CardContent>
-                 {ticket.attachments?.length > 0 ? (
-                   <TicketAttachmentList attachments={ticket.attachments} downloadRoute="admin.tiket.download" grouped={true} />
-                 ) : (
+                {ticket.attachments && ticket.attachments.length > 0 ? (
+                  <TicketAttachmentList attachments={ticket.attachments} downloadRoute="admin.tiket.download" grouped={true} />
+                ) : (
                    <p className="text-xs text-slate-500">Tidak ada lampiran file pada tiket ini.</p>
                  )}
                </CardContent>
@@ -410,9 +465,13 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
               <ConfirmDialog
                 open={showCancelBookingConfirm}
                 onOpenChange={setShowCancelBookingConfirm}
-                title={`Batalkan ${bookingServiceTitle}?`}
-                message={`${bookingServiceTitle} ini akan dibatalkan seketika dan aset akan langsung berstatus 'Tersedia' di Live Monitor. Yakin ingin membatalkan?`}
-                confirmText="Ya, Batalkan Booking"
+                title={isCreator ? `Batalkan ${bookingServiceTitle}?` : `Tolak ${bookingServiceTitle}?`}
+                message={
+                  isCreator
+                    ? `${bookingServiceTitle} ini akan dibatalkan seketika dan aset akan langsung berstatus 'Tersedia' di Live Monitor. Yakin ingin membatalkan?`
+                    : `Karena Anda bukan pembuat tiket, ${bookingServiceTitle} ini akan berstatus 'Ditolak' dan aset langsung berstatus 'Tersedia' di Live Monitor. Lanjutkan?`
+                }
+                confirmText={isCreator ? 'Ya, Batalkan Booking' : 'Ya, Tolak Booking'}
                 cancelText="Tutup"
                 onConfirm={handleCancelBooking}
               />
@@ -425,14 +484,18 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                     className="w-full flex items-center justify-center gap-1.5"
                     onClick={() => setShowCancelTicketConfirm(true)}
                   >
-                    <XCircle className="w-4 h-4" /> Batalkan Tiket
+                    <XCircle className="w-4 h-4" /> {isCreator ? 'Batalkan Tiket' : 'Tolak / Batalkan Tiket'}
                   </Button>
                   <ConfirmDialog
                     open={showCancelTicketConfirm}
                     onOpenChange={setShowCancelTicketConfirm}
-                    title="Batalkan Tiket?"
-                    message="Tiket yang dibatalkan tidak dapat diproses lagi oleh tim penangan. Yakin ingin membatalkan?"
-                    confirmText="Ya, Batalkan Tiket"
+                    title={isCreator ? 'Batalkan Tiket?' : 'Tolak Tiket?'}
+                    message={
+                      isCreator
+                        ? 'Tiket yang dibatalkan tidak dapat diproses lagi oleh tim penangan. Yakin ingin membatalkan?'
+                        : 'Karena Anda bukan pembuat tiket ini, membatalkan akan mengubah status tiket menjadi Ditolak. Yakin ingin melanjutkan?'
+                    }
+                    confirmText={isCreator ? 'Ya, Batalkan Tiket' : 'Ya, Tolak Tiket'}
                     cancelText="Tutup"
                     onConfirm={handleCancelTicket}
                   />
@@ -878,9 +941,9 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
                            <Clock className="w-3 h-3" /> Belum Dimulai
                          </span>
-                       ) : ticket.sla_tracking.responded_at ? (
-                         new Date(ticket.sla_tracking.responded_at) > new Date(ticket.sla_tracking.sla_response_deadline) ? (
-                           <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                      ) : ticket.sla_tracking.responded_at ? (
+                        ticket.sla_tracking.sla_response_deadline && new Date(ticket.sla_tracking.responded_at) > new Date(ticket.sla_tracking.sla_response_deadline) ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                              <XCircle className="w-3 h-3" /> Terlanggar
                            </span>
                          ) : (
@@ -921,9 +984,9 @@ export default function TicketDetail({ ticket, formFields, operators }: any) {
                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
                            <Clock className="w-3 h-3" /> Belum Dimulai
                          </span>
-                       ) : ticket.sla_tracking.resolved_at ? (
-                         new Date(ticket.sla_tracking.resolved_at) > new Date(ticket.sla_tracking.sla_resolution_deadline) ? (
-                           <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                      ) : ticket.sla_tracking.resolved_at ? (
+                        ticket.sla_tracking.sla_resolution_deadline && new Date(ticket.sla_tracking.resolved_at) > new Date(ticket.sla_tracking.sla_resolution_deadline) ? (
+                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                              <XCircle className="w-3 h-3" /> Terlanggar
                            </span>
                          ) : (

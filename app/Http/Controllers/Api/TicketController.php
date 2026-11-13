@@ -514,6 +514,11 @@ class TicketController extends Controller
         $responseData['isSubmittedByMe'] = $isAdmin
             ? $ticket->isSubmittedBy($user)
             : ((int) $ticket->user_id === (int) $user->id);
+        $responseData['hasActiveBooking'] = (bool) (
+            $ticket->booking
+            && ! in_array(strtolower((string) $ticket->booking->status), ['dibatalkan', 'reject', 'selesai'], true)
+            && (! $ticket->booking->tanggal_selesai || Carbon::parse($ticket->booking->tanggal_selesai)->isFuture())
+        );
 
         return response()->json(['data' => $responseData], 200);
     }
@@ -618,16 +623,22 @@ class TicketController extends Controller
     {
         $user = $request->user();
 
-        $ticket = Ticket::where('id', str_replace('-', '', $id))
+        $ticket = Ticket::with('booking')
+            ->where('id', str_replace('-', '', $id))
             ->orWhere('id', $id)
             ->first();
 
-        $isAdmin = $user instanceof Admin;
-        $isOwner = $isAdmin
-            ? ((int) $ticket->created_by_admin_id === (int) $user->id || $ticket->isAccessibleBy($user))
-            : ((int) $ticket->user_id === (int) $user->id);
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
+        }
 
-        if (! $ticket || ! $isOwner) {
+        $isAdmin = $user instanceof Admin;
+        $isCreator = $isAdmin
+            ? $ticket->isSubmittedBy($user)
+            : ((int) $ticket->user_id === (int) $user->id);
+        $canAccess = $isCreator || ($isAdmin && $ticket->isAccessibleBy($user));
+
+        if (! $canAccess) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
@@ -635,24 +646,43 @@ class TicketController extends Controller
             return response()->json(['message' => 'Hanya tiket dengan status Open yang bisa dibatalkan'], 422);
         }
 
-        $ticket->update(['status' => 'dibatalkan']);
+        $targetStatus = $isCreator ? 'dibatalkan' : 'reject';
+        $catatan = $isCreator
+            ? 'Tiket dibatalkan oleh '.($user->name ?? $user->username)
+            : 'Tiket ditolak/dibatalkan oleh Admin '.($user->name ?? $user->username);
+
+        $ticket->update(['status' => $targetStatus]);
 
         if ($ticket->booking) {
-            $ticket->booking->update(['status' => 'dibatalkan']);
+            $ticket->booking->update(['status' => $targetStatus]);
         }
 
         TicketLog::create([
             'ticket_id' => $ticket->id,
-            'admin_id' => null,
-            'aksi' => 'dibatalkan',
-            'catatan' => 'Tiket dibatalkan oleh '.($user->name ?? $user->username),
+            'admin_id' => $isAdmin ? $user->id : null,
+            'aksi' => $targetStatus,
+            'catatan' => $catatan,
             'timestamp' => now(),
         ]);
 
-        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.cancelled');
+        if (! $isCreator) {
+            try {
+                $ticket->load('user');
+                if ($ticket->user && class_exists(\App\Notifications\TicketStatusUpdatedNotification::class)) {
+                    $ticket->user->notify(new \App\Notifications\TicketStatusUpdatedNotification($ticket, $catatan));
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
+        app(SparcIntegrationService::class)->notifyIfEligible(
+            $ticket,
+            $isCreator ? 'ticket.cancelled' : 'ticket.status_updated'
+        );
 
         return response()->json([
-            'message' => 'Tiket berhasil dibatalkan',
+            'message' => $isCreator ? 'Tiket berhasil dibatalkan' : 'Tiket berhasil ditolak',
+            'data' => $this->formatTicket($ticket->fresh()),
         ]);
     }
 
@@ -679,22 +709,41 @@ class TicketController extends Controller
             return response()->json(['message' => 'Tidak ada data booking untuk tiket ini.'], 422);
         }
 
-        $ticket->booking->update(['status' => 'dibatalkan']);
-        $ticket->update(['status' => 'dibatalkan']);
+        $isCreator = $ticket->isSubmittedBy($admin);
+        $targetStatus = $isCreator ? 'dibatalkan' : 'reject';
 
-        $catatan = $request->input('catatan') ?: 'Booking dibatalkan oleh Admin dan aset telah dibebaskan.';
+        $ticket->booking->update(['status' => $targetStatus]);
+        $ticket->update(['status' => $targetStatus]);
+
+        $catatan = $request->input('catatan') ?: (
+            $isCreator
+                ? 'Booking dibatalkan oleh pengaju dan aset telah dibebaskan.'
+                : 'Booking ditolak oleh Admin dan aset telah dibebaskan.'
+        );
 
         TicketLog::create([
             'ticket_id' => $ticket->id,
             'admin_id' => $admin->id,
-            'aksi' => 'dibatalkan',
+            'aksi' => $targetStatus,
             'catatan' => $catatan,
             'timestamp' => now(),
         ]);
 
+        if (! $isCreator) {
+            try {
+                $ticket->load('user');
+                if ($ticket->user && class_exists(\App\Notifications\TicketStatusUpdatedNotification::class)) {
+                    $ticket->user->notify(new \App\Notifications\TicketStatusUpdatedNotification($ticket, $catatan));
+                }
+            } catch (\Throwable $e) {
+            }
+        }
+
         return response()->json([
             'success' => true,
-            'message' => 'Booking berhasil dibatalkan. Aset seketika tersedia kembali di Live Monitor.',
+            'message' => $isCreator
+                ? 'Booking berhasil dibatalkan. Aset seketika tersedia kembali di Live Monitor.'
+                : 'Booking ditolak. Aset seketika tersedia kembali di Live Monitor.',
             'data' => $this->formatTicket($ticket->fresh()),
         ]);
     }

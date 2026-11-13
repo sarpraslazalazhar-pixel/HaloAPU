@@ -343,6 +343,7 @@ class TicketController extends Controller
             'ticket' => $ticket,
             'formFields' => $formFields,
             'operators' => $operators,
+            'isSubmittedByMe' => $ticket->isSubmittedBy($admin),
         ]);
     }
 
@@ -482,9 +483,11 @@ class TicketController extends Controller
     public function cancel(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin']);
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+        $isCreator = $ticket->isSubmittedBy($admin);
 
-        if (! $isSuperAdmin && (int) $ticket->created_by_admin_id !== (int) $admin->id) {
+        if (! $isSuperAdmin && ! $isCreator) {
             abort(403, 'Hanya pengaju tiket yang dapat membatalkan tiket ini.');
         }
 
@@ -492,21 +495,43 @@ class TicketController extends Controller
             return redirect()->back()->with('error', 'Tiket hanya dapat dibatalkan saat berstatus open.');
         }
 
-        DB::transaction(function () use ($ticket, $admin) {
-            $ticket->update(['status' => 'dibatalkan']);
-            $ticket->booking?->update(['status' => 'dibatalkan']);
+        $targetStatus = $isCreator ? 'dibatalkan' : 'reject';
+        $catatan = $isCreator
+            ? 'Tiket dibatalkan oleh pengaju ('.($admin->name ?? $admin->username).')'
+            : 'Tiket ditolak/dibatalkan oleh Admin '.($admin->name ?? $admin->username);
+
+        DB::transaction(function () use ($ticket, $admin, $targetStatus, $catatan) {
+            $ticket->update(['status' => $targetStatus]);
+            $ticket->booking?->update(['status' => $targetStatus]);
 
             TicketLog::create([
                 'ticket_id' => $ticket->id,
                 'admin_id' => $admin->id,
-                'aksi' => 'dibatalkan',
-                'catatan' => 'Tiket dibatalkan oleh pengaju ('.$admin->name.')',
+                'aksi' => $targetStatus,
+                'catatan' => $catatan,
             ]);
         });
 
-        app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.cancelled');
+        if (! $isCreator) {
+            try {
+                $ticket->load('user');
+                if ($ticket->user) {
+                    $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $catatan));
+                }
+            } catch (\Exception $e) {
+                \Log::error('Gagal kirim notif reject/cancel admin: '.$e->getMessage());
+            }
+        }
 
-        return redirect()->back()->with('success', 'Tiket berhasil dibatalkan.');
+        app(SparcIntegrationService::class)->notifyIfEligible(
+            $ticket,
+            $isCreator ? 'ticket.cancelled' : 'ticket.status_updated'
+        );
+
+        return redirect()->back()->with(
+            'success',
+            $isCreator ? 'Tiket berhasil dibatalkan.' : 'Tiket berhasil ditolak.'
+        );
     }
 
     public function cancelBooking(Request $request, Ticket $ticket)
@@ -531,15 +556,22 @@ class TicketController extends Controller
                 ? preg_replace('/^penggunaan\s+/i', 'Peminjaman ', $rawService)
                 : "Peminjaman {$rawService}");
 
-        $ticket->booking->update(['status' => 'dibatalkan']);
-        $ticket->update(['status' => 'dibatalkan']);
+        $isCreator = $ticket->isSubmittedBy($admin);
+        $targetStatus = $isCreator ? 'dibatalkan' : 'reject';
 
-        $alasan = $request->input('catatan') ?: "{$layananTitle} dibatalkan oleh Admin dan aset telah dibebaskan.";
+        $ticket->booking->update(['status' => $targetStatus]);
+        $ticket->update(['status' => $targetStatus]);
+
+        $alasan = $request->input('catatan') ?: (
+            $isCreator
+                ? "{$layananTitle} dibatalkan oleh pengaju dan aset telah dibebaskan."
+                : "{$layananTitle} ditolak oleh Admin dan aset telah dibebaskan."
+        );
 
         TicketLog::create([
             'ticket_id' => $ticket->id,
             'admin_id' => $admin->id,
-            'aksi' => 'dibatalkan',
+            'aksi' => $targetStatus,
             'catatan' => $alasan,
         ]);
 
@@ -548,8 +580,8 @@ class TicketController extends Controller
             if ($ticket->user) {
                 $ticket->user->notify(new TicketStatusUpdatedNotification($ticket, $alasan));
                 $ticket->user->notify(new BrowserNotification(
-                    'Peminjaman Dibatalkan',
-                    "{$layananTitle} tiket #{$ticket->formatted_id} telah dibatalkan oleh Admin. Kini tersedia kembali di Live Monitor.",
+                    $isCreator ? 'Peminjaman Dibatalkan' : 'Peminjaman Ditolak',
+                    "{$layananTitle} tiket #{$ticket->formatted_id} telah ".($isCreator ? 'dibatalkan' : 'ditolak')." oleh Admin. Kini tersedia kembali di Live Monitor.",
                     "/tiket/{$ticket->id}"
                 ));
             }
@@ -557,7 +589,17 @@ class TicketController extends Controller
             \Log::error('Gagal kirim notif cancel booking admin: '.$e->getMessage());
         }
 
-        return redirect()->back()->with('success', 'Booking berhasil dibatalkan. Aset seketika tersedia kembali di Live Monitor.');
+        app(SparcIntegrationService::class)->notifyIfEligible(
+            $ticket,
+            $isCreator ? 'ticket.cancelled' : 'ticket.status_updated'
+        );
+
+        return redirect()->back()->with(
+            'success',
+            $isCreator
+                ? 'Booking berhasil dibatalkan. Aset seketika tersedia kembali di Live Monitor.'
+                : 'Booking ditolak. Aset seketika tersedia kembali di Live Monitor.'
+        );
     }
 
     public function kembalikanAlat(Request $request, Ticket $ticket)

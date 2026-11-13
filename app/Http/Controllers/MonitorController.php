@@ -20,13 +20,14 @@ class MonitorController extends Controller
     {
         $now = Carbon::now();
         $oneHourAgo = $now->copy()->subHour();
-        $oneHourLater = $now->copy()->addHour();
 
         // Ambil semua booking yang relevan (selesai dalam 1 jam terakhir atau di masa depan)
         $query = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
+            ->whereHas('ticket', function ($tq) {
+                $tq->whereNotIn('status', ['reject', 'dibatalkan']);
+            })
             ->where('tanggal_selesai', '>=', $oneHourAgo)
             ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name']);
-
         if ($tipe) {
             $query->where('tipe', $tipe);
         }
@@ -95,7 +96,7 @@ class MonitorController extends Controller
         };
 
         // Map status per aset
-        return $allAssets->map(function ($asset) use ($bookings, $now, $oneHourAgo, $oneHourLater, $formatWaktu) {
+        return $allAssets->map(function ($asset) use ($bookings, $now, $oneHourAgo, $formatWaktu) {
             $assetBookings = $bookings->where('nama_aset', $asset->nama_aset);
 
             // 1. Cek apakah sedang aktif berlangsung saat ini (mulai <= now < selesai)
@@ -106,7 +107,8 @@ class MonitorController extends Controller
 
             if ($activeBooking) {
                 $userStr = $activeBooking->ticket?->user?->name ?? $activeBooking->ticket?->createdByAdmin?->name ?? $activeBooking->ticket?->user?->username ?? $activeBooking->ticket?->createdByAdmin?->username ?? '-';
-                $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve']);
+                $isApproved = in_array($activeBooking->status, ['on_proses', 'disetujui', 'solve'])
+                    || in_array($activeBooking->ticket?->status, ['on_proses', 'solve']);
                 $statusLabel = $isApproved ? 'Sedang Dipakai' : 'Menunggu Persetujuan';
                 return [
                     'nama_aset' => $asset->nama_aset,
@@ -118,22 +120,23 @@ class MonitorController extends Controller
                 ];
             }
 
-            // 2. Cek apakah ada booking terdekat dalam 1 jam ke depan (now < mulai <= now + 1 jam)
-            $imminentBooking = $assetBookings->filter(function ($b) use ($now, $oneHourLater) {
-                $start = Carbon::parse($b->tanggal_mulai);
-                return $start->gt($now) && $start->lte($oneHourLater);
+            // 2. Cek apakah ada booking berikutnya di masa depan (now < mulai) — selaras dengan Mobile
+            $upcomingBooking = $assetBookings->filter(function ($b) use ($now) {
+                return Carbon::parse($b->tanggal_mulai)->gt($now);
             })->sortBy('tanggal_mulai')->first();
 
-            if ($imminentBooking) {
-                $displayStatus = $imminentBooking->status === 'open' ? 'Menunggu Persetujuan' : 'Dipesan';
-                $userStr = $imminentBooking->ticket?->user?->name ?? $imminentBooking->ticket?->createdByAdmin?->name ?? $imminentBooking->ticket?->user?->username ?? $imminentBooking->ticket?->createdByAdmin?->username ?? '-';
+            if ($upcomingBooking) {
+                $isApprovedUpcoming = in_array($upcomingBooking->status, ['on_proses', 'disetujui', 'solve'])
+                    || in_array($upcomingBooking->ticket?->status, ['on_proses', 'solve']);
+                $displayStatus = $isApprovedUpcoming ? 'Dipesan' : 'Menunggu Persetujuan';
+                $userStr = $upcomingBooking->ticket?->user?->name ?? $upcomingBooking->ticket?->createdByAdmin?->name ?? $upcomingBooking->ticket?->user?->username ?? $upcomingBooking->ticket?->createdByAdmin?->username ?? '-';
                 return [
                     'nama_aset' => $asset->nama_aset,
                     'tipe' => $asset->tipe,
                     'status' => $displayStatus,
                     'user' => $userStr,
-                    'waktu' => $formatWaktu($imminentBooking->tanggal_mulai, $imminentBooking->tanggal_selesai),
-                    'booking_id' => $imminentBooking->id,
+                    'waktu' => $formatWaktu($upcomingBooking->tanggal_mulai, $upcomingBooking->tanggal_selesai),
+                    'booking_id' => $upcomingBooking->id,
                 ];
             }
 
@@ -171,8 +174,13 @@ class MonitorController extends Controller
      */
     protected function getCalendarData()
     {
+        $now = Carbon::now();
         $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
-            ->whereBetween('tanggal_mulai', [Carbon::now()->startOfDay(), Carbon::now()->addDays(30)->endOfDay()])
+            ->whereHas('ticket', function ($tq) {
+                $tq->whereNotIn('status', ['reject', 'dibatalkan']);
+            })
+            ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
+            ->where('tanggal_mulai', '<=', $now->copy()->addDays(30)->endOfDay())
             ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name'])
             ->orderBy('tanggal_mulai')
             ->get()

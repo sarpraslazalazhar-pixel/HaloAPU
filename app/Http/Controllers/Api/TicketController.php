@@ -481,6 +481,9 @@ class TicketController extends Controller
         $responseData['revisionCount'] = $ticket->revision_count ?? 0;
         $responseData['isResultAccepted'] = (bool) $ticket->is_result_accepted;
         $responseData['isRevisionEnabled'] = $ticket->subUnit ? (bool) $ticket->subUnit->is_revision_enabled : false;
+        $responseData['isSubmittedByMe'] = $isAdmin
+            ? $ticket->isSubmittedBy($user)
+            : ((int) $ticket->user_id === (int) $user->id);
 
         return response()->json(['data' => $responseData], 200);
     }
@@ -678,7 +681,16 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (! $ticket || (int) $ticket->user_id !== (int) $user->id) {
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
+        }
+
+        $isAdmin = $user instanceof Admin;
+        $isOwner = $isAdmin
+            ? $ticket->isSubmittedBy($user)
+            : ((int) $ticket->user_id === (int) $user->id);
+
+        if (! $isOwner) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 
@@ -715,7 +727,16 @@ class TicketController extends Controller
             ->orWhere('id', $id)
             ->first();
 
-        if (! $ticket || (int) $ticket->user_id !== (int) $user->id) {
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
+        }
+
+        $isAdmin = $user instanceof Admin;
+        $isOwner = $isAdmin
+            ? $ticket->isSubmittedBy($user)
+            : ((int) $ticket->user_id === (int) $user->id);
+
+        if (! $isOwner) {
             return response()->json(['message' => 'Tiket tidak ditemukan atau akses ditolak'], 404);
         }
 

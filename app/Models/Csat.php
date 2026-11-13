@@ -10,6 +10,7 @@ class Csat extends Model
     protected $fillable = [
         'ticket_id',
         'user_id',
+        'admin_id',
         'rating',
         'komentar',
     ];
@@ -26,5 +27,10 @@ class Csat extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function admin(): BelongsTo
+    {
+        return $this->belongsTo(Admin::class);
     }
 }

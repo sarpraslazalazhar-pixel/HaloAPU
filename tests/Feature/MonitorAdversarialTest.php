@@ -50,9 +50,9 @@ class MonitorAdversarialTest extends TestCase
     }
 
     /**
-     * 1. Booking starting in the future on a different day should show as 'Tersedia' today.
+     * 1. Future booking on a different day should show as 'Dipesan' with borrower info (parity with mobile).
      */
-    public function test_booking_on_different_day_in_future_shows_as_tersedia_today(): void
+    public function test_booking_on_different_day_in_future_shows_as_dipesan(): void
     {
         $now = Carbon::create(2026, 7, 13, 12, 0, 0);
         Carbon::setTestNow($now);
@@ -74,9 +74,8 @@ class MonitorAdversarialTest extends TestCase
         $vipRoom = collect($assets)->firstWhere('nama_aset', 'Ruang VIP');
 
         $this->assertNotNull($vipRoom);
-        $this->assertEquals('Tersedia', $vipRoom['status']);
-        $this->assertNull($vipRoom['user']);
-
+        $this->assertEquals('Dipesan', $vipRoom['status']);
+        $this->assertEquals($this->user->name ?? $this->user->username, $vipRoom['user']);
         Carbon::setTestNow();
     }
 

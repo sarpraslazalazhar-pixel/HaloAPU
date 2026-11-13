@@ -25,13 +25,18 @@ class CsatApiController extends Controller
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
-        if ((int) $ticket->user_id !== (int) $user->id) {
+        $isAdmin = $user instanceof \App\Models\Admin;
+        $isOwner = $isAdmin
+            ? $ticket->isSubmittedBy($user)
+            : ((int) $ticket->user_id === (int) $user->id);
+
+        if (! $isOwner) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
 
-        if (!in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
+        if (! in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
             return response()->json([
-                'message' => 'Rating hanya bisa diberikan untuk tiket yang sudah diselesaikan'
+                'message' => 'Rating hanya bisa diberikan untuk tiket yang sudah diselesaikan',
             ], 422);
         }
 
@@ -41,13 +46,14 @@ class CsatApiController extends Controller
         ]);
 
         $csat = Csat::updateOrCreate(
-            ['ticket_id' => $ticket->id, 'user_id' => $user->id],
+            ['ticket_id' => $ticket->id],
             [
+                'user_id' => $isAdmin ? $ticket->user_id : $user->id,
+                'admin_id' => $isAdmin ? $user->id : null,
                 'rating' => $validated['rating'],
                 'komentar' => $validated['komentar'] ?? null,
             ]
         );
-
         // Update ticket status to 'Selesai' after rating
         if (in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
             if (strtolower($ticket->status) === 'solve' || $ticket->status !== 'Selesai') {
@@ -62,6 +68,10 @@ class CsatApiController extends Controller
             })->orWhereHas('roles', function ($q) {
                 $q->whereIn('name', ['superadmin', 'Super Admin']);
             })->get();
+
+            if ($isAdmin) {
+                $notifiedAdmins = $notifiedAdmins->where('id', '!=', $user->id)->values();
+            }
 
             if ($notifiedAdmins->isNotEmpty() && class_exists(\App\Notifications\TicketRatedAdminNotification::class)) {
                 \Illuminate\Support\Facades\Notification::send($notifiedAdmins, new \App\Notifications\TicketRatedAdminNotification($ticket, $validated['rating'], $validated['komentar'] ?? ''));
@@ -91,9 +101,19 @@ class CsatApiController extends Controller
 
         $query = Csat::query();
         if ($user instanceof \App\Models\Admin) {
-            $query->whereHas('ticket', function ($tq) use ($user) {
-                $tq->accessibleBy($user);
-            });
+            $scope = $request->query('scope', $request->query('tab', 'incoming'));
+            if (in_array($scope, ['submitted', 'saya_ajukan', 'mine'], true)) {
+                $query->where(function ($q) use ($user) {
+                    $q->where('admin_id', $user->id)
+                        ->orWhereHas('ticket', function ($tq) use ($user) {
+                            $tq->submittedBy($user);
+                        });
+                });
+            } else {
+                $query->whereHas('ticket', function ($tq) use ($user) {
+                    $tq->accessibleBy($user);
+                });
+            }
         } else {
             $query->where('user_id', $user->id);
         }
@@ -136,15 +156,20 @@ class CsatApiController extends Controller
         $user = $request->user();
 
         if ($user instanceof \App\Models\Admin) {
-            return response()->json(['data' => []], 200);
+            $pendingTickets = Ticket::submittedBy($user)
+                ->whereIn('status', ['solve', 'selesai'])
+                ->whereDoesntHave('csat')
+                ->with('subUnit:id,nama_layanan')
+                ->latest()
+                ->get();
+        } else {
+            $pendingTickets = Ticket::where('user_id', $user->id)
+                ->whereIn('status', ['solve', 'selesai'])
+                ->whereDoesntHave('csat')
+                ->with('subUnit:id,nama_layanan')
+                ->latest()
+                ->get();
         }
-
-        $pendingTickets = Ticket::where('user_id', $user->id)
-            ->whereIn('status', ['solve', 'selesai'])
-            ->whereDoesntHave('csat')
-            ->with('subUnit:id,nama_layanan')
-            ->latest()
-            ->get();
 
         $formatted = $pendingTickets->map(function ($ticket) {
             return [

@@ -10,6 +10,7 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class MonitorTest extends TestCase
@@ -137,7 +138,7 @@ class MonitorTest extends TestCase
         $this->assertEquals('Dipesan', $avanza['status']);
         $this->assertEquals($this->user->name ?? $this->user->username, $avanza['user']);
 
-        // 6. Booking starting in 3 hours (> 1 hour pre-buffer) should show 'Tersedia' on current card
+        // 6. Booking starting in 3 hours (> 1 hour) should show 'Dipesan' with user info (parity with mobile)
         RoomVehicleBooking::create([
             'ticket_id' => $this->ticket->id,
             'tipe' => 'kendaraan',
@@ -150,9 +151,8 @@ class MonitorTest extends TestCase
         $response = $this->actingAs($this->user)->get('/monitor');
         $assets = $response->original->getData()['page']['props']['assets'];
         $innova = collect($assets)->firstWhere('nama_aset', 'Innova');
-        $this->assertEquals('Tersedia', $innova['status']);
-        $this->assertNull($innova['user']);
-
+        $this->assertEquals('Dipesan', $innova['status']);
+        $this->assertEquals($this->user->name ?? $this->user->username, $innova['user']);
         // 7. Booking starting 1 minute ago with status 'open' (submitted at 12:01 for 12:00) -> should show 'Menunggu Persetujuan'
         RoomVehicleBooking::create([
             'ticket_id' => $this->ticket->id,
@@ -170,6 +170,49 @@ class MonitorTest extends TestCase
         $this->assertEquals('Menunggu Persetujuan', $urgent['status']);
 
         // Reset testing time
+        Carbon::setTestNow();
+    }
+
+    public function test_web_and_mobile_monitor_assets_match_for_upcoming_and_ticket_status(): void
+    {
+        $now = Carbon::create(2026, 7, 13, 12, 0, 0);
+        Carbon::setTestNow($now);
+
+        $processingTicket = Ticket::create([
+            'user_id' => $this->user->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => [],
+            'status' => 'on_proses',
+        ]);
+
+        // Booking starts 4 hours later, booking.status='open' but ticket.status='on_proses'
+        RoomVehicleBooking::create([
+            'ticket_id' => $processingTicket->id,
+            'tipe' => 'kendaraan',
+            'nama_aset' => 'Hiace',
+            'tanggal_mulai' => $now->copy()->addHours(4),
+            'tanggal_selesai' => $now->copy()->addHours(7),
+            'status' => 'open',
+        ]);
+
+        $webResponse = $this->actingAs($this->user)->get('/monitor');
+        $webResponse->assertStatus(200);
+        $webAssets = collect($webResponse->original->getData()['page']['props']['assets']);
+        $webHiace = $webAssets->firstWhere('nama_aset', 'Hiace');
+
+        Sanctum::actingAs($this->user, ['*']);
+        $apiResponse = $this->getJson('/api/monitor/assets');
+        $apiResponse->assertOk();
+        $apiAssets = collect($apiResponse->json('data'));
+        $apiHiace = $apiAssets->firstWhere('nama_aset', 'Hiace');
+
+        $this->assertNotNull($webHiace);
+        $this->assertNotNull($apiHiace);
+        $this->assertEquals($apiHiace['status'], $webHiace['status']);
+        $this->assertEquals('Dipesan', $webHiace['status']);
+        $this->assertEquals($apiHiace['user'], $webHiace['user']);
+
         Carbon::setTestNow();
     }
 }

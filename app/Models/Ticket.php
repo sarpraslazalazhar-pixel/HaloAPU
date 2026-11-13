@@ -259,6 +259,39 @@ class Ticket extends Model
     }
 
     /**
+     * Cek apakah tiket ini diajukan oleh admin terkait.
+     */
+    public function isSubmittedBy(Admin $admin): bool
+    {
+        if ((int) $this->created_by_admin_id === (int) $admin->id) {
+            return true;
+        }
+
+        if (! $this->user_id) {
+            return false;
+        }
+
+        return \App\Models\User::where('id', $this->user_id)
+            ->where(function ($q) use ($admin) {
+                $hasCondition = false;
+                if (! empty($admin->username)) {
+                    $q->where('username', $admin->username);
+                    $hasCondition = true;
+                }
+                if (! empty($admin->email)) {
+                    $hasCondition
+                        ? $q->orWhere('email', $admin->email)
+                        : $q->where('email', $admin->email);
+                    $hasCondition = true;
+                }
+                if (! $hasCondition) {
+                    $q->whereRaw('1 = 0');
+                }
+            })
+            ->exists();
+    }
+
+    /**
      * Tiket yang boleh dilihat: masuk tim ATAU diajukan oleh admin ini.
      */
     public function scopeAccessibleBy($query, ?Admin $admin = null): void

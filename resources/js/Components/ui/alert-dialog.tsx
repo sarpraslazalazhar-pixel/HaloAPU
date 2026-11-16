@@ -80,6 +80,8 @@ const AlertDialogDescription = React.forwardRef<
 
 AlertDialogDescription.displayName = AlertDialogPrimitives.Description.displayName;
 
+// Base UI's Button expects `render`, not `asChild`; without it the Radix
+// close button never receives className/handlers and click does nothing.
 const AlertDialogAction = React.forwardRef<
   React.ElementRef<typeof AlertDialogPrimitives.Action>,
   React.ComponentPropsWithoutRef<typeof AlertDialogPrimitives.Action>

@@ -336,7 +336,7 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Batal</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => router.post(route('manajemen-operator.reset-device', admin.id), {}, { preserveScroll: true })}
+                                    onClick={() => router.post(route('admin.manajemen-operator.reset-device', admin.id), {}, { preserveScroll: true })}
                                     className="bg-amber-600 text-white hover:bg-amber-700"
                                   >
                                     Buka Kunci

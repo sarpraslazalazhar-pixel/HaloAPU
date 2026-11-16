@@ -360,7 +360,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Batal</AlertDialogCancel>
                                   <AlertDialogAction
-                                    onClick={() => router.post(route('manajemen-user.reset-device', user.id), {}, { preserveScroll: true })}
+                                    onClick={() => router.post(route('admin.manajemen-user.reset-device', user.id), {}, { preserveScroll: true })}
                                     className="bg-amber-600 text-white hover:bg-amber-700"
                                   >
                                     Buka Kunci

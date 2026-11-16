@@ -140,7 +140,7 @@ class AdminManagementController extends Controller
         $admin = $manajemen_operator;
 
         if ($admin->id === auth('admin')->id()) {
-            return back()->withErrors(['error' => 'Kamu tidak bisa menghapus akun kamu sendiri.']);
+            return back()->with('error', 'Kamu tidak bisa menghapus akun kamu sendiri.');
         }
 
         $currentAdmin = auth('admin')->user();
@@ -171,7 +171,7 @@ class AdminManagementController extends Controller
     {
         $admin = $manajemen_operator;
         if (empty($admin->email)) {
-            return back()->withErrors(['error' => 'Operator tidak memiliki alamat email.']);
+            return back()->with('error', 'Operator tidak memiliki alamat email.');
         }
 
         $status = \Illuminate\Support\Facades\Password::broker('admins')->sendResetLink([
@@ -180,6 +180,6 @@ class AdminManagementController extends Controller
 
         return $status === \Illuminate\Support\Facades\Password::RESET_LINK_SENT
             ? back()->with('success', "Link reset password berhasil dikirim ke {$admin->email}.")
-            : back()->withErrors(['error' => __($status)]);
+            : back()->with('error', __($status));
     }
 }

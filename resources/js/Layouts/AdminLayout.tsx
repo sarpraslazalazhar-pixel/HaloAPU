@@ -375,7 +375,7 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
 }
 
 export default function AdminLayout({ children, title, hideBottomNav }: AdminLayoutProps) {
- const { auth, flash, appConfig } = usePage<any>().props;
+ const { auth, flash, appConfig, errors: pageErrors } = usePage<any>().props;
  const admin = auth.admin || auth.user;
  const [profileOpen, setProfileOpen] = useState(false);
  const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -430,6 +430,12 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     if (flash?.error) toast.error(flash.error, { id: 'flash-error' });
 
     if (flash?.message) toast(flash.message, { id: 'flash-message' });
+
+    // Validation errors (back()->withErrors(...)) were previously swallowed outside forms.
+    const firstError = Object.values(pageErrors ?? {}).flat()[0];
+    if (typeof firstError === 'string' && firstError !== flash?.error) {
+      toast.error(firstError, { id: 'page-error' });
+    }
 
     // Listen for Echo notifications
     if (window.Echo && admin) {
@@ -492,7 +498,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
         window.Echo.leave(channel);
       };
     }
-  }, [flash, admin]);
+  }, [flash, pageErrors, admin]);
 
   const url = usePage().url;
   const isActive = (routePath: string) => isRouteActive(url, routePath);

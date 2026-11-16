@@ -111,9 +111,7 @@ class UserManagementController extends Controller
 
         $activeTickets = $user->tickets()->whereNotIn('status', ['Selesai'])->count();
         if ($activeTickets > 0) {
-            return back()->withErrors([
-                'error' => "User ini memiliki {$activeTickets} tiket aktif. Selesaikan terlebih dahulu.",
-            ]);
+            return back()->with('error', "User ini memiliki {$activeTickets} tiket aktif. Selesaikan terlebih dahulu.");
         }
 
         $user->delete();
@@ -136,7 +134,7 @@ class UserManagementController extends Controller
     public function sendResetLink(User $user)
     {
         if (empty($user->email)) {
-            return back()->withErrors(['error' => 'User tidak memiliki alamat email.']);
+            return back()->with('error', 'User tidak memiliki alamat email.');
         }
 
         $status = \Illuminate\Support\Facades\Password::broker('users')->sendResetLink([
@@ -145,6 +143,6 @@ class UserManagementController extends Controller
 
         return $status === \Illuminate\Support\Facades\Password::RESET_LINK_SENT
             ? back()->with('success', "Link reset password berhasil dikirim ke {$user->email}.")
-            : back()->withErrors(['error' => __($status)]);
+            : back()->with('error', __($status));
     }
 }

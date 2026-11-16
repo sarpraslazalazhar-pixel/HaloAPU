@@ -183,7 +183,7 @@ class DeviceLockConfigController extends Controller
         } elseif ($type === 'admin') {
             $account = Admin::findOrFail($id);
         } else {
-            return back()->withErrors(['error' => 'Tipe akun tidak valid.']);
+            return back()->with('error', 'Tipe akun tidak valid.');
         }
 
         $account->update([

@@ -71,4 +71,28 @@ class DeviceUnlockTest extends TestCase
         $this->assertDatabaseCount('account_devices', 0);
         $this->loginAs($user, 'device-baru')->assertOk();
     }
+
+    public function test_delete_user_with_active_ticket_flashes_visible_error(): void
+    {
+        $this->withoutMiddleware([PreventRequestForgery::class, \Spatie\Permission\Middleware\PermissionMiddleware::class]);
+
+        $admin = Admin::factory()->create(['password' => bcrypt('password')]);
+        $user = User::factory()->create(['password' => bcrypt('password')]);
+
+        $unit = \App\Models\Unit::create(['nama_unit' => 'Unit Uji']);
+        $subUnit = \App\Models\SubUnit::create(['unit_id' => $unit->id, 'nama_layanan' => 'Layanan Uji']);
+        \App\Models\Ticket::create([
+            'user_id' => $user->id,
+            'unit_id' => $unit->id,
+            'sub_unit_id' => $subUnit->id,
+            'form_data' => ['Keluhan' => 'Uji'],
+            'status' => 'Menunggu',
+        ]);
+
+        $this->actingAs($admin, 'admin')
+            ->delete("/admin/manajemen-user/{$user->id}")
+            ->assertSessionHas('error');
+
+        $this->assertNotNull(User::find($user->id));
+    }
 }

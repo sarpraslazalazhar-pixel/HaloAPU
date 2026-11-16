@@ -52,7 +52,7 @@ class SlaConfigController extends Controller
             ->exists();
 
         if ($exists) {
-            return back()->withErrors(['message' => 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.']);
+            return back()->with('error', 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.');
         }
 
         SlaConfig::create($validated);
@@ -77,7 +77,7 @@ class SlaConfigController extends Controller
             ->exists();
 
         if ($exists) {
-            return back()->withErrors(['message' => 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.']);
+            return back()->with('error', 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.');
         }
 
         $sla_config->update($validated);

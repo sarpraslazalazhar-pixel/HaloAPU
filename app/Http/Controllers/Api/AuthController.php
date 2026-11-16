@@ -443,6 +443,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'User tidak ditemukan'], 404);
         }
 
+        $user->devices()->delete();
         $user->device_id = null;
         $user->device_name = null;
         $user->save();
@@ -468,6 +469,7 @@ class AuthController extends Controller
             return response()->json(['message' => 'Admin tidak ditemukan'], 404);
         }
 
+        $admin->devices()->delete();
         $admin->device_id = null;
         $admin->device_name = null;
         $admin->save();
@@ -631,17 +633,18 @@ class AuthController extends Controller
 
         Log::info("Hubungi Admin dari {$senderName} ({$senderEmail}): [{$subject}] {$message}");
 
-        // ponytail: notifikasi synchronous via Mail::raw dan DB notification; ganti Mailable/Queue jika traffic bantuan melonjak.
+        // ponytail: notifikasi synchronous via Mail::send dan DB notification; ganti Mailable/Queue jika traffic bantuan melonjak.
         try {
             $adminEmail = SystemConfig::getValue('email_admin', 'sarpras@alazharpeduli.or.id');
             if ($adminEmail) {
+                $waktu = now()->format('d/m/Y H:i:s');
                 $emailBody = "Halo Tim Admin / Sarpras,\n\n"
                     . "Terdapat pesan bantuan baru yang masuk melalui aplikasi Halo APU Mobile:\n\n"
                     . "--------------------------------------------------\n"
                     . "Pengirim : {$senderName}\n"
                     . "Email    : {$senderEmail}\n"
                     . "Subjek   : {$subject}\n"
-                    . "Waktu    : " . now()->format('d/m/Y H:i:s') . "\n"
+                    . "Waktu    : {$waktu}\n"
                     . "--------------------------------------------------\n\n"
                     . "Pesan:\n"
                     . "{$message}\n\n"
@@ -650,9 +653,28 @@ class AuthController extends Controller
 
                 $mailSubject = "[Halo APU] Pesan Bantuan: " . ($subject ?: 'Bantuan Mobile');
 
-                Mail::raw($emailBody, function ($mail) use ($adminEmail, $mailSubject, $senderEmail, $senderName) {
+                $mailMessage = (new \Illuminate\Notifications\Messages\MailMessage)
+                    ->subject($mailSubject)
+                    ->greeting('Halo Tim Admin / Sarpras,')
+                    ->line('Terdapat pesan bantuan baru yang masuk melalui aplikasi Halo APU Mobile:')
+                    ->line("**Pengirim:** {$senderName}")
+                    ->line("**Email:** {$senderEmail}")
+                    ->line("**Subjek:** {$subject}")
+                    ->line("**Waktu:** {$waktu}")
+                    ->line("**Pesan:**\n{$message}")
+                    ->line('Pesan ini dikirim otomatis oleh sistem Halo APU.')
+                    ->salutation('Salam hormat, Tim Halo APU');
+
+                $htmlBody = (string) app(\Illuminate\Mail\Markdown::class)->render(
+                    $mailMessage->markdown,
+                    $mailMessage->data()
+                );
+
+                Mail::send([], [], function ($mail) use ($adminEmail, $mailSubject, $senderEmail, $senderName, $htmlBody, $emailBody) {
                     $mail->to($adminEmail)
-                        ->subject($mailSubject);
+                        ->subject($mailSubject)
+                        ->html($htmlBody)
+                        ->text($emailBody);
                     if ($senderEmail && filter_var($senderEmail, FILTER_VALIDATE_EMAIL)) {
                         $mail->replyTo($senderEmail, $senderName);
                     }

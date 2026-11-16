@@ -38,6 +38,7 @@ interface UserData {
  email: string;
  no_wa: string | null;
  device_id: string | null;
+    devices_count?: number;
  device_name: string | null;
  divisi_id: number | null;
  org_unit_id: number | null;
@@ -312,10 +313,11 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                       <td className="p-3 text-muted-foreground">{user.username}</td>
                       <td className="p-3">{user.email}</td>
                       <td className="p-3">
-                        {user.device_id ? (
+                        {user.device_id || (user.devices_count ?? 0) > 0 ? (
                           <Badge variant="outline" className="font-normal gap-1 bg-amber-50 text-amber-800 border-amber-300">
                             <Smartphone className="h-3.5 w-3.5" />
                             {user.device_name || 'Terikat HP'}
+                            {(user.devices_count ?? 0) > 1 && ` +${user.devices_count! - 1}`}
                           </Badge>
                         ) : (
                           <span className="text-muted-foreground/50 text-xs">Belum Terikat</span>
@@ -338,7 +340,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                       </td>
                       <td className="p-3">
                         <div className="flex gap-1">
-                          {user.device_id && (
+                          {(user.device_id || (user.devices_count ?? 0) > 0) && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Buka Kunci Perangkat">

@@ -41,6 +41,7 @@ interface Admin {
  no_wa: string | null;
  device_id?: string | null;
  device_name?: string | null;
+ devices_count?: number;
  created_at: string;
  roles: Role[];
  sub_units: SubUnit[];
@@ -315,7 +316,7 @@ export default function ManajemenOperatorIndex({ admins, roles, subUnits, units,
  </td>
  <td className="p-3 align-top">
                         <div className="flex gap-1">
-                          {admin.device_id && (
+                          {(admin.device_id || (admin.devices_count ?? 0) > 0) && (
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="outline" size="icon" className="h-8 w-8 text-amber-600 hover:text-amber-700 hover:bg-amber-50" title="Buka Kunci Perangkat">

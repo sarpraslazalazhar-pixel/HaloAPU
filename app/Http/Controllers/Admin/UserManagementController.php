@@ -31,7 +31,7 @@ class UserManagementController extends Controller
             $query->where('org_unit_id', $unitOrg);
         }
 
-        $users = $query->with(['divisi', 'orgUnit', 'jabatan'])->latest()->paginate(15);
+        $users = $query->with(['divisi', 'orgUnit', 'jabatan'])->withCount('devices')->latest()->paginate(15);
 
         $divisiList = \App\Models\OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
         $unitOrgList = \App\Models\OrgUnit::select('id', 'nama_unit_organisasi', 'divisi_id')->orderBy('nama_unit_organisasi')->get();

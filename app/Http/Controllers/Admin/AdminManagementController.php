@@ -13,7 +13,7 @@ class AdminManagementController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Admin::with(['roles', 'subUnits', 'units']);
+        $query = Admin::with(['roles', 'subUnits', 'units'])->withCount('devices');
 
         if ($search = $request->get('search')) {
             $query->where(function ($q) use ($search) {

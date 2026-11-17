@@ -142,6 +142,11 @@ class Ticket extends Model
         return $this->hasMany(TicketLog::class);
     }
 
+    public function editHistories()
+    {
+        return $this->hasMany(TicketEditHistory::class)->latest('created_at');
+    }
+
     public function orgDivisi()
     {
         return $this->belongsTo(OrgDivisi::class, 'divisi_id');

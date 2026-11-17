@@ -32,6 +32,7 @@ class NotificationApiController extends Controller
                 'reject', 'rejected', 'ticket_rejected' => 'rejected',
                 'csat', 'csat_reminder' => 'csat',
                 'sla', 'sla_escalation' => 'sla',
+                'ticket_form_edited', 'ticket_edited' => 'edited',
                 'ticket_status_updated', 'ticket_status_updated_operator' => (function () use ($data) {
                     $title = strtolower($data['title'] ?? '');
                     $body = strtolower($data['message'] ?? $data['body'] ?? '');

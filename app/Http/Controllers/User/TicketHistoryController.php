@@ -121,6 +121,7 @@ class TicketHistoryController extends Controller
             },
             'logs.admin',
             'logs.attachments',
+            'editHistories.editor',
         ]);
 
         // Ambil form fields untuk mapping label

@@ -7,9 +7,12 @@ import { Button } from '@/Components/ui/button';
 import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketAttachmentList, type Attachment } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
+import type { FormField } from '@/types';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
+import EditTicketFormDialog from '@/Components/EditTicketFormDialog';
+import { TicketEditHistory, type EditHistoryEntry } from '@/Components/TicketEditHistory';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
 import { TicketChatBox } from '@/Components/TicketChatBox';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
@@ -56,6 +59,7 @@ interface TicketDetailData {
     tanggal_selesai: string;
   } | null;
   attachments?: Attachment[];
+  edit_histories?: EditHistoryEntry[];
   logs?: Array<{ id: number; ticket_id: number; admin_id?: number | null; aksi: string; catatan?: string | null; timestamp: string }>;
   sla_tracking?: {
     sla_response_deadline?: string | null;
@@ -74,9 +78,10 @@ interface TicketDetailProps {
   formFields?: Array<{ id: number; label: string; tipe_field: string; [key: string]: unknown }>;
   operators?: Array<{ id: number; name?: string; username?: string }>;
   isSubmittedByMe?: boolean;
+  canEditForm?: boolean;
 }
 
-export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe }: TicketDetailProps) {
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canEditForm }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as unknown as {
     auth?: { is_super_admin?: boolean; permissions?: string[]; admin?: { id?: number } };
@@ -84,6 +89,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   };
   const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
 
+  const [editFormOpen, setEditFormOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -317,7 +323,21 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
        </Button>
        <h1 className="text-2xl font-bold flex items-center gap-3">
          #TKT-{formatTicketId(ticket.id)} <StatusBadge status={ticket.status} />
+         {(ticket.edit_histories?.length ?? 0) > 0 && (
+           <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Diedit Admin</span>
+         )}
        </h1>
+       <div className="ml-auto">
+         {canEditForm && (
+           <Button variant="outline" size="sm" onClick={() => setEditFormOpen(true)}>
+             <Edit2 className="w-4 h-4 mr-1" /> Edit Formulir
+           </Button>
+         )}
+       </div>
+     </div>
+
+     <div className="mb-6">
+       <TicketEditHistory histories={ticket.edit_histories} />
      </div>
 
      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1038,6 +1058,15 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
        </div>
      </div>
      
+     {canEditForm && editFormOpen && (
+       <EditTicketFormDialog
+         open={editFormOpen}
+         onOpenChange={setEditFormOpen}
+         ticket={ticket}
+         formFields={(formFields || []) as unknown as FormField[]}
+       />
+     )}
+
      {fileToEdit && (
        <ImageEditorModal
          isOpen={editorOpen}

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { TicketTimeline } from '@/Components/TicketTimeline';
+import { TicketEditHistory } from '@/Components/TicketEditHistory';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
@@ -191,6 +192,10 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
              <Button variant="outline">Kembali ke Riwayat</Button>
            </Link>
          </div>
+       </div>
+
+       <div className="mb-6">
+         <TicketEditHistory histories={ticket.edit_histories} />
        </div>
 
        <ConfirmDialog

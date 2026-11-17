@@ -22,6 +22,7 @@ use App\Notifications\TicketCreatedUserNotification;
 use App\Services\SlaCalculator;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
+use App\Services\TicketFormEditor;
 use App\Services\TicketStatusService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -402,6 +403,7 @@ class TicketController extends Controller
             },
             'logs.admin',
             'logs.attachments',
+            'editHistories.editor',
         ])
             ->where('id', str_replace('-', '', $id))
             ->orWhere('id', $id)
@@ -434,6 +436,9 @@ class TicketController extends Controller
                 'label' => $field->label,
                 'type' => $field->tipe_field,
                 'required' => (bool) $field->wajib,
+                'options' => $field->opsi ?? [],
+                'parentFieldId' => $field->parent_field_id,
+                'triggerValue' => $field->trigger_value,
             ];
         });
 
@@ -449,6 +454,11 @@ class TicketController extends Controller
         });
 
         $responseData['formData'] = $ticket->form_data ?? [];
+
+        $responseData['editHistories'] = $ticket->editHistories->map(fn ($h) => $h->toPayload())->values();
+        $responseData['canEditForm'] = $isAdmin
+            && in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true)
+            && $ticket->isAccessibleBy($user);
 
         $responseData['attachments'] = $ticket->attachments->map(function ($att) {
             $name = $att->original_name ?: 'attachment';
@@ -1272,6 +1282,59 @@ class TicketController extends Controller
             'message' => 'Alat/aset berhasil ditandai sudah dikembalikan',
             'data' => $this->formatTicket($ticket->fresh()),
         ], 200);
+    }
+
+    public function updateForm(Request $request, string $id)
+    {
+        $admin = $request->user();
+
+        if (! $admin instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat mengedit formulir tiket'], 403);
+        }
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))->orWhere('id', $id)->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (! $ticket->isAccessibleBy($admin)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses ke tiket ini.'], 403);
+        }
+
+        $formData = $request->input('form_data', []);
+        if (is_string($formData)) {
+            $formData = json_decode($formData, true) ?: [];
+        }
+
+        $validated = $request->validate([
+            'priority' => 'nullable|string',
+            'edit_reason' => 'required|string|min:5|max:500',
+        ]);
+
+        if (! is_array($formData)) {
+            return response()->json(['message' => 'Data formulir tidak valid'], 422);
+        }
+
+        $history = TicketFormEditor::apply(
+            $ticket,
+            $formData,
+            $validated['priority'] ?? null,
+            $validated['edit_reason'],
+            $admin
+        );
+
+        if (! $history) {
+            return response()->json(['message' => 'Tidak ada data yang berubah.'], 422);
+        }
+
+        $ticket = $ticket->fresh(['subUnit', 'assignedAdmin', 'user', 'editHistories.editor']);
+
+        return response()->json([
+            'message' => 'Formulir tiket berhasil diperbarui.',
+            'data' => $this->formatTicket($ticket),
+            'editHistories' => $ticket->editHistories->map(fn ($h) => $h->toPayload())->values(),
+        ]);
     }
 
     /**

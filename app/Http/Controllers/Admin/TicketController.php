@@ -21,6 +21,7 @@ use App\Notifications\TicketStatusUpdatedNotification;
 use App\Services\SlaCalculator;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
+use App\Services\TicketFormEditor;
 use App\Services\TicketStatusService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -329,6 +330,7 @@ class TicketController extends Controller
             'logs' => fn ($q) => $q->latest('timestamp'),
             'logs.admin',
             'logs.attachments',
+            'editHistories.editor',
         ]);
 
         $formFields = FormField::where('sub_unit_id', $ticket->sub_unit_id)
@@ -344,6 +346,7 @@ class TicketController extends Controller
             'formFields' => $formFields,
             'operators' => $operators,
             'isSubmittedByMe' => $ticket->isSubmittedBy($admin),
+            'canEditForm' => in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true),
         ]);
     }
 
@@ -374,6 +377,34 @@ class TicketController extends Controller
         }
 
         return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
+    }
+
+    public function updateForm(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak mengedit formulir tiket ini.');
+        }
+
+        $validated = $request->validate([
+            'form_data' => 'required|array',
+            'priority' => 'nullable|string',
+            'edit_reason' => 'required|string|min:5|max:500',
+        ]);
+
+        $history = TicketFormEditor::apply(
+            $ticket,
+            $validated['form_data'],
+            $validated['priority'] ?? null,
+            $validated['edit_reason'],
+            $admin
+        );
+
+        if (! $history) {
+            return redirect()->back()->with('error', 'Tidak ada data yang berubah.');
+        }
+
+        return redirect()->back()->with('success', 'Formulir tiket berhasil diperbarui.');
     }
 
     public function updatePriority(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)

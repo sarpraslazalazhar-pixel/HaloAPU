@@ -336,6 +336,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/assign', [TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [TicketController::class, 'updatePriority'])->name('priority');
+            Route::patch('/{ticket}/form', [TicketController::class, 'updateForm'])->name('form');
             Route::patch('/{ticket}/cancel-booking', [TicketController::class, 'cancelBooking'])->name('cancel-booking');
             Route::patch('/{ticket}/batal', [TicketController::class, 'cancel'])->name('cancel');
             Route::patch('/{ticket}/kembalikan-alat', [TicketController::class, 'kembalikanAlat'])->name('kembalikan-alat');

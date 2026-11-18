@@ -486,7 +486,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
              replyRoute="tiket.reply"
              downloadRoute="tiket.download"
              canReply={['solve', 'reject', 'dibatalkan', 'waiting_approval'].indexOf(ticket.status) === -1}
-             chatUrl="/chat"
+             chatUrl={`/chat?ticket=${ticket.id}`}
            />
          </TabsContent>
 

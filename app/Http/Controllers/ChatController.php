@@ -80,6 +80,33 @@ class ChatController extends Controller
             ->orderByDesc('updated_at')
             ->get();
 
+        // Deep link from a ticket page: /chat?ticket=5 opens the room bound to that
+        // ticket, so the ticket and its chat are the same conversation.
+        if (!$request->query('active') && $request->filled('ticket')) {
+            $ticketId = (int) $request->query('ticket');
+
+            $ownsTicket = Ticket::where('id', $ticketId)
+                ->where('user_id', $user->id)
+                ->exists();
+
+            if ($ownsTicket) {
+                $ticketConv = Conversation::firstOrCreate([
+                    'type' => 'user_admin_direct',
+                    'user_id' => $user->id,
+                    'admin_one_id' => Ticket::whereKey($ticketId)->value('assigned_admin_id')
+                        ?: Admin::value('id'),
+                ], [
+                    'last_message_at' => now(),
+                ]);
+
+                if (!$rawConversations->contains('id', $ticketConv->id)) {
+                    $rawConversations->prepend($ticketConv);
+                }
+
+                $request->merge(['active' => $ticketConv->id]);
+            }
+        }
+
         $activeConversationId = $request->query('active');
 
         if (!$activeConversationId && $rawConversations->isNotEmpty()) {
@@ -258,11 +285,28 @@ class ChatController extends Controller
             ];
         });
 
+        // Ticket bound to this room, if the user arrived from a ticket page.
+        $linkedTicket = null;
+
+        if ($request->filled('ticket')) {
+            // formatted_id is a computed accessor, so the whole model is needed.
+            $linkedTicket = Ticket::where('id', (int) $request->query('ticket'))
+                ->where('user_id', $user->id)
+                ->first();
+        }
+
         return Inertia::render('Chat/Index', [
             'conversations' => $conversations,
             'activeConversationId' => $activeConversationId ? (int) $activeConversationId : null,
             'activeConversation' => $activeConversationData,
             'activeMessages' => $activeMessages,
+            'linkedTicket' => $linkedTicket ? [
+                'id' => $linkedTicket->id,
+                'formatted_id' => $linkedTicket->formatted_id,
+                'judul' => $linkedTicket->judul,
+                'status' => $linkedTicket->status,
+                'priority' => $linkedTicket->priority,
+            ] : null,
         ]);
     }
 

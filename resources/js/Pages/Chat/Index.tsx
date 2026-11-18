@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Head, usePage } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import ConversationList, { ConversationItem } from '@/Components/Chat/ConversationList';
 import ChatWindow, { ChatMessage } from '@/Components/Chat/ChatWindow';
 import { useChatSound } from '@/hooks/useChatSound';
+import { subscribe, type ChannelHandlers, type ChatEvents, type OnlineUser } from '@/lib/realtime';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -12,6 +13,7 @@ interface UserChatPageProps {
   activeConversationId: number | null;
   activeConversation: any;
   activeMessages: ChatMessage[];
+  linkedTicket?: ChatMessage['ticket'] | null;
 }
 
 export default function UserChatIndex({
@@ -19,6 +21,7 @@ export default function UserChatIndex({
   activeConversationId,
   activeConversation,
   activeMessages,
+  linkedTicket = null,
 }: UserChatPageProps) {
   const { auth } = usePage<any>().props;
   const user = auth.user;
@@ -48,6 +51,10 @@ export default function UserChatIndex({
 
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
 
+  // Echo listeners read the active conversation without resubscribing on switch.
+  const activeIdRef = useRef(activeId);
+  activeIdRef.current = activeId;
+
   const { playSound } = useChatSound();
 
   // Sync props to state when Inertia partial reload or page props change
@@ -74,34 +81,30 @@ export default function UserChatIndex({
 
   // Presence channel to track real-time online / offline users
   useEffect(() => {
-    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this effect runs.
-    const echo = (window as any).Echo;
+    const echo = window.Echo;
 
     if (!echo) return;
 
-    try {
-      const _presence = echo.join('chat.presence')
-        .here((users: any[]) => {
-          setOnlineUsers(users || []);
-        })
-        .joining((user: any) => {
-          if (user) {
-            setOnlineUsers((prev) => [...prev.filter((u) => !(u.id === user.id && u.type === user.type)), user]);
-          }
-        })
-        .leaving((user: any) => {
-          if (user) {
-            setOnlineUsers((prev) => prev.filter((u) => !(u.id === user.id && u.type === user.type)));
-          }
-        });
+    const presence = echo.join('chat.presence');
 
-      return () => {
-        // SAFETY: Echo is verified to exist at effect setup time.
-        (window as any).Echo.leave('chat.presence');
-      };
-    } catch {
-      // ignore
-    }
+    presence
+      .here((members: OnlineUser[]) => {
+        setOnlineUsers(members ?? []);
+      })
+      .joining((user: OnlineUser) => {
+        if (user) {
+          setOnlineUsers((prev) => [...prev.filter((u) => !(u.id === user.id && u.type === user.type)), user]);
+        }
+      })
+      .leaving((user: OnlineUser) => {
+        if (user) {
+          setOnlineUsers((prev) => prev.filter((u) => !(u.id === user.id && u.type === user.type)));
+        }
+      });
+
+    return () => {
+      echo.leave('chat.presence');
+    };
   }, []);
 
   const updateConversationOnMessage = useCallback((msg: ChatMessage, isFromActiveChat: boolean) => {
@@ -147,26 +150,17 @@ export default function UserChatIndex({
 
   // Global Echo listener for user's personal channel and public global chat
   useEffect(() => {
-    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this effect runs.
-    const echo = (window as any).Echo;
+    if (!user?.id) return;
 
-    if (!user?.id || !echo) return;
+    const userId = user.id;
 
-    const userChannelName = `App.Models.User.${user.id}`;
-    const publicChannelName = `chat.public_global`;
-
-    const userChannel = echo.private(userChannelName);
-    const publicChannel = echo.private(publicChannelName);
-
-    const handleIncomingMessage = (e: any) => {
-      const newMsg: ChatMessage = e.messageData;
-
+    const handleIncomingMessage = ({ messageData: newMsg }: ChatEvents['.ChatMessageSent']) => {
       if (!newMsg) return;
 
-      const isCurrentActive = activeId === newMsg.conversation_id;
+      const isCurrentActive = activeIdRef.current === newMsg.conversation_id;
       updateConversationOnMessage(newMsg, isCurrentActive);
 
-      const isSelf = newMsg.sender_id === user.id && newMsg.sender_type.includes('User');
+      const isSelf = newMsg.sender_id === userId && newMsg.sender_type.includes('User');
 
       if (!isCurrentActive && !isSelf) {
         playSound();
@@ -177,23 +171,28 @@ export default function UserChatIndex({
       }
     };
 
-    const handleMessageRead = (e: any) => {
-      if (e.conversationId) {
+    const handleMessageRead = ({ conversationId }: ChatEvents['.ChatMessageRead']) => {
+      if (conversationId) {
         setConvList((prev) =>
-          prev.map((c) => (c.id === e.conversationId ? { ...c, is_last_message_read: true } : c))
+          prev.map((c) => (c.id === conversationId ? { ...c, is_last_message_read: true } : c))
         );
       }
     };
 
-    const handleTypingStatus = (e: any) => {
-      if (e.userId !== user.id && e.conversationId) {
+    const handleTypingStatus = ({
+      userId: typistId,
+      conversationId,
+      isTyping,
+      userName,
+    }: ChatEvents['.UserTypingStatus']) => {
+      if (typistId !== userId && conversationId) {
         setTypingMap((prev) => {
           const updated = { ...prev };
 
-          if (e.isTyping) {
-            updated[e.conversationId] = e.userName;
+          if (isTyping) {
+            updated[conversationId] = userName;
           } else {
-            delete updated[e.conversationId];
+            delete updated[conversationId];
           }
 
           return updated;
@@ -201,18 +200,20 @@ export default function UserChatIndex({
       }
     };
 
-    userChannel.listen('.ChatMessageSent', handleIncomingMessage);
-    publicChannel.listen('.ChatMessageSent', handleIncomingMessage);
-    userChannel.listen('.ChatMessageRead', handleMessageRead);
-    publicChannel.listen('.ChatMessageRead', handleMessageRead);
-    userChannel.listen('.UserTypingStatus', handleTypingStatus);
-    publicChannel.listen('.UserTypingStatus', handleTypingStatus);
+    const handlers = {
+      '.ChatMessageSent': handleIncomingMessage,
+      '.ChatMessageRead': handleMessageRead,
+      '.UserTypingStatus': handleTypingStatus,
+    } satisfies ChannelHandlers<ChatEvents>;
+
+    const leaveUser = subscribe<ChatEvents>(`App.Models.User.${userId}`, handlers);
+    const leavePublic = subscribe<ChatEvents>('chat.public_global', handlers);
 
     return () => {
-      echo.leave(userChannelName);
-      echo.leave(publicChannelName);
+      leaveUser();
+      leavePublic();
     };
-  }, [user?.id, activeId, playSound, updateConversationOnMessage]);
+  }, [user?.id, playSound, updateConversationOnMessage]);
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
@@ -321,6 +322,7 @@ export default function UserChatIndex({
               <ChatWindow
                 conversation={currentConv}
                 initialMessages={messages}
+                initialTicket={linkedTicket}
                 currentUser={currentUser}
                 isAdmin={false}
                 isLoading={isLoadingMessages}

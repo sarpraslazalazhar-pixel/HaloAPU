@@ -47,6 +47,7 @@ import {
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { accordionVariants, navItemHover } from '@/lib/animationConfig';
+import { subscribe as subscribeChannel, type NotificationEvents } from '@/lib/realtime';
 import PageTransition from '@/Components/PageTransition';
 import NotificationBell from '@/Components/NotificationBell';
 const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
@@ -472,12 +473,9 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
         ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
       }
 
-      const channel = admin.hasOwnProperty('username') && !admin.hasOwnProperty('divisi_id')
-        ? `App.Models.Admin.${admin.id}`
-        : `App.Models.User.${admin.id}`;
-
-      window.Echo.private(channel)
-        .notification((notification: any) => {
+      // Ref-counted: chat hooks and page listeners share this same channel.
+      const leave = subscribeChannel<NotificationEvents>(`App.Models.Admin.${admin.id}`, {
+        '.Illuminate\\Notifications\\Events\\BroadcastNotificationCreated': (notification) => {
           // Mainkan suara notifikasi jika diizinkan
           if (admin?.notify_sound !== false) {
             playNotificationSound();
@@ -505,11 +503,10 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
           if (admin?.notify_inapp !== false) {
             toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });
           }
-        });
+        },
+      });
 
-      return () => {
-        window.Echo.leave(channel);
-      };
+      return leave;
     }
   }, [flash, pageErrors, admin]);
 

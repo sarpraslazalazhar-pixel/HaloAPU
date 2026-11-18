@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { router, usePage } from '@inertiajs/react';
 import { useChatSound } from './useChatSound';
+import { subscribe, type ChannelHandlers, type ChatEvents } from '@/lib/realtime';
 
 interface UseChatUnreadOptions {
   user: any;
@@ -52,23 +53,9 @@ export function useChatUnread({
 
   // Global Echo Realtime Listeners across ALL pages (Dashboard, Tickets, Chat, etc.)
   useEffect(() => {
-    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js) before this hook runs.
-    const echo = (window as any).Echo;
+    if (!user?.id) return;
 
-    if (!user?.id || !echo) return;
-
-    const privateChannelName = isAdmin
-      ? `App.Models.Admin.${user.id}`
-      : `App.Models.User.${user.id}`;
-
-    const publicChannelName = `chat.public_global`;
-
-    const privateChannel = echo.private(privateChannelName);
-    const publicChannel = echo.private(publicChannelName);
-
-    const handleIncomingMessage = (e: any) => {
-      const msg = e.messageData;
-
+    const handleIncomingMessage = ({ messageData: msg }: ChatEvents['.ChatMessageSent']) => {
       if (!msg) return;
 
       const currentUser = userRef.current;
@@ -143,24 +130,28 @@ export function useChatUnread({
       }
     };
 
-    const handleMessageRead = (e: any) => {
-      const currentUserId = userRef.current?.id;
-
-      if (Number(e.userId) === Number(currentUserId)) {
-        const decrement = e.readCount && e.readCount > 0 ? e.readCount : 1;
+    const handleMessageRead = ({ userId, readCount }: ChatEvents['.ChatMessageRead']) => {
+      if (Number(userId) === Number(userRef.current?.id)) {
+        const decrement = readCount > 0 ? readCount : 1;
         setUnreadCount((prev) => Math.max(0, prev - decrement));
       }
     };
 
-    privateChannel.listen('.ChatMessageSent', handleIncomingMessage);
-    privateChannel.listen('.ChatMessageRead', handleMessageRead);
+    const handlers = {
+      '.ChatMessageSent': handleIncomingMessage,
+      '.ChatMessageRead': handleMessageRead,
+    } satisfies ChannelHandlers<ChatEvents>;
 
-    publicChannel.listen('.ChatMessageSent', handleIncomingMessage);
-    publicChannel.listen('.ChatMessageRead', handleMessageRead);
+    const channelName = isAdmin
+      ? `App.Models.Admin.${user.id}`
+      : `App.Models.User.${user.id}`;
+
+    const leavePrivate = subscribe<ChatEvents>(channelName, handlers);
+    const leavePublic = subscribe<ChatEvents>('chat.public_global', handlers);
 
     return () => {
-      echo.leave(privateChannelName);
-      echo.leave(publicChannelName);
+      leavePrivate();
+      leavePublic();
     };
   }, [user?.id, isAdmin, playSound, faviconUrl]);
 

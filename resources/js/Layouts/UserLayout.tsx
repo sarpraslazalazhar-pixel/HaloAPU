@@ -27,6 +27,7 @@ import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
 import { motion } from 'framer-motion';
 import { navItemHover } from '@/lib/animationConfig';
+import { subscribe as subscribeChannel, type NotificationEvents } from '@/lib/realtime';
 import PageTransition from '@/Components/PageTransition';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
@@ -140,10 +141,9 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  ), { duration: Infinity, id: 'notif-request', position: 'bottom-right' });
  }
 
-      const channel = `App.Models.User.${user.id}`;
-      
-      window.Echo.private(channel)
-        .notification((notification: any) => {
+      // Ref-counted: the chat hook and page listeners share this same channel.
+      const leave = subscribeChannel<NotificationEvents>(`App.Models.User.${user.id}`, {
+        '.Illuminate\\Notifications\\Events\\BroadcastNotificationCreated': (notification) => {
           // Cek preferensi notifikasi browser
           if (user?.notify_browser !== false && 'Notification' in window && Notification.permission === 'granted') {
             const n = new Notification(notification.title || 'Pemberitahuan Baru', {
@@ -167,11 +167,10 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
           if (user?.notify_inapp !== false) {
             toast.success(notification.title || 'Pemberitahuan Baru', { id: `notif-${Date.now()}` });
           }
-        });
-      
-      return () => {
-        window.Echo.leave(channel);
-      };
+        },
+      });
+
+      return leave;
     }
   }, [flash, user]);
  

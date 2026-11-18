@@ -334,11 +334,25 @@ class ChatController extends Controller
             ];
         });
 
+        // Arriving from a ticket page preselects that ticket in the composer.
+        $linkedTicket = null;
+
+        if ($request->filled('ticket_id')) {
+            $linkedTicket = Ticket::find((int) $request->input('ticket_id'));
+        }
+
         return Inertia::render('Admin/Chat/Index', [
             'conversations' => $conversations,
             'activeConversationId' => $activeConversationId ? (int) $activeConversationId : null,
             'activeConversation' => $activeConversationData,
             'activeMessages' => $activeMessages,
+            'linkedTicket' => $linkedTicket ? [
+                'id' => $linkedTicket->id,
+                'formatted_id' => $linkedTicket->formatted_id,
+                'judul' => $linkedTicket->judul,
+                'status' => $linkedTicket->status,
+                'priority' => $linkedTicket->priority,
+            ] : null,
             'filters' => [
                 'search' => $request->input('search', ''),
                 'unread_only' => $request->boolean('unread_only'),

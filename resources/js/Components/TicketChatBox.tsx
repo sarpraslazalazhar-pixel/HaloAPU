@@ -1,35 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useForm, router } from '@inertiajs/react';
+import { useForm } from '@inertiajs/react';
 import { 
   Send, Paperclip, MessageSquare, Clock, 
   ExternalLink, X, Loader2, Image as ImageIcon, FileText, Download 
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { formatDateId } from '@/lib/utils';
+import { subscribe, type TicketEvents, type TicketLogEntry } from '@/lib/realtime';
 
-interface LogAttachment {
-  id: number;
-  original_name?: string;
-  file_name?: string;
-  file_path: string;
-  mime_type?: string;
-  file_size?: number;
-}
-
-interface TicketLogItem {
-  id: number;
-  ticket_id: number;
-  admin_id?: number | null;
-  aksi: string;
-  catatan?: string | null;
-  timestamp: string;
-  admin?: {
-    id: number;
-    name?: string;
-    username: string;
-  } | null;
-  attachments?: LogAttachment[];
-}
+type TicketLogItem = TicketLogEntry;
 
 interface TicketChatData {
   id: number;
@@ -71,12 +50,22 @@ export function TicketChatBox({
     _method: 'post',
   });
 
+  // Entries that arrived over the websocket, merged with the server-rendered ones.
+  const [liveLogs, setLiveLogs] = useState<TicketLogItem[]>([]);
+
+  useEffect(() => {
+    setLiveLogs([]);
+  }, [ticket.id]);
+
   // Urutkan kronologis dari paling awal ke paling baru (chat style: paling baru di bawah)
   const sortedLogs = useMemo(() => {
-    return [...(ticket.logs || [])].sort(
+    const seen = new Set((ticket.logs || []).map((l: TicketLogItem) => l.id));
+    const merged = [...(ticket.logs || []), ...liveLogs.filter((l) => !seen.has(l.id))];
+
+    return merged.sort(
       (a: TicketLogItem, b: TicketLogItem) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
-  }, [ticket.logs]);
+  }, [ticket.logs, liveLogs]);
 
   const scrollToBottom = (smooth = true) => {
     if (messagesEndRef.current) {
@@ -90,13 +79,17 @@ export function TicketChatBox({
     }
   }, [sortedLogs.length]);
 
-  // Polling update berkala (4 detik) agar pesan dari mobile/web langsung muncul tanpa reload layar
+  // Realtime: every timeline entry (reply, status change, mobile/SPARC reply) is
+  // broadcast by App\Models\TicketLog on the ticket channel.
   useEffect(() => {
-    const timer = setInterval(() => {
-      router.reload({ only: ['ticket'] });
-    }, 4000);
-    return () => clearInterval(timer);
-  }, []);
+    if (!ticket?.id) return;
+
+    return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
+      '.TicketMessagePosted': ({ log }) => {
+        setLiveLogs((prev) => (prev.some((l) => l.id === log.id) ? prev : [...prev, log]));
+      },
+    });
+  }, [ticket?.id]);
 
   const handleScroll = () => {
     if (!chatContainerRef.current) return;

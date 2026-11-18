@@ -3,6 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="robots" content="index, follow">
     <meta name="description" content="Sistem Layanan Helpdesk Internal Halo APU. Akses terproteksi untuk pelaporan tiket dan pemantauan operasional.">
     <link rel="canonical" href="{{ url()->current() }}">
@@ -57,6 +58,10 @@
                 document.documentElement.classList.add('dark');
             }
         })();
+    </script>
+    {{-- Public realtime settings (app key only; the secret stays on the server). --}}
+    <script>
+        window.__realtime = @json(\App\Providers\AppServiceProvider::realtimeConfig());
     </script>
     @viteReactRefresh
     @vite(['resources/js/app.tsx'])

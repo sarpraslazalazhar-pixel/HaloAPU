@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\CsatApiController;
 use App\Http\Controllers\Api\DashboardApiController;
 use App\Http\Controllers\Api\MonitorApiController;
@@ -27,6 +28,17 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/fcm-token', [AuthController::class, 'storeFcmToken']);
     Route::post('/users/fcm-token', [AuthController::class, 'storeFcmToken']);
     Route::post('/logout', [AuthController::class, 'logout']);
+
+    // Chat / Inbox — shares tables with the web chat, so both stay in sync.
+    Route::get('/conversations', [ChatController::class, 'index']);
+    Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
+    Route::post('/conversations/{conversation}/messages', [ChatController::class, 'store']);
+    Route::post('/conversations/{conversation}/read', [ChatController::class, 'read']);
+    Route::get('/chat/attachments/{attachment}', [ChatController::class, 'downloadAttachment']);
+
+    // WebSocket channel auth for Bearer tokens (Flutter). The web route
+    // /broadcasting/auth is session-only, so mobile needs its own entrypoint.
+    Route::post('/broadcasting/auth', [\Illuminate\Broadcasting\BroadcastController::class, 'authenticate']);
 
     // Dashboard
     Route::get('/dashboard', [DashboardApiController::class, 'index']);

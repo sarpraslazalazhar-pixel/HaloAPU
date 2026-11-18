@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -23,6 +23,7 @@ import {
   Bot,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
+import { Input } from '@/Components/ui/input';
 import { Badge } from '@/Components/ui/badge';
 import {
   Dialog,
@@ -32,6 +33,7 @@ import {
 } from '@/Components/ui/dialog';
 import TicketReferenceCard from './TicketReferenceCard';
 import { useChatSound } from '@/hooks/useChatSound';
+import { subscribe, type ChatEvents } from '@/lib/realtime';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -96,6 +98,7 @@ interface ChatWindowProps {
     type?: string;
   } | null;
   initialMessages: ChatMessage[];
+  initialTicket?: ChatMessage['ticket'] | null;
   currentUser: {
     id: number;
     name?: string;
@@ -115,6 +118,7 @@ const COMMON_EMOJIS = ['😊', '👍', '🙏', '🚀', '✅', '⚠️', '📄', 
 export function ChatWindow({
   conversation,
   initialMessages,
+  initialTicket = null,
   currentUser,
   isAdmin = false,
   onBack,
@@ -125,7 +129,7 @@ export function ChatWindow({
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
-  const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
+  const [selectedTicket, setSelectedTicket] = useState<any | null>(initialTicket);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
@@ -137,6 +141,7 @@ export function ChatWindow({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [ticketsList, setTicketsList] = useState<any[]>([]);
+  const [ticketSearch, setTicketSearch] = useState('');
   const [loadingTickets, setLoadingTickets] = useState(false);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -146,6 +151,10 @@ export function ChatWindow({
   const typingTimeoutRef = useRef<any>(null);
 
   const { playSound } = useChatSound();
+
+  // Keep the latest callback without forcing the Echo effect to resubscribe.
+  const onMessageReceivedRef = useRef(onMessageReceived);
+  onMessageReceivedRef.current = onMessageReceived;
 
   // Scroll to bottom
   const scrollToBottom = useCallback((smooth = true) => {
@@ -157,33 +166,32 @@ export function ChatWindow({
     scrollToBottom(false);
   }, [initialMessages, conversation?.id, scrollToBottom]);
 
+  // Follow the room: arriving from /chat?ticket=N preselects that ticket.
+  useEffect(() => {
+    setSelectedTicket(initialTicket);
+  }, [initialTicket]);
+
   // Handle Realtime Echo Listener
   useEffect(() => {
-    // SAFETY: window.Echo is injected by Laravel Echo (bootstrap.js).
-    const echo = (window as any).Echo;
+    if (!conversation?.id) return;
 
-    if (!conversation?.id || !echo) return;
+    const conversationId = conversation.id;
 
-    const channelName = `chat.conversation.${conversation.id}`;
-    const echoChannel = echo.private(channelName);
-
-    // Join Echo Channel
-    echoChannel
-      .listen('.ChatMessageSent', (e: any) => {
-        const newMsg: ChatMessage = e.messageData;
-
+    return subscribe<ChatEvents>(`chat.conversation.${conversationId}`, {
+      '.ChatMessageSent': ({ messageData: newMsg }) => {
         setMessages((prev) => {
           if (prev.some((m) => m.id === newMsg.id)) return prev;
 
           return [...prev, newMsg];
         });
 
-        onMessageReceived?.(newMsg);
+        onMessageReceivedRef.current?.(newMsg);
 
         // If not sent by current user, play sound & toast
-        const isSelf = newMsg.sender_id === currentUser.id &&
+        const isSelf =
+          newMsg.sender_id === currentUser.id &&
           ((currentUser.type === 'user' && newMsg.sender_type.includes('User')) ||
-           (currentUser.type === 'admin' && newMsg.sender_type.includes('Admin')));
+            (currentUser.type === 'admin' && newMsg.sender_type.includes('Admin')));
 
         if (!isSelf) {
           playSound();
@@ -200,34 +208,32 @@ export function ChatWindow({
           } else {
             // Window is active, auto-mark as read
             const readUrl = isAdmin
-              ? route('admin.chat.read', { conversation: conversation.id })
-              : route('chat.read', { conversation: conversation.id });
+              ? route('admin.chat.read', { conversation: conversationId })
+              : route('chat.read', { conversation: conversationId });
 
             axios.post(readUrl).catch(() => {});
           }
         }
 
         scrollToBottom(true);
-      })
-      .listen('.ChatMessageEdited', (e: any) => {
+      },
+      '.ChatMessageEdited': ({ messageId, body }) => {
         setMessages((prev) =>
-          prev.map((m) =>
-            m.id === e.messageId ? { ...m, body: e.body, is_edited: true } : m
-          )
+          prev.map((m) => (m.id === messageId ? { ...m, body, is_edited: true } : m))
         );
-      })
-      .listen('.ChatMessageDeleted', (e: any) => {
-        setMessages((prev) => prev.filter((m) => m.id !== e.messageId));
-      })
-      .listen('.ChatMessageRead', (e: any) => {
+      },
+      '.ChatMessageDeleted': ({ messageId }) => {
+        setMessages((prev) => prev.filter((m) => m.id !== messageId));
+      },
+      '.ChatMessageRead': ({ userId, userType, readAt }) => {
         setMessages((prev) =>
           prev.map((m) => {
             const alreadyRead = m.reads?.some((r) => {
-              const sameUser = r.user_id === e.userId;
+              const sameUser = r.user_id === userId;
 
               const sameType =
-                (r.user_type?.includes('User') && e.userType?.includes('User')) ||
-                (r.user_type?.includes('Admin') && e.userType?.includes('Admin'));
+                (r.user_type?.includes('User') && userType?.includes('User')) ||
+                (r.user_type?.includes('Admin') && userType?.includes('Admin'));
 
               return sameUser && sameType;
             });
@@ -236,28 +242,18 @@ export function ChatWindow({
 
             return {
               ...m,
-              reads: [
-                ...(m.reads || []),
-                { user_type: e.userType, user_id: e.userId, read_at: e.readAt },
-              ],
+              reads: [...(m.reads || []), { user_type: userType, user_id: userId, read_at: readAt }],
             };
           })
         );
-      })
-      .listen('.UserTypingStatus', (e: any) => {
-        if (e.userId !== currentUser.id) {
-          if (e.isTyping) {
-            setTypingUser(e.userName);
-          } else {
-            setTypingUser(null);
-          }
+      },
+      '.UserTypingStatus': ({ userId, isTyping: typing, userName }) => {
+        if (userId !== currentUser.id) {
+          setTypingUser(typing ? userName : null);
         }
-      });
-
-    return () => {
-      echo.leave(channelName);
-    };
-  }, [conversation?.id, currentUser, playSound, scrollToBottom]);
+      },
+    });
+  }, [conversation?.id, currentUser.id, currentUser.type, isAdmin, playSound, scrollToBottom]);
 
   // Handle typing status broadcast trigger
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -307,9 +303,26 @@ export function ChatWindow({
   };
 
   const handleOpenTicketModal = () => {
+    setTicketSearch('');
     setShowTicketModal(true);
     fetchTickets();
   };
+
+  // Cari tiket berdasarkan nomor, judul, atau status.
+  const filteredTickets = useMemo(() => {
+    const term = ticketSearch.trim().toLowerCase();
+
+    if (!term) return ticketsList;
+
+    return ticketsList.filter((t) => {
+      const haystack = [t.formatted_id, t.judul, t.status, t.priority]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(term);
+    });
+  }, [ticketsList, ticketSearch]);
 
   // File selection & 3MB Validation
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1020,18 +1033,25 @@ export function ChatWindow({
             </DialogTitle>
           </DialogHeader>
 
-          <div className="max-h-80 overflow-y-auto divide-y divide-zinc-100">
+          <Input
+            value={ticketSearch}
+            onChange={(e) => setTicketSearch(e.target.value)}
+            placeholder="Cari nomor tiket, judul, atau status..."
+            className="h-9 text-xs"
+          />
+
+          <div className="max-h-72 overflow-y-auto divide-y divide-zinc-100">
             {loadingTickets ? (
               <div className="p-6 text-center text-xs text-zinc-400">
                 <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-sky-600" />
                 Memuat daftar tiket...
               </div>
-            ) : ticketsList.length === 0 ? (
+            ) : filteredTickets.length === 0 ? (
               <div className="p-6 text-center text-xs text-zinc-400">
-                Tidak ada tiket ditemukan
+                {ticketsList.length === 0 ? 'Tidak ada tiket ditemukan' : 'Tidak ada tiket yang cocok'}
               </div>
             ) : (
-              ticketsList.map((ticket) => (
+              filteredTickets.map((ticket) => (
                 <div
                   key={ticket.id}
                   onClick={() => {

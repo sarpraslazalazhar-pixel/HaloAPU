@@ -1,19 +1,23 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Head, usePage } from '@inertiajs/react';
+import { useState, useEffect, useCallback, useRef, type ComponentProps } from 'react';
+import axios from 'axios';
+import { Head } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import ConversationList, { ConversationItem } from '@/Components/Chat/ConversationList';
 import ChatWindow, { ChatMessage } from '@/Components/Chat/ChatWindow';
 import { useChatSound } from '@/hooks/useChatSound';
-import { subscribe, type ChannelHandlers, type ChatEvents, type OnlineUser } from '@/lib/realtime';
+import { subscribe, type ChatEvents } from '@/lib/realtime';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+
+// The room shape the window already declares; restating it here would drift.
+type ConversationDetail = NonNullable<ComponentProps<typeof ChatWindow>['conversation']>;
 
 interface UserChatPageProps {
   conversations: ConversationItem[];
   activeConversationId: number | null;
-  activeConversation: any;
+  activeConversation: ConversationDetail | null;
   activeMessages: ChatMessage[];
-  linkedTicket?: ChatMessage['ticket'] | null;
+  currentUser: { id: number; name: string };
 }
 
 export default function UserChatIndex({
@@ -21,212 +25,41 @@ export default function UserChatIndex({
   activeConversationId,
   activeConversation,
   activeMessages,
-  linkedTicket = null,
+  currentUser,
 }: UserChatPageProps) {
-  const { auth } = usePage<any>().props;
-  const user = auth.user;
+  const userId = currentUser.id;
 
   const [convList, setConvList] = useState<ConversationItem[]>(conversations);
-
-  const [activeId, setActiveId] = useState<number | null>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const activeParam = params.get('active');
-
-      if (activeParam) return parseInt(activeParam, 10);
-
-      if (window.innerWidth < 768) return null;
-    }
-
-    return activeConversationId;
-  });
-
-  const [currentConv, setCurrentConv] = useState<any>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768 && !new URLSearchParams(window.location.search).has('active')) {
-      return null;
-    }
-
-    return activeConversation;
-  });
-
+  const [activeId, setActiveId] = useState<number | null>(activeConversationId);
+  const [currentConv, setCurrentConv] = useState<ConversationDetail | null>(activeConversation);
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
-  // Echo listeners read the active conversation without resubscribing on switch.
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
 
   const { playSound } = useChatSound();
 
-  // Sync props to state when Inertia partial reload or page props change
   useEffect(() => {
     setConvList(conversations);
   }, [conversations]);
 
   useEffect(() => {
-    const isMobileInitial = typeof window !== 'undefined' && window.innerWidth < 768;
-    const hasActiveParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('active');
-    
-    if (isMobileInitial && !hasActiveParam) {
-      setActiveId(null);
-      setCurrentConv(null);
-    } else {
-      setActiveId(activeConversationId);
-      setCurrentConv(activeConversation);
-      setMessages(activeMessages);
-    }
-  }, [activeConversationId, activeConversation, activeMessages]);
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener('resize', check);
 
-  const [onlineUsers, setOnlineUsers] = useState<Array<{ id: number; name: string; type: string }>>([]);
-  const [typingMap, setTypingMap] = useState<Record<number, string>>({});
-
-  // Presence channel to track real-time online / offline users
-  useEffect(() => {
-    const echo = window.Echo;
-
-    if (!echo) return;
-
-    const presence = echo.join('chat.presence');
-
-    presence
-      .here((members: OnlineUser[]) => {
-        setOnlineUsers(members ?? []);
-      })
-      .joining((user: OnlineUser) => {
-        if (user) {
-          setOnlineUsers((prev) => [...prev.filter((u) => !(u.id === user.id && u.type === user.type)), user]);
-        }
-      })
-      .leaving((user: OnlineUser) => {
-        if (user) {
-          setOnlineUsers((prev) => prev.filter((u) => !(u.id === user.id && u.type === user.type)));
-        }
-      });
-
-    return () => {
-      echo.leave('chat.presence');
-    };
+    return () => window.removeEventListener('resize', check);
   }, []);
 
-  const updateConversationOnMessage = useCallback((msg: ChatMessage, isFromActiveChat: boolean) => {
-    setConvList((prevList) => {
-      const snippet = msg.body || (msg.attachments && msg.attachments.length > 0 ? '[Lampiran]' : (msg.ticket ? '[Tiket]' : 'Pesan baru'));
-      const timestamp = msg.created_at || new Date().toISOString();
-      const isSelf = msg.sender_id === user.id && msg.sender_type.includes('User');
+  const handleSelectConversation = useCallback(async (id: number) => {
+    if (id === activeIdRef.current) return;
 
-      const index = prevList.findIndex((c) => c.id === msg.conversation_id);
-
-      if (index !== -1) {
-        const updated = { ...prevList[index] };
-        updated.last_message = snippet;
-        updated.last_message_at = timestamp;
-        updated.last_message_sender_id = msg.sender_id;
-        updated.last_message_sender_type = msg.sender_type;
-        updated.is_last_message_read = isFromActiveChat;
-
-        if (!isFromActiveChat && !isSelf) {
-          updated.unread_count = (updated.unread_count || 0) + 1;
-        }
-
-        const remaining = prevList.filter((_, i) => i !== index);
-
-        return [updated, ...remaining];
-      } else {
-        const newConvItem: ConversationItem = {
-          id: msg.conversation_id,
-          title: msg.sender_name || 'Admin',
-          subtitle: msg.sender_type.includes('Admin') ? 'Admin' : 'Pengguna',
-          last_message: snippet,
-          last_message_at: timestamp,
-          last_message_sender_id: msg.sender_id,
-          last_message_sender_type: msg.sender_type,
-          is_last_message_read: isFromActiveChat,
-          unread_count: isFromActiveChat || isSelf ? 0 : 1,
-        };
-
-        return [newConvItem, ...prevList];
-      }
-    });
-  }, [user?.id]);
-
-  // Global Echo listener for user's personal channel and public global chat
-  useEffect(() => {
-    if (!user?.id) return;
-
-    const userId = user.id;
-
-    const handleIncomingMessage = ({ messageData: newMsg }: ChatEvents['.ChatMessageSent']) => {
-      if (!newMsg) return;
-
-      const isCurrentActive = activeIdRef.current === newMsg.conversation_id;
-      updateConversationOnMessage(newMsg, isCurrentActive);
-
-      const isSelf = newMsg.sender_id === userId && newMsg.sender_type.includes('User');
-
-      if (!isCurrentActive && !isSelf) {
-        playSound();
-
-        if (document.hidden) {
-          toast.success(`Pesan Baru dari ${newMsg.sender_name}`, { id: `chat-notif-${newMsg.id}` });
-        }
-      }
-    };
-
-    const handleMessageRead = ({ conversationId }: ChatEvents['.ChatMessageRead']) => {
-      if (conversationId) {
-        setConvList((prev) =>
-          prev.map((c) => (c.id === conversationId ? { ...c, is_last_message_read: true } : c))
-        );
-      }
-    };
-
-    const handleTypingStatus = ({
-      userId: typistId,
-      conversationId,
-      isTyping,
-      userName,
-    }: ChatEvents['.UserTypingStatus']) => {
-      if (typistId !== userId && conversationId) {
-        setTypingMap((prev) => {
-          const updated = { ...prev };
-
-          if (isTyping) {
-            updated[conversationId] = userName;
-          } else {
-            delete updated[conversationId];
-          }
-
-          return updated;
-        });
-      }
-    };
-
-    const handlers = {
-      '.ChatMessageSent': handleIncomingMessage,
-      '.ChatMessageRead': handleMessageRead,
-      '.UserTypingStatus': handleTypingStatus,
-    } satisfies ChannelHandlers<ChatEvents>;
-
-    const leaveUser = subscribe<ChatEvents>(`App.Models.User.${userId}`, handlers);
-    const leavePublic = subscribe<ChatEvents>('chat.public_global', handlers);
-
-    return () => {
-      leaveUser();
-      leavePublic();
-    };
-  }, [user?.id, playSound, updateConversationOnMessage]);
-
-  const [isLoadingMessages, setIsLoadingMessages] = useState(false);
-
-  const handleSelectConversation = async (id: number) => {
-    if (id === activeId && currentConv) return;
-
-    const targetConv = convList.find((c) => c.id === id);
-    const unreadToClear = targetConv?.unread_count || 0;
+    const unreadToClear = convList.find((c) => c.id === id)?.unread_count || 0;
 
     setActiveId(id);
-    setConvList((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c))
-    );
+    setConvList((prev) => prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c)));
 
     if (unreadToClear > 0) {
       window.dispatchEvent(new CustomEvent('chat:unread-cleared', { detail: { count: unreadToClear } }));
@@ -234,78 +67,94 @@ export default function UserChatIndex({
 
     window.history.pushState({ activeId: id }, '', `/chat?active=${id}`);
 
-    setIsLoadingMessages(true);
+    setIsLoading(true);
 
     try {
-      // SAFETY: window.axios is injected by Laravel's bootstrap.js; it is available on all pages after bootstrap.
-      const res = await (window as any).axios.get(`/chat/conversations/${id}`);
+      const res = await axios.get(`/chat/conversations/${id}`);
       setCurrentConv(res.data.conversation);
       setMessages(res.data.messages || []);
     } catch {
       toast.error('Gagal memuat pesan percakapan');
     } finally {
-      setIsLoadingMessages(false);
+      setIsLoading(false);
     }
-  };
+  }, [convList]);
 
-  // Support browser Back/Forward buttons without reload
+  // Live inbox: any room can raise its badge, no reload needed.
   useEffect(() => {
-    const handlePopState = () => {
-      const params = new URLSearchParams(window.location.search);
-      const active = params.get('active');
+    if (!userId) return;
 
-      if (active) {
-        const parsedId = parseInt(active, 10);
+    return subscribe<ChatEvents>(`App.Models.User.${userId}`, {
+      '.ChatMessageSent': ({ messageData: msg }) => {
+        if (!msg) return;
 
-        if (parsedId && parsedId !== activeId) {
-          handleSelectConversation(parsedId);
+        const isSelf = msg.sender_id === userId && msg.sender_type?.includes('User');
+        const isActive = activeIdRef.current === msg.conversation_id;
+
+        setConvList((prev) => {
+          const snippet = msg.body || (msg.attachments?.length ? '[Lampiran]' : '[Pesan]');
+          const index = prev.findIndex((c) => c.id === msg.conversation_id);
+
+          if (index === -1) {
+            return [
+              {
+                id: msg.conversation_id,
+                type: 'ticket',
+                title: msg.ticket ? `Tiket #${msg.ticket.formatted_id}` : 'Percakapan',
+                subtitle: msg.ticket?.judul ?? '',
+                last_message: snippet,
+                last_message_at: msg.created_at,
+                last_message_sender_id: msg.sender_id,
+                last_message_sender_type: msg.sender_type,
+                is_last_message_read: isActive,
+                unread_count: isActive || isSelf ? 0 : 1,
+              },
+              ...prev,
+            ];
+          }
+
+          const updated = {
+            ...prev[index],
+            last_message: snippet,
+            last_message_at: msg.created_at,
+            last_message_sender_id: msg.sender_id,
+            last_message_sender_type: msg.sender_type,
+            is_last_message_read: isActive,
+            unread_count: isActive || isSelf ? 0 : (prev[index].unread_count || 0) + 1,
+          };
+
+          return [updated, ...prev.filter((_, i) => i !== index)];
+        });
+
+        if (!isActive && !isSelf) {
+          playSound();
+
+          if (document.hidden) {
+            toast.success(`Pesan Baru dari ${msg.sender_name}`, { id: `chat-notif-${msg.id}` });
+          }
         }
-      } else {
-        setActiveId(null);
-        setCurrentConv(null);
-      }
-    };
+      },
+    });
+  }, [userId, playSound]);
 
-    window.addEventListener('popstate', handlePopState);
-
-    return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeId]);
-
-  const currentUser = {
-    id: user.id,
-    name: user.name || user.username,
-    type: 'user' as const,
-  };
-
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  const handleBackToList = () => {
+  const handleBack = useCallback(() => {
     setActiveId(null);
     setCurrentConv(null);
+    setMessages([]);
     window.history.pushState({}, '', '/chat');
-  };
+  }, []);
 
   return (
-    <UserLayout title="Pesan & Chat Realtime" hideBottomNav={isMobile && activeId !== null}>
-      <Head title="Pesan & Chat Realtime" />
+    <UserLayout title="Chat" hideBottomNav={isMobile && activeId !== null}>
+      <Head title="Chat" />
 
-      <div className="h-[calc(100vh-130px)] md:min-h-[450px] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0 relative">
-        <div className={`md:flex flex-col min-h-0 h-full w-full ${isMobile && activeId ? 'hidden' : 'flex'}`}>
+      <div className="h-[calc(100vh-130px)] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0 relative">
+        <div className={`flex-col min-h-0 h-full w-full md:flex ${isMobile && activeId ? 'hidden' : 'flex'}`}>
           <ConversationList
             conversations={convList}
             activeId={activeId}
             onSelect={handleSelectConversation}
-            isAdmin={false}
-            onlineUsers={onlineUsers}
-            typingMap={typingMap}
-            currentUserId={user.id}
+            currentUserId={userId}
             currentUserType="user"
           />
         </div>
@@ -322,14 +171,10 @@ export default function UserChatIndex({
               <ChatWindow
                 conversation={currentConv}
                 initialMessages={messages}
-                initialTicket={linkedTicket}
-                currentUser={currentUser}
+                currentUser={{ id: userId, name: currentUser.name, type: 'user' }}
                 isAdmin={false}
-                isLoading={isLoadingMessages}
-                onlineUsers={onlineUsers}
-                onBack={isMobile ? handleBackToList : undefined}
-                onMessageSent={(msg) => updateConversationOnMessage(msg, true)}
-                onMessageReceived={(msg) => updateConversationOnMessage(msg, true)}
+                isLoading={isLoading}
+                onBack={isMobile ? handleBack : undefined}
               />
             </motion.div>
           )}

@@ -12,6 +12,7 @@ class Conversation extends Model
     protected $fillable = [
         'type',
         'user_id',
+        'ticket_id',
         'admin_one_id',
         'admin_two_id',
         'last_message_at',
@@ -19,10 +20,16 @@ class Conversation extends Model
 
     protected $casts = [
         'user_id' => 'integer',
+        'ticket_id' => 'integer',
         'admin_one_id' => 'integer',
         'admin_two_id' => 'integer',
         'last_message_at' => 'datetime',
     ];
+
+    public function ticket()
+    {
+        return $this->belongsTo(Ticket::class);
+    }
 
     public function user()
     {

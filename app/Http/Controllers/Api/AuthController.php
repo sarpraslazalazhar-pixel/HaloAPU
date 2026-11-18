@@ -143,6 +143,8 @@ class AuthController extends Controller
                 'user' => $isAdmin ? $this->formatAdminProfile($user) : $this->formatUserProfile($user),
                 'token' => $token,
                 'role' => $isAdmin ? 'admin' : 'user',
+                // Public websocket settings so Flutter can subscribe without VITE_*.
+                'realtime' => \App\Providers\AppServiceProvider::realtimeConfig(),
             ],
             'message' => 'Login berhasil'
         ], 200);

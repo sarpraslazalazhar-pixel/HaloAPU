@@ -1,9 +1,12 @@
 @props(['url'])
-<tr>
-<td class="header">
-<a href="{{ $url }}" style="display: inline-block;">
 @php
-    $favicon = \App\Models\SystemConfig::getValue('favicon_path');
+    $favicon = null;
+    try {
+        $favicon = \App\Models\SystemConfig::getValue('favicon_path');
+    } catch (\Throwable $e) {
+        $favicon = null;
+    }
+
     if ($favicon) {
         $faviconUrl = str_starts_with($favicon, 'http')
             ? $favicon
@@ -17,8 +20,26 @@
     } else {
         $faviconUrl = asset('images/logo.png');
     }
+
+    $brandName = trim(strip_tags((string) $slot)) ?: config('app.name', 'Halo APU');
 @endphp
-<img src="{{ $faviconUrl }}" class="logo" alt="{{ config('app.name') }}" width="64" height="64" style="max-height: 64px; max-width: 64px; width: 64px; height: 64px; object-fit: contain; display: inline-block;">
+<tr>
+<td class="header-cell">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+<tr>
+<td width="56" valign="middle" style="width: 56px; padding-right: 14px;">
+<a href="{{ $url }}" target="_blank" rel="noopener" style="display: inline-block; text-decoration: none;">
+<img src="{{ $faviconUrl }}" class="logo" alt="{{ $brandName }}" width="46" height="46" style="width: 46px; height: 46px; max-width: 46px; max-height: 46px; object-fit: contain; display: block; border: 0;">
 </a>
+</td>
+<td valign="middle" align="left">
+<a href="{{ $url }}" target="_blank" rel="noopener" class="brand-title">{{ strtoupper($brandName) }}</a>
+<div class="brand-subtitle">Ajukan. Pantau. Selesai</div>
+</td>
+<td valign="middle" align="right" class="header-badge-cell">
+<span class="header-badge">Layanan Helpdesk</span>
+</td>
+</tr>
+</table>
 </td>
 </tr>

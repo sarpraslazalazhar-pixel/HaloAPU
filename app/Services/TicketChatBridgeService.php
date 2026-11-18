@@ -30,101 +30,59 @@ class TicketChatBridgeService
                 return null;
             }
 
-            $targetAdminIds = collect();
-
-            if ($log->admin_id) {
-                $senderType = Admin::class;
-                $senderId = (int) $log->admin_id;
-                $targetAdminIds->push($senderId);
-            } else {
-                $senderType = User::class;
-                $senderId = $userId;
-
-                // Admin tujuan: prioritas operator tiket -> admin unit terkait -> admin pertama
-                if ($ticket->assigned_admin_id) {
-                    $targetAdminIds->push((int) $ticket->assigned_admin_id);
-                }
-
-                $unitAdmins = $ticket->subUnit?->unit?->admins;
-                if ($unitAdmins && $unitAdmins->isNotEmpty()) {
-                    $targetAdminIds = $targetAdminIds->concat($unitAdmins->pluck('id'));
-                }
-
-                if ($targetAdminIds->isEmpty()) {
-                    $firstAdmin = Admin::value('id');
-                    if ($firstAdmin) {
-                        $targetAdminIds->push((int) $firstAdmin);
-                    }
-                }
-            }
-
-            $targetAdminIds = $targetAdminIds->unique()->filter();
-            if ($targetAdminIds->isEmpty()) {
-                return null;
-            }
-
             $body = trim((string) $log->catatan);
             if (empty($body) && $log->attachments && $log->attachments->isNotEmpty()) {
                 $body = '[Lampiran Tiket]';
             }
 
-            $firstMessage = null;
-
-            foreach ($targetAdminIds as $adminId) {
-                // Cari atau buat percakapan direct antara User dan masing-masing Admin terkait
-                $conversation = Conversation::firstOrCreate([
-                    'type' => 'user_admin_direct',
+            // Chat is per ticket now, so a timeline reply lands in that ticket's room.
+            $conversation = Conversation::firstOrCreate(
+                ['type' => 'ticket', 'ticket_id' => $ticket->id],
+                [
                     'user_id' => $userId,
-                    'admin_one_id' => $adminId,
-                ], [
+                    'admin_one_id' => $ticket->assigned_admin_id,
                     'last_message_at' => now(),
-                ]);
+                ]
+            );
 
-                // Cegah duplikasi jika pesan persis sama baru saja dibuat < 10 detik
-                $alreadyBridged = Message::where('conversation_id', $conversation->id)
-                    ->where('ticket_id', $ticket->id)
-                    ->where('body', $body)
-                    ->where('created_at', '>=', now()->subSeconds(10))
-                    ->exists();
+            $alreadyBridged = Message::where('conversation_id', $conversation->id)
+                ->where('body', $body)
+                ->where('created_at', '>=', now()->subSeconds(10))
+                ->exists();
 
-                if ($alreadyBridged) {
-                    continue;
-                }
+            if ($alreadyBridged) {
+                return null;
+            }
 
-                $chatMessage = Message::create([
-                    'conversation_id' => $conversation->id,
-                    'sender_type' => $senderType,
-                    'sender_id' => $senderId,
-                    'ticket_id' => $ticket->id,
-                    'body' => $body,
-                ]);
+            $chatMessage = Message::create([
+                'conversation_id' => $conversation->id,
+                'sender_type' => $log->admin_id ? Admin::class : User::class,
+                'sender_id' => $log->admin_id ? (int) $log->admin_id : $userId,
+                'ticket_id' => $ticket->id,
+                'body' => $body,
+            ]);
 
-                if (!$firstMessage) {
-                    $firstMessage = $chatMessage;
-                }
-
-                // Sinkronkan lampiran jika ada
-                if ($log->attachments && $log->attachments->isNotEmpty()) {
-                    foreach ($log->attachments as $att) {
-                        ChatAttachment::create([
-                            'message_id' => $chatMessage->id,
-                            'file_name' => $att->original_name ?: basename($att->file_path),
-                            'file_path' => $att->file_path,
-                            'file_type' => $att->mime_type ?: 'application/octet-stream',
-                            'file_size' => (int) ($att->file_size ?: 0),
-                        ]);
-                    }
-                }
-
-                $conversation->update(['last_message_at' => now()]);
-
-                // Broadcast real-time ke web chat
-                try {
-                    broadcast(new ChatMessageSent($chatMessage))->toOthers();
-                } catch (\Throwable $be) {
-                    // Abaikan jika broadcast socket offline
+            if ($log->attachments && $log->attachments->isNotEmpty()) {
+                foreach ($log->attachments as $att) {
+                    ChatAttachment::create([
+                        'message_id' => $chatMessage->id,
+                        'file_name' => $att->original_name ?: basename($att->file_path),
+                        'file_path' => $att->file_path,
+                        'file_type' => $att->mime_type ?: 'application/octet-stream',
+                        'file_size' => (int) ($att->file_size ?: 0),
+                    ]);
                 }
             }
+
+            $conversation->update(['last_message_at' => now()]);
+
+            try {
+                broadcast(new ChatMessageSent($chatMessage))->toOthers();
+            } catch (\Throwable $be) {
+                // Socket offline: the message is still persisted.
+            }
+
+            $firstMessage = $chatMessage;
 
             return $firstMessage;
         } catch (\Throwable $e) {

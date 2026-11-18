@@ -147,6 +147,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('chat')->name('chat.')->group(function () {
         Route::get('/', [ChatController::class, 'index'])->name('index');
         Route::get('/tickets', [ChatController::class, 'userTickets'])->name('tickets');
+        Route::get('/tickets/{ticket}/messages', [ChatController::class, 'ticketRoom'])->name('tickets.room');
         Route::get('/conversations/{conversation}', [ChatController::class, 'show'])->name('conversations.show');
         Route::post('/conversations/{conversation}/messages', [ChatController::class, 'storeMessage'])->name('messages.store');
         Route::put('/messages/{message}', [ChatController::class, 'updateMessage'])->name('messages.update');

@@ -22,6 +22,10 @@ use Inertia\Inertia;
 
 class ChatController extends Controller
 {
+    /**
+     * Same inbox as the mobile app: forum, direct chat, and one room per ticket.
+     * `?ticket=N` (from a ticket page) or `?active=N` preselects a room.
+     */
     public function index(Request $request)
     {
         $user = Auth::user();
@@ -31,303 +35,194 @@ class ChatController extends Controller
 
         $user->update(['last_seen_at' => now()]);
 
-        // 1. Global Public Conversation
-        $supportConv = Conversation::firstOrCreate(
-            ['type' => 'public_global'],
-            ['last_message_at' => now()]
-        );
-
-        // 2. Direct Conversations with ALL Admins
-        $assignedAdminIds = Ticket::where('user_id', $user->id)
-            ->whereNotNull('assigned_admin_id')
-            ->pluck('assigned_admin_id')
-            ->unique()
-            ->toArray();
-
-        $allAdminIds = Admin::pluck('id')->all();
-        if (!empty($allAdminIds)) {
-            $existingAdminIds = Conversation::where('type', 'user_admin_direct')
-                ->where('user_id', $user->id)
-                ->pluck('admin_one_id')
-                ->all();
-
-            $missingAdminIds = array_diff($allAdminIds, $existingAdminIds);
-            foreach ($missingAdminIds as $admId) {
-                Conversation::firstOrCreate([
-                    'type' => 'user_admin_direct',
-                    'user_id' => $user->id,
-                    'admin_one_id' => $admId,
-                ], [
-                    'last_message_at' => now(),
-                ]);
-            }
-        }
-
-        // Fetch all conversations for this user
-        $query = Conversation::with([
-            'adminOne:id,name,username,email,avatar_path,last_seen_at',
-            'latestMessage.sender',
-            'latestMessage.attachments',
-        ])->where(function ($q) use ($user) {
-            $q->where('type', 'public_global')
-              ->orWhere(function ($q2) use ($user) {
-                  $q2->where('user_id', $user->id)
-                     ->whereIn('type', ['user_admin_direct']);
-              });
-        });
-
-        $rawConversations = $query->orderByDesc('last_message_at')
-            ->orderByDesc('updated_at')
-            ->get();
-
-        // Deep link from a ticket page: /chat?ticket=5 opens the room bound to that
-        // ticket, so the ticket and its chat are the same conversation.
-        if (!$request->query('active') && $request->filled('ticket')) {
-            $ticketId = (int) $request->query('ticket');
-
-            $ownsTicket = Ticket::where('id', $ticketId)
-                ->where('user_id', $user->id)
-                ->exists();
-
-            if ($ownsTicket) {
-                $ticketConv = Conversation::firstOrCreate([
-                    'type' => 'user_admin_direct',
-                    'user_id' => $user->id,
-                    'admin_one_id' => Ticket::whereKey($ticketId)->value('assigned_admin_id')
-                        ?: Admin::value('id'),
-                ], [
-                    'last_message_at' => now(),
-                ]);
-
-                if (!$rawConversations->contains('id', $ticketConv->id)) {
-                    $rawConversations->prepend($ticketConv);
-                }
-
-                $request->merge(['active' => $ticketConv->id]);
-            }
-        }
-
         $activeConversationId = $request->query('active');
 
-        if (!$activeConversationId && $rawConversations->isNotEmpty()) {
-            // Priority to support chat if no active selected
-            $supportItem = $rawConversations->where('type', 'public_global')->first();
-            $activeConversationId = $supportItem ? $supportItem->id : $rawConversations->first()->id;
+        if (!$activeConversationId && $request->filled('ticket')) {
+            $ticketId = (int) $request->query('ticket');
+            $ticket = $user->tickets()->find($ticketId);
+
+            if (!$ticket) {
+                abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
+            }
+
+            // Room may be brand new; resolve it before listing the inbox.
+            $activeConversationId = $this->conversationForTicket($ticket)->id;
         }
 
+        $activeConversation = null;
         $activeMessages = [];
-        $activeConversationData = null;
 
         if ($activeConversationId) {
-            $activeConv = Conversation::where('id', $activeConversationId)
-                ->where(function ($q) use ($user) {
-                    $q->where('type', 'public_global')
-                      ->orWhere('user_id', $user->id);
-                })
-                ->with(['adminOne'])
-                ->first();
+            $conversation = Conversation::find($activeConversationId);
 
-            if ($activeConv) {
-                if ($activeConv->type === 'public_global') {
-                    $title = 'Forum Bantuan Halo APU';
-                    $subtitle = 'Grup Publik';
-                    $avatar = null;
-                } else {
-                    $target = $activeConv->adminOne;
-                    $title = $target ? ($target->name ?? $target->username) : 'Admin';
-                    $subtitle = 'Admin (Privat)';
-                    $avatar = $target && $target->avatar_path ? '/storage/' . $target->avatar_path : null;
-                }
+            if ($conversation && Gate::allows('view', $conversation)) {
+                $this->markConversationRead($conversation, $user);
 
-                $activeConversationData = [
-                    'id' => $activeConv->id,
-                    'title' => $title,
-                    'subtitle' => $subtitle,
-                    'user' => [
-                        'avatar' => $avatar,
-                    ],
-                ];
-
-                // Mark unread messages as read
-                $unreadMessages = Message::where('conversation_id', $activeConv->id)
-                    ->where(function ($sq) use ($user) {
-                        $sq->where('sender_type', '!=', User::class)
-                           ->orWhere('sender_id', '!=', $user->id);
-                    })
-                    ->whereDoesntHave('reads', function ($q) use ($user) {
-                        $q->where('user_type', User::class)->where('user_id', $user->id);
-                    })
-                    ->get();
-
-                foreach ($unreadMessages as $uMsg) {
-                    MessageRead::firstOrCreate([
-                        'message_id' => $uMsg->id,
-                        'user_type' => User::class,
-                        'user_id' => $user->id,
-                    ], [
-                        'read_at' => now(),
-                    ]);
-                }
-
-                if ($unreadMessages->isNotEmpty()) {
-                    \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
-                    broadcast(new ChatMessageRead($activeConv->id, User::class, $user->id, $unreadMessages->count()));
-                }
-
-                $rawMessages = Message::where('conversation_id', $activeConv->id)
-                    ->with([
-                        'sender',
-                        'ticket:id,sub_unit_id,user_id,status,priority',
-                        'ticket.subUnit:id,nama_layanan',
-                        'attachments',
-                        'replyTo.sender',
-                        'replyTo.attachments',
-                        'reads',
-                    ])
-                    ->orderBy('created_at', 'asc')
-                    ->get();
-
-                $activeMessages = $rawMessages->map(function ($msg) {
-                    return [
-                        'id' => $msg->id,
-                        'conversation_id' => $msg->conversation_id,
-                        'sender_type' => $msg->sender_type,
-                        'sender_id' => $msg->sender_id,
-                        'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Sistem',
-                        'sender_avatar' => $msg->sender && !empty($msg->sender->avatar_path) ? '/storage/' . $msg->sender->avatar_path : null,
-                        'ticket' => $msg->ticket ? [
-                            'id' => $msg->ticket->id,
-                            'formatted_id' => $msg->ticket->formatted_id,
-                            'judul' => $msg->ticket->judul,
-                            'status' => $msg->ticket->status,
-                            'priority' => $msg->ticket->priority,
-                        ] : null,
-                        'reply_to_message_id' => $msg->reply_to_message_id,
-                        'reply_to' => $msg->replyTo ? [
-                            'id' => $msg->replyTo->id,
-                            'body' => $msg->replyTo->body,
-                            'sender_name' => $msg->replyTo->sender ? ($msg->replyTo->sender->name ?? $msg->replyTo->sender->username) : 'User',
-                        ] : null,
-                        'body' => $msg->body,
-                        'is_edited' => $msg->is_edited,
-                        'attachments' => $msg->attachments->map(fn($att) => [
-                            'id' => $att->id,
-                            'file_name' => $att->file_name,
-                            'file_path' => '/storage/' . $att->file_path,
-                            'file_type' => $att->file_type,
-                            'file_size' => $att->file_size,
-                        ]),
-                        'reads' => $msg->reads->map(fn($r) => [
-                            'user_type' => $r->user_type,
-                            'user_id' => $r->user_id,
-                            'read_at' => $r->read_at ? $r->read_at->toIso8601String() : null,
-                        ]),
-                        'created_at' => $msg->created_at->toIso8601String(),
-                    ];
-                });
+                $activeConversation = \App\Services\ChatInboxService::present($conversation, $user, false);
+                $activeMessages = $this->serializeMessages(
+                    Message::where('conversation_id', $conversation->id)
+                        ->with([
+                            'sender',
+                            'ticket:id,sub_unit_id,user_id,status,priority',
+                            'ticket.subUnit:id,nama_layanan',
+                            'attachments',
+                            'replyTo.sender',
+                            'replyTo.attachments',
+                            'reads',
+                        ])
+                        ->orderBy('created_at')
+                        ->get()
+                );
             }
-        }
-
-        $conversations = $rawConversations->map(function ($conv) use ($user, $assignedAdminIds) {
-            $unreadCount = Message::where('conversation_id', $conv->id)
-                ->where(function ($sq) use ($user) {
-                    $sq->where('sender_type', '!=', User::class)
-                       ->orWhere('sender_id', '!=', $user->id);
-                })
-                ->whereDoesntHave('reads', function ($q) use ($user) {
-                    $q->where('user_type', User::class)->where('user_id', $user->id);
-                })
-                ->count();
-
-            $latestMsg = $conv->latestMessage;
-
-            $target = null;
-            if ($conv->type === 'public_global') {
-                $title = 'Forum Bantuan Halo APU';
-                $subtitle = 'Grup Publik';
-                $avatar = null;
-                $isAssigned = false;
-            } else {
-                $target = $conv->adminOne;
-                $title = $target ? ($target->name ?? $target->username) : 'Admin';
-                $isAssigned = in_array($conv->admin_one_id, $assignedAdminIds);
-                $subtitle = $isAssigned ? 'Admin (Ditugaskan)' : 'Admin';
-                $avatar = $target && $target->avatar_path ? '/storage/' . $target->avatar_path : null;
-            }
-
-            $isLastMessageRead = false;
-            if ($latestMsg) {
-                $isLastMessageRead = $latestMsg->reads()
-                    ->where(function ($rq) use ($latestMsg) {
-                        $rq->where('user_id', '!=', $latestMsg->sender_id)
-                           ->orWhere('user_type', '!=', $latestMsg->sender_type);
-                    })
-                    ->exists();
-            }
-
-            return [
-                'id' => $conv->id,
-                'title' => $title,
-                'subtitle' => $subtitle,
-                'is_assigned' => $isAssigned,
-                'user' => [
-                    'id' => $target?->id,
-                    'name' => $target ? ($target->name ?? $target->username) : null,
-                    'avatar' => $avatar,
-                    'last_seen_at' => $target?->last_seen_at ? $target->last_seen_at->toIso8601String() : null,
-                ],
-                'last_message' => $latestMsg ? ($latestMsg->body ?? ($latestMsg->attachments->first() ? '[Lampiran]' : '[Tiket]')) : 'Belum ada pesan',
-                'last_message_at' => $conv->last_message_at ? $conv->last_message_at->toIso8601String() : $conv->updated_at->toIso8601String(),
-                'last_message_sender_id' => $latestMsg?->sender_id,
-                'last_message_sender_type' => $latestMsg?->sender_type,
-                'is_last_message_read' => $isLastMessageRead,
-                'unread_count' => $unreadCount,
-            ];
-        });
-
-        // Ticket bound to this room, if the user arrived from a ticket page.
-        $linkedTicket = null;
-
-        if ($request->filled('ticket')) {
-            // formatted_id is a computed accessor, so the whole model is needed.
-            $linkedTicket = Ticket::where('id', (int) $request->query('ticket'))
-                ->where('user_id', $user->id)
-                ->first();
         }
 
         return Inertia::render('Chat/Index', [
-            'conversations' => $conversations,
-            'activeConversationId' => $activeConversationId ? (int) $activeConversationId : null,
-            'activeConversation' => $activeConversationData,
+            'conversations' => \App\Services\ChatInboxService::items($user),
+            'activeConversationId' => $activeConversation['id'] ?? null,
+            'activeConversation' => $activeConversation,
             'activeMessages' => $activeMessages,
-            'linkedTicket' => $linkedTicket ? [
-                'id' => $linkedTicket->id,
-                'formatted_id' => $linkedTicket->formatted_id,
-                'judul' => $linkedTicket->judul,
-                'status' => $linkedTicket->status,
-                'priority' => $linkedTicket->priority,
-            ] : null,
+            'currentUser' => [
+                'id' => $user->id,
+                'name' => $user->name ?? $user->username,
+            ],
         ]);
     }
 
+    /** Tickets the composer may tag; scoped to the signed-in user. */
     public function userTickets()
     {
         $user = Auth::user();
-        $tickets = Ticket::with('subUnit:id,nama_layanan')
-            ->where('user_id', $user->id)
-            ->orderByDesc('created_at')
-            ->limit(20)
+
+        $tickets = Ticket::where('user_id', $user->id)
+            ->orderByDesc('updated_at')
+            ->limit(50)
             ->get()
-            ->map(fn($t) => [
+            ->map(fn (Ticket $t) => [
                 'id' => $t->id,
                 'formatted_id' => $t->formatted_id,
                 'judul' => $t->judul,
                 'status' => $t->status,
                 'priority' => $t->priority,
-                'created_at' => $t->created_at->format('d/m/Y H:i'),
             ]);
 
         return response()->json(['tickets' => $tickets]);
+    }
+
+    /** Room for one ticket; created on first open so the room always exists. */
+    public function ticketRoom(Request $request, Ticket $ticket)
+    {
+        $user = Auth::user();
+
+        abort_unless((int) $ticket->user_id === (int) $user->id, 403, 'Kamu tidak memiliki akses ke tiket ini.');
+
+        $conversation = $this->conversationForTicket($ticket);
+
+        $messages = Message::where('conversation_id', $conversation->id)
+            ->with([
+                'sender',
+                'ticket:id,sub_unit_id,user_id,status,priority',
+                'ticket.subUnit:id,nama_layanan',
+                'attachments',
+                'replyTo.sender',
+                'replyTo.attachments',
+                'reads',
+            ])
+            ->orderBy('created_at')
+            ->get();
+
+        $this->markConversationRead($conversation, $user);
+
+        return response()->json([
+            'conversation' => [
+                'id' => $conversation->id,
+                'ticket_id' => $ticket->id,
+                'title' => 'Tiket #' . $ticket->formatted_id,
+                'subtitle' => $ticket->subUnit?->nama_layanan ?? 'Diskusi Tiket',
+                'ticket' => [
+                    'id' => $ticket->id,
+                    'formatted_id' => $ticket->formatted_id,
+                    'judul' => $ticket->judul,
+                    'status' => $ticket->status,
+                    'priority' => $ticket->priority,
+                ],
+            ],
+            'messages' => $this->serializeMessages($messages),
+        ]);
+    }
+
+    /** The room that owns a ticket's chat, created on first visit. */
+    private function conversationForTicket(Ticket $ticket): Conversation
+    {
+        return Conversation::firstOrCreate(
+            ['type' => 'ticket', 'ticket_id' => $ticket->id],
+            [
+                'user_id' => $ticket->user_id,
+                'admin_one_id' => $ticket->assigned_admin_id,
+                'last_message_at' => now(),
+            ]
+        );
+    }
+
+    private function markConversationRead(Conversation $conversation, User $user): void
+    {
+        $unread = Message::where('conversation_id', $conversation->id)
+            ->where(fn ($q) => $q->where('sender_type', '!=', User::class)->orWhere('sender_id', '!=', $user->id))
+            ->whereDoesntHave('reads', fn ($q) => $q->where('user_type', User::class)->where('user_id', $user->id))
+            ->get();
+
+        foreach ($unread as $message) {
+            MessageRead::firstOrCreate([
+                'message_id' => $message->id,
+                'user_type' => User::class,
+                'user_id' => $user->id,
+            ], ['read_at' => now()]);
+        }
+
+        if ($unread->isNotEmpty()) {
+            \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
+            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unread->count()));
+        }
+    }
+
+    /** Shape messages exactly like the web chat client expects. */
+    private function serializeMessages($messages): array
+    {
+        return $messages->map(fn (Message $msg) => [
+            'id' => $msg->id,
+            'conversation_id' => $msg->conversation_id,
+            'sender_type' => $msg->sender_type,
+            'sender_id' => $msg->sender_id,
+            'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Sistem',
+            'sender_avatar' => $msg->sender && !empty($msg->sender->avatar_path) ? '/storage/' . $msg->sender->avatar_path : null,
+            'ticket' => $msg->ticket ? [
+                'id' => $msg->ticket->id,
+                'formatted_id' => $msg->ticket->formatted_id,
+                'judul' => $msg->ticket->judul,
+                'status' => $msg->ticket->status,
+                'priority' => $msg->ticket->priority,
+            ] : null,
+            'reply_to_message_id' => $msg->reply_to_message_id,
+            'reply_to' => $msg->replyTo ? [
+                'id' => $msg->replyTo->id,
+                'body' => $msg->replyTo->body,
+                'sender_name' => $msg->replyTo->sender ? ($msg->replyTo->sender->name ?? $msg->replyTo->sender->username) : 'User',
+            ] : null,
+            'body' => $msg->body,
+            'is_edited' => $msg->is_edited,
+            'attachments' => $msg->attachments->map(fn ($att) => [
+                'id' => $att->id,
+                'file_name' => $att->file_name,
+                'file_path' => '/storage/' . $att->file_path,
+                'file_type' => $att->file_type,
+                'file_size' => $att->file_size,
+            ])->all(),
+            'reads' => $msg->reads->map(fn ($r) => [
+                'user_type' => $r->user_type,
+                'user_id' => $r->user_id,
+                'read_at' => $r->read_at?->toIso8601String(),
+            ])->all(),
+            'created_at' => $msg->created_at->toIso8601String(),
+        ])->all();
     }
 
     public function storeMessage(Request $request, Conversation $conversation)
@@ -350,6 +245,9 @@ class ChatController extends Controller
         }
 
         $ticketId = $request->ticket_id;
+        if (!$ticketId && $conversation->type === 'ticket') {
+            $ticketId = $conversation->ticket_id;
+        }
         if (!$ticketId && $request->filled('reply_to_message_id')) {
             $parent = Message::find($request->reply_to_message_id);
             if ($parent && $parent->ticket_id) {
@@ -533,25 +431,7 @@ class ChatController extends Controller
             broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unreadMessages->count()));
         }
 
-        if ($conversation->type === 'public_global') {
-            $title = 'Forum Bantuan Halo APU';
-            $subtitle = 'Grup Publik';
-            $avatar = null;
-        } else {
-            $target = $conversation->adminOne;
-            $title = $target ? ($target->name ?? $target->username) : 'Admin';
-            $subtitle = 'Admin (Privat)';
-            $avatar = $target && $target->avatar_path ? '/storage/' . $target->avatar_path : null;
-        }
-
-        $conversationData = [
-            'id' => $conversation->id,
-            'title' => $title,
-            'subtitle' => $subtitle,
-            'user' => [
-                'avatar' => $avatar,
-            ],
-        ];
+        $conversationData = \App\Services\ChatInboxService::present($conversation, $user, false);
 
         $rawMessages = Message::where('conversation_id', $conversation->id)
             ->with([

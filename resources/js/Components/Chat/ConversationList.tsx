@@ -26,6 +26,15 @@ export interface ConversationItem {
   last_message_sender_type?: string | null;
   is_last_message_read?: boolean;
   unread_count: number;
+  ticket_id?: number | null;
+  ticket?: {
+    id: number;
+    formatted_id: string;
+    judul?: string;
+    status?: string;
+    requester?: string | null;
+    handler?: string | null;
+  } | null;
 }
 
 interface ConversationListProps {
@@ -258,6 +267,17 @@ export function ConversationList({
                         </span>
                       )}
                     </div>
+                  )}
+
+                  {item.ticket && (item.ticket.requester || item.ticket.handler) && (
+                    <p className="text-[10px] text-zinc-500 truncate mb-1">
+                      Dari <span className="font-semibold text-zinc-700">{item.ticket.requester ?? '—'}</span>
+                      {' · '}
+                      Ditangani{' '}
+                      <span className={`font-semibold ${item.ticket.handler ? 'text-zinc-700' : 'text-amber-600'}`}>
+                        {item.ticket.handler ?? 'Belum ditugaskan'}
+                      </span>
+                    </p>
                   )}
 
                   <div className="flex items-center justify-between gap-2">

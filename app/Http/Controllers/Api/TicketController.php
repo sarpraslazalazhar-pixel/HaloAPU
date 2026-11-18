@@ -560,7 +560,7 @@ class TicketController extends Controller
         }
 
         $request->validate([
-            'catatan' => 'required|string|max:1000',
+            'catatan' => 'required_without:attachments|nullable|string|max:1000',
             'attachments' => 'nullable|array|max:3',
             'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
@@ -569,7 +569,7 @@ class TicketController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => $isAdmin ? $user->id : null,
             'aksi' => 'balasan',
-            'catatan' => $request->catatan,
+            'catatan' => filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]',
             'timestamp' => now(),
         ]);
 
@@ -600,7 +600,7 @@ class TicketController extends Controller
 
         // Notify admins / user
         if (! $isAdmin) {
-            $this->notifyAdminsReply($ticket, $user, $request->catatan);
+            $this->notifyAdminsReply($ticket, $user, $log->catatan);
         } else {
             try {
                 $ticket->user?->notify(new BrowserNotification(

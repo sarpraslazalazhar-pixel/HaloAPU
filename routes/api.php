@@ -34,6 +34,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
     Route::post('/conversations/{conversation}/messages', [ChatController::class, 'store']);
     Route::post('/conversations/{conversation}/read', [ChatController::class, 'read']);
+    Route::get('/tickets/{ticket}/chat', [ChatController::class, 'ticketRoom']);
     Route::get('/chat/attachments/{attachment}', [ChatController::class, 'downloadAttachment']);
 
     // WebSocket channel auth for Bearer tokens (Flutter). The web route

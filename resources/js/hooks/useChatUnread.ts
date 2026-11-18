@@ -75,11 +75,13 @@ export function useChatUnread({
         : currentPath.startsWith('/chat');
 
       const params = new URLSearchParams(window.location.search);
-      const currentActiveId = params.get('active');
+
+      // Users read chat per ticket, admins per conversation.
+      const currentActiveId = isAdminRef.current ? params.get('active') : params.get('ticket');
 
       const isViewingThisChat =
         isChatPage &&
-        currentActiveId === String(msg.conversation_id) &&
+        currentActiveId === String(isAdminRef.current ? msg.conversation_id : msg.ticket?.id) &&
         !document.hidden;
 
       if (!isViewingThisChat) {
@@ -119,7 +121,9 @@ export function useChatUnread({
 
               const targetUrl = isAdminRef.current
                 ? `/admin/chat?active=${msg.conversation_id}`
-                : `/chat?active=${msg.conversation_id}`;
+                : msg.ticket?.id
+                  ? `/chat?ticket=${msg.ticket.id}`
+                  : '/chat';
 
               router.visit(targetUrl);
             };

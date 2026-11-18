@@ -13,6 +13,26 @@ class ConversationPolicy
 
     public function view(mixed $user, Conversation $conversation): bool
     {
+        // Per-ticket rooms are shared by the ticket owner and the admins who
+        // may act on that ticket, so authorization delegates to the ticket.
+        if ($conversation->type === 'ticket') {
+            $ticket = $conversation->ticket;
+
+            if (! $ticket) {
+                return false;
+            }
+
+            if ($user instanceof User) {
+                return (int) $ticket->user_id === (int) $user->id;
+            }
+
+            if ($user instanceof Admin) {
+                return $ticket->isAccessibleBy($user);
+            }
+
+            return false;
+        }
+
         if ($user instanceof User) {
             if ($conversation->type === 'public_global') {
                 return true;

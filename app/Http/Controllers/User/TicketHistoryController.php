@@ -204,7 +204,7 @@ class TicketHistoryController extends Controller
         }
 
         $request->validate([
-            'catatan' => 'required|string|max:1000',
+            'catatan' => 'required_without:general_attachments|nullable|string|max:1000',
             'general_attachments' => 'nullable|array|max:3',
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
@@ -213,7 +213,7 @@ class TicketHistoryController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => null,
             'aksi' => 'balasan',
-            'catatan' => $request->catatan,
+            'catatan' => filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]',
             'timestamp' => now(),
         ]);
 
@@ -254,7 +254,7 @@ class TicketHistoryController extends Controller
         if ($notifiedAdmins->isNotEmpty()) {
             $senderName = auth()->user()->name ?? auth()->user()->username;
             $url = route('admin.tiket.show', $ticket->id);
-            Notification::send($notifiedAdmins, new TicketCommentPushNotification($ticket, $senderName, $request->catatan, $url));
+            Notification::send($notifiedAdmins, new TicketCommentPushNotification($ticket, $senderName, $log->catatan, $url));
         }
 
         app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.replied');

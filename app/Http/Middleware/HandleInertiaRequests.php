@@ -114,6 +114,10 @@ class HandleInertiaRequests extends Middleware
               })
               ->orWhere(function ($q2) use ($admin) {
                   $q2->where('type', 'user_admin_direct')->where('admin_one_id', $admin->id);
+              })
+              ->orWhere(function ($q2) use ($admin) {
+                  $q2->where('type', 'ticket')
+                     ->whereHas('ticket', fn ($tq) => $tq->accessibleBy($admin));
               });
         })
         ->where(function ($sq) use ($admin) {
@@ -129,8 +133,7 @@ class HandleInertiaRequests extends Middleware
     protected function calculateUnreadChatCountForUser(User $user): int
     {
         return \App\Models\Message::whereHas('conversation', function ($q) use ($user) {
-            $q->where('type', 'public_global')
-              ->orWhere('user_id', $user->id);
+            $q->where('type', 'ticket')->whereHas('ticket', fn ($t) => $t->where('user_id', $user->id));
         })
         ->where(function ($sq) use ($user) {
             $sq->where('sender_type', '!=', \App\Models\User::class)

@@ -51,6 +51,8 @@ export interface ChatMessage {
     judul?: string;
     status?: string;
     priority?: string;
+    requester?: string | null;
+    handler?: string | null;
   } | null;
   reply_to_message_id?: number | null;
   reply_to?: {
@@ -91,6 +93,9 @@ interface ChatWindowProps {
       formatted_id: string;
       judul?: string;
       status?: string;
+      priority?: string;
+      requester?: string | null;
+      handler?: string | null;
     } | null;
     title: string;
     subtitle?: string;
@@ -129,7 +134,7 @@ export function ChatWindow({
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [inputText, setInputText] = useState('');
-  const [selectedTicket, setSelectedTicket] = useState<any | null>(initialTicket);
+  const [selectedTicket, setSelectedTicket] = useState<ChatMessage['ticket'] | null>(initialTicket ?? null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
@@ -379,7 +384,7 @@ export function ChatWindow({
 
     if (inputText.trim()) formData.append('body', inputText.trim());
 
-    if (selectedTicket) formData.append('ticket_id', selectedTicket.id);
+    if (selectedTicket) formData.append('ticket_id', String(selectedTicket.id));
 
     if (replyingTo) formData.append('reply_to_message_id', String(replyingTo.id));
 
@@ -586,15 +591,30 @@ export function ChatWindow({
         </div>
 
         {conversation.ticket && (
-          <a
-            href={isAdmin ? `/admin/tiket/${conversation.ticket.id}` : `/tiket/${conversation.ticket.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg border border-sky-200 transition-colors"
-          >
-            <span>Detail Tiket</span>
-            <ExternalLink className="h-3 w-3" />
-          </a>
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="hidden sm:flex flex-col items-end text-[10px] leading-tight">
+              {conversation.ticket.requester && (
+                <span className="text-zinc-500">
+                  Dari: <span className="font-semibold text-zinc-700">{conversation.ticket.requester}</span>
+                </span>
+              )}
+              <span className="text-zinc-500">
+                Ditangani:{' '}
+                <span className={`font-semibold ${conversation.ticket.handler ? 'text-zinc-700' : 'text-amber-600'}`}>
+                  {conversation.ticket.handler ?? 'Belum ditugaskan'}
+                </span>
+              </span>
+            </div>
+            <a
+              href={isAdmin ? `/admin/tiket/${conversation.ticket.id}` : `/tiket/${conversation.ticket.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg border border-sky-200 transition-colors"
+            >
+              <span>Detail Tiket</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
         )}
       </motion.div>
 
@@ -969,16 +989,19 @@ export function ChatWindow({
               <Paperclip className="h-4 w-4" />
             </Button>
 
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={handleOpenTicketModal}
-              title="Lampirkan Tiket"
-              className="h-9 w-9 text-zinc-500 hover:text-sky-600 rounded-xl"
-            >
-              <TicketIcon className="h-4 w-4" />
-            </Button>
+            {/* A ticket room already belongs to one ticket: attaching another is noise. */}
+            {!conversation.ticket_id && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={handleOpenTicketModal}
+                title="Lampirkan Tiket"
+                className="h-9 w-9 text-zinc-500 hover:text-sky-600 rounded-xl"
+              >
+                <TicketIcon className="h-4 w-4" />
+              </Button>
+            )}
 
             <Button
               type="button"

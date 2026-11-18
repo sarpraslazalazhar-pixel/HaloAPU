@@ -11,7 +11,7 @@
 <td align="{{ $align }}">
 <table border="0" cellpadding="0" cellspacing="0" role="presentation">
 <tr>
-<td>
+<td class="button-wrapper button-wrapper-{{ $color }}" align="center">
 <a href="{{ $url }}" class="button button-{{ $color }}" target="_blank" rel="noopener">{!! $slot !!}</a>
 </td>
 </tr>

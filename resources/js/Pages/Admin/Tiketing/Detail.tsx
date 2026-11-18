@@ -369,6 +369,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
               isAdmin={true}
               replyRoute="admin.tiket.reply"
               downloadRoute="admin.tiket.download"
+              viewRoute="admin.tiket.view"
               canReply={['solve', 'reject', 'dibatalkan'].indexOf(ticket.status) === -1}
               chatUrl={`/admin/chat?user_id=${ticket.user_id}&ticket_id=${ticket.id}`}
             />

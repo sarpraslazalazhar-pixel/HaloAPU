@@ -62,7 +62,8 @@ class TicketChatBridgeTest extends TestCase
         $this->assertEquals($user->id, $message->sender_id);
 
         $this->assertDatabaseHas('conversations', [
-            'type' => 'user_admin_direct',
+            'type' => 'ticket',
+            'ticket_id' => $ticket->id,
             'user_id' => $user->id,
             'admin_one_id' => $admin->id,
         ]);

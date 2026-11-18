@@ -2,10 +2,11 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useForm } from '@inertiajs/react';
 import { 
   Send, Paperclip, MessageSquare, Clock, 
-  ExternalLink, X, Loader2, Image as ImageIcon, FileText, Download 
+  ExternalLink, X, Loader2, Image as ImageIcon, FileText 
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { formatDateId } from '@/lib/utils';
+import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { subscribe, type TicketEvents, type TicketLogEntry } from '@/lib/realtime';
 
 type TicketLogItem = TicketLogEntry;
@@ -29,6 +30,7 @@ interface TicketChatBoxProps {
   currentAdminName?: string;
   replyRoute: string;
   downloadRoute?: string;
+  viewRoute?: string;
   canReply?: boolean;
   chatUrl?: string;
 }
@@ -37,6 +39,7 @@ export function TicketChatBox({
   isAdmin = false,
   replyRoute,
   downloadRoute = 'admin.tiket.download',
+  viewRoute = 'admin.tiket.view',
   canReply = true,
   chatUrl,
 }: TicketChatBoxProps) {
@@ -254,32 +257,68 @@ export function TicketChatBox({
                           <span>{log.attachments.length} Berkas Lampiran</span>
                         </p>
                         <div className="space-y-1">
+                          {/* Images get a real inline thumbnail, other files a row. */}
+                          <div className="flex flex-wrap gap-1.5">
+                          {log.attachments
+                            .filter((att) => {
+                              const name = att.original_name || att.file_name || '';
+                              return att.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
+                            })
+                            .map((att) => (
+                              <AttachmentViewer
+                                key={`thumb-${att.id}`}
+                                attachment={{
+                                  id: att.id,
+                                  original_name: att.original_name || att.file_name || 'Lampiran',
+                                  file_path: att.file_path,
+                                }}
+                                viewRoute={viewRoute}
+                                downloadRoute={downloadRoute}
+                              >
+                                <button type="button" title="Lihat gambar" className="block p-0.5 rounded-lg overflow-hidden bg-white/20 hover:ring-2 hover:ring-sky-400 transition">
+                                  <img
+                                    src={route(viewRoute, att.id)}
+                                    alt={att.original_name || 'Lampiran'}
+                                    loading="lazy"
+                                    className="h-20 w-20 object-cover rounded-md"
+                                  />
+                                </button>
+                              </AttachmentViewer>
+                            ))}
+                          </div>
                           {log.attachments.map((att) => {
                             const name = att.original_name || att.file_name || 'Lampiran';
                             const isImg = att.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(name);
-                            const url = route(downloadRoute, att.id);
 
+                            // Non-image files keep a compact row carrying the name.
+                            if (isImg) return null;
+
+                            // Review in place: the viewer previews images/PDF/DOCX
+                            // instead of forcing a download.
                             return (
-                              <div
+                              <AttachmentViewer
                                 key={att.id}
-                                className={`flex items-center justify-between gap-2 p-1.5 rounded-lg text-xs ${
-                                  isMe ? 'bg-sky-700/60 text-white' : 'bg-slate-50 text-slate-700 border border-slate-200'
-                                }`}
+                                attachment={{
+                                  id: att.id,
+                                  original_name: name,
+                                  file_path: att.file_path,
+                                }}
+                                viewRoute={viewRoute}
+                                downloadRoute={downloadRoute}
                               >
-                                <div className="flex items-center gap-1.5 min-w-0">
+                                <button
+                                  type="button"
+                                  title="Lihat lampiran"
+                                  className={`w-full flex items-center gap-1.5 p-1.5 rounded-lg text-xs text-left transition-colors ${
+                                    isMe
+                                      ? 'bg-sky-700/60 text-white hover:bg-sky-700/80'
+                                      : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                                  }`}
+                                >
                                   {isImg ? <ImageIcon className="w-3.5 h-3.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0" />}
                                   <span className="truncate max-w-[170px] sm:max-w-[240px] text-[11px]">{name}</span>
-                                </div>
-                                <a
-                                  href={url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`p-1 rounded hover:bg-black/10 transition-colors shrink-0 ${isMe ? 'text-white' : 'text-sky-600'}`}
-                                  title="Unduh / Buka berkas"
-                                >
-                                  <Download className="w-3.5 h-3.5" />
-                                </a>
-                              </div>
+                                </button>
+                              </AttachmentViewer>
                             );
                           })}
                         </div>

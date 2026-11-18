@@ -700,7 +700,7 @@ class TicketController extends Controller
         }
 
         $request->validate([
-            'catatan' => 'required|string|max:1000',
+            'catatan' => 'required_without:general_attachments|nullable|string|max:1000',
             'general_attachments' => 'nullable|array|max:3',
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
@@ -709,7 +709,7 @@ class TicketController extends Controller
             'ticket_id' => $ticket->id,
             'admin_id' => $admin->id,
             'aksi' => 'balasan',
-            'catatan' => $request->catatan,
+            'catatan' => filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]',
             'timestamp' => now(),
         ]);
 
@@ -746,7 +746,7 @@ class TicketController extends Controller
             if ($ticket->user) {
                 $ticket->user->notify(new BrowserNotification(
                     "Balasan Baru Tiket #{$ticket->formatted_id}",
-                    'Admin '.($admin->name ?? $admin->username).' membalas tiket Anda: '.Str::limit($request->catatan, 80),
+                    'Admin '.($admin->name ?? $admin->username).' membalas tiket Anda: '.Str::limit($log->catatan, 80),
                     "/tiket/{$ticket->id}"
                 ));
             }

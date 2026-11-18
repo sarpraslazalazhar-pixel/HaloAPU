@@ -30,74 +30,24 @@ class ChatController extends Controller
         $actor = $request->user();
         $isAdmin = $actor instanceof Admin;
 
-        $query = Conversation::with([
-            'user:id,name,username,email,avatar_path,last_seen_at',
-            'adminOne:id,name,username,email,avatar_path,last_seen_at',
-            'latestMessage.sender',
-            'latestMessage.attachments',
-        ])->where(function ($base) use ($actor, $isAdmin) {
-            $base->where('type', 'public_global');
-
-            if ($isAdmin) {
-                $base->orWhere(function ($q) use ($actor) {
-                    $q->where('type', 'admin_bot_reminder')->where('admin_one_id', $actor->id);
-                })->orWhere(function ($q) use ($actor) {
-                    $q->where('type', 'admin_direct')
-                        ->where(fn ($q2) => $q2->where('admin_one_id', $actor->id)->orWhere('admin_two_id', $actor->id));
-                })->orWhere(function ($q) use ($actor) {
-                    $q->where('type', 'user_admin_direct')->where('admin_one_id', $actor->id);
-                });
-            } else {
-                $base->orWhere(function ($q) use ($actor) {
-                    $q->where('type', 'user_admin_direct')->where('user_id', $actor->id);
-                });
-            }
-        });
-
-        $conversations = $query->orderByDesc('last_message_at')
-            ->orderByDesc('updated_at')
-            ->limit((int) $request->query('limit', 50))
-            ->get();
-
-        $items = $conversations->map(function (Conversation $conv) use ($actor, $isAdmin) {
-            $unread = $this->unreadQuery($conv, $actor, $isAdmin)->count();
-            $latest = $conv->latestMessage;
-
-            // The other party, from this actor's point of view.
-            if ($isAdmin) {
-                $peerName = $conv->user
-                    ? ($conv->user->name ?? $conv->user->username)
-                    : ($conv->type === 'public_global' ? 'Forum Bantuan' : 'Pengguna');
-                $peerAvatar = $conv->user?->avatar_path ? '/storage/' . $conv->user->avatar_path : null;
-            } else {
-                $peerName = $conv->adminOne
-                    ? ($conv->adminOne->name ?? $conv->adminOne->username)
-                    : ($conv->type === 'public_global' ? 'Forum Bantuan' : 'Admin');
-                $peerAvatar = $conv->adminOne?->avatar_path ? '/storage/' . $conv->adminOne->avatar_path : null;
-            }
-
-            $ticket = $latest?->ticket_id ? Ticket::find($latest->ticket_id) : null;
-
-            return [
-                'id' => $conv->id,
-                'type' => $conv->type,
-                'peer_name' => $peerName,
-                'peer_avatar' => $peerAvatar,
-                'ticket' => $ticket ? [
-                    'id' => $ticket->id,
-                    'formatted_id' => $ticket->formatted_id,
-                    'judul' => $ticket->judul,
-                    'status' => $ticket->status,
-                ] : null,
-                'last_message' => $latest
-                    ? ($latest->body ?: ($latest->attachments->isNotEmpty() ? '[Lampiran]' : '[Pesan]'))
-                    : 'Belum ada pesan',
-                'last_message_at' => $conv->last_message_at?->toIso8601String(),
-                'last_sender_id' => $latest?->sender_id,
-                'last_sender_type' => $latest?->sender_type,
-                'unread_count' => $unread,
-            ];
-        });
+        // One source of truth for both clients; the mobile payload keeps its
+        // own field names (peer_name/peer_avatar) so the Flutter app is unchanged.
+        $items = collect(\App\Services\ChatInboxService::items($actor, (int) $request->query('limit', 50)))
+            ->map(fn (array $conv) => [
+                'id' => $conv['id'],
+                'type' => $conv['type'],
+                'ticket_id' => $conv['ticket_id'],
+                'peer_name' => $conv['type'] === 'ticket'
+                    ? $conv['title']
+                    : ($conv['title'] ?? ($isAdmin ? 'Pengguna' : 'Admin')),
+                'peer_avatar' => $conv['user']['avatar'] ?? null,
+                'ticket' => $conv['ticket'],
+                'last_message' => $conv['last_message'],
+                'last_message_at' => $conv['last_message_at'],
+                'last_sender_id' => $conv['last_sender_id'],
+                'last_sender_type' => $conv['last_sender_type'],
+                'unread_count' => $conv['unread_count'],
+            ]);
 
         return response()->json([
             'conversations' => $items,
@@ -121,13 +71,46 @@ class ChatController extends Controller
             ->get()
             ->map(fn (Message $msg) => $this->presentMessage($msg));
 
+        $ticket = $conversation->ticket;
+
         return response()->json([
             'conversation' => [
                 'id' => $conversation->id,
                 'type' => $conversation->type,
+                'ticket_id' => $conversation->ticket_id,
+                'title' => $ticket ? 'Tiket #' . $ticket->formatted_id : null,
+                'ticket' => $ticket ? [
+                    'id' => $ticket->id,
+                    'formatted_id' => $ticket->formatted_id,
+                    'judul' => $ticket->judul,
+                    'status' => $ticket->status,
+                ] : null,
             ],
             'messages' => $messages,
         ]);
+    }
+
+    /** Open (creating on first use) the per-ticket room from the mobile app. */
+    public function ticketRoom(Request $request, Ticket $ticket)
+    {
+        $actor = $request->user();
+
+        if ($actor instanceof Admin) {
+            abort_unless($ticket->isAccessibleBy($actor), 403, 'Akses ditolak.');
+        } else {
+            abort_unless((int) $ticket->user_id === (int) $actor->id, 403, 'Akses ditolak.');
+        }
+
+        $conversation = Conversation::firstOrCreate(
+            ['type' => 'ticket', 'ticket_id' => $ticket->id],
+            [
+                'user_id' => $ticket->user_id,
+                'admin_one_id' => $ticket->assigned_admin_id,
+                'last_message_at' => now(),
+            ]
+        );
+
+        return $this->show($request, $conversation);
     }
 
     /** Send a message from mobile (direct chat, or chat about a ticket). */
@@ -150,6 +133,11 @@ class ChatController extends Controller
         }
 
         $ticketId = $validated['ticket_id'] ?? null;
+
+        // A ticket room always stays on its own ticket, whatever the client sends.
+        if ($conversation->type === 'ticket') {
+            $ticketId = $conversation->ticket_id;
+        }
 
         if ($ticketId && ! $isAdmin) {
             // A user may only attach their own ticket.
@@ -233,11 +221,7 @@ class ChatController extends Controller
 
     protected function unreadQuery(Conversation $conversation, object $actor, bool $isAdmin)
     {
-        $type = $isAdmin ? Admin::class : User::class;
-
-        return Message::where('conversation_id', $conversation->id)
-            ->where(fn ($q) => $q->where('sender_type', '!=', $type)->orWhere('sender_id', '!=', $actor->id))
-            ->whereDoesntHave('reads', fn ($q) => $q->where('user_type', $type)->where('user_id', $actor->id));
+        return \App\Services\ChatInboxService::unreadQuery($conversation, $actor, $isAdmin);
     }
 
     protected function markRead(Conversation $conversation, object $actor, bool $isAdmin): int

@@ -29,6 +29,11 @@ Broadcast::channel('chat.conversation.{conversationId}', function ($user, $conve
     }
 
     if ($user instanceof \App\Models\Admin) {
+        // Per-ticket rooms are only for admins who may act on that ticket.
+        if ($conversation->type === 'ticket') {
+            return $conversation->ticket?->isAccessibleBy($user) ?? false;
+        }
+
         return true;
     }
 

@@ -68,6 +68,7 @@ class ChatController extends Controller
 
         // ponytail: wrap base filter in a closure to prevent orWhere leaks
         $query = Conversation::with([
+            'ticket:id,user_id,sub_unit_id,form_data,status,priority,assigned_admin_id,created_by_admin_id,unit_id',
             'user:id,name,username,email,avatar_path,last_seen_at',
             'adminOne:id,name,username,email,avatar_path,last_seen_at',
             'adminTwo:id,name,username,email,avatar_path,last_seen_at',
@@ -89,6 +90,10 @@ class ChatController extends Controller
                  ->orWhere(function ($q) use ($admin) {
                      $q->where('type', 'user_admin_direct')
                        ->where('admin_one_id', $admin->id);
+                 })
+                 ->orWhere(function ($q) use ($admin) {
+                     $q->where('type', 'ticket')
+                       ->whereHas('ticket', fn ($tq) => $tq->accessibleBy($admin));
                  });
         });
 
@@ -125,6 +130,26 @@ class ChatController extends Controller
 
         $activeConversationId = $request->query('active');
 
+        if (!$activeConversationId && $request->filled('ticket_id')) {
+            $ticketId = (int) $request->input('ticket_id');
+            $ticket = Ticket::accessibleBy($admin)->find($ticketId);
+
+            if ($ticket) {
+                $ticketConv = Conversation::firstOrCreate([
+                    'type' => 'ticket',
+                    'ticket_id' => $ticket->id,
+                ], [
+                    'user_id' => $ticket->user_id,
+                    'admin_one_id' => $ticket->assigned_admin_id,
+                    'last_message_at' => now(),
+                ]);
+                $activeConversationId = $ticketConv->id;
+                if (!$rawConversations->contains('id', $ticketConv->id)) {
+                    $rawConversations->prepend($ticketConv->load(['user', 'adminOne', 'adminTwo', 'latestMessage.sender', 'latestMessage.attachments']));
+                }
+            }
+        }
+
         if (!$activeConversationId && $request->filled('user_id')) {
             $targetUserId = (int) $request->input('user_id');
             $userConv = Conversation::firstOrCreate([
@@ -150,7 +175,7 @@ class ChatController extends Controller
 
         if ($activeConversationId) {
             $activeConv = Conversation::where('id', $activeConversationId)
-                ->with(['user', 'adminOne', 'adminTwo'])
+                ->with(['user', 'adminOne', 'adminTwo', 'ticket'])
                 ->first();
 
             if ($activeConv) {
@@ -164,6 +189,11 @@ class ChatController extends Controller
                     $target = null;
                     $title = 'Forum Bantuan Halo APU';
                     $subtitle = 'Grup Publik';
+                } elseif ($activeConv->type === 'ticket') {
+                    $target = $activeConv->user;
+                    $ticket = $activeConv->ticket;
+                    $title = $ticket ? 'Tiket #' . $ticket->formatted_id : 'Tiket';
+                    $subtitle = $ticket ? ($ticket->judul ?: 'Diskusi Tiket') : 'Diskusi Tiket';
                 } elseif ($activeConv->type === 'user_admin_direct') {
                     $target = $activeConv->user;
                     $title = $target ? ($target->name ?? $target->username) : 'Pengguna';
@@ -187,6 +217,13 @@ class ChatController extends Controller
                     ] : null,
                     'title' => $title,
                     'subtitle' => $subtitle,
+                    'ticket_id' => $activeConv->ticket_id,
+                    'ticket' => $activeConv->ticket ? [
+                        'id' => $activeConv->ticket->id,
+                        'formatted_id' => $activeConv->ticket->formatted_id,
+                        'judul' => $activeConv->ticket->judul,
+                        'status' => $activeConv->ticket->status,
+                    ] : null,
                 ];
 
                 // Mark unread messages as read
@@ -292,6 +329,10 @@ class ChatController extends Controller
                 $target = null;
                 $title = 'Forum Bantuan Halo APU';
                 $subtitle = 'Grup Publik';
+            } elseif ($conv->type === 'ticket') {
+                $target = $conv->user;
+                $title = $conv->ticket ? 'Tiket #' . $conv->ticket->formatted_id : 'Tiket';
+                $subtitle = $conv->ticket ? ($conv->ticket->judul ?: 'Diskusi Tiket') : 'Diskusi Tiket';
             } elseif ($conv->type === 'user_admin_direct') {
                 $target = $conv->user;
                 $title = $target ? ($target->name ?? $target->username) : 'Pengguna';
@@ -417,6 +458,9 @@ class ChatController extends Controller
         }
 
         $ticketId = $request->ticket_id;
+        if (!$ticketId && $conversation && $conversation->type === 'ticket') {
+            $ticketId = $conversation->ticket_id;
+        }
         if (!$ticketId && $request->filled('reply_to_message_id')) {
             $parent = Message::find($request->reply_to_message_id);
             if ($parent && $parent->ticket_id) {
@@ -598,6 +642,8 @@ class ChatController extends Controller
         }
 
         $isBot = false;
+        $ticketData = null;
+
         if ($conversation->type === 'admin_bot_reminder') {
             $target = null;
             $title = 'Bot Pengingat Halo APU';
@@ -607,6 +653,17 @@ class ChatController extends Controller
             $target = null;
             $title = 'Forum Bantuan Halo APU';
             $subtitle = 'Grup Publik';
+        } elseif ($conversation->type === 'ticket') {
+            $target = $conversation->user;
+            $ticket = $conversation->ticket;
+            $title = $ticket ? 'Tiket #' . $ticket->formatted_id : 'Tiket';
+            $subtitle = $ticket ? ($ticket->judul ?: 'Diskusi Tiket') : 'Diskusi Tiket';
+            $ticketData = $ticket ? [
+                'id' => $ticket->id,
+                'formatted_id' => $ticket->formatted_id,
+                'judul' => $ticket->judul,
+                'status' => $ticket->status,
+            ] : null;
         } elseif ($conversation->type === 'user_admin_direct') {
             $target = $conversation->user;
             $title = $target ? ($target->name ?? $target->username) : 'Pengguna';
@@ -630,6 +687,8 @@ class ChatController extends Controller
             ] : null,
             'title' => $title,
             'subtitle' => $subtitle,
+            'ticket_id' => $conversation->ticket_id,
+            'ticket' => $ticketData,
         ];
 
         $rawMessages = Message::where('conversation_id', $conversation->id)

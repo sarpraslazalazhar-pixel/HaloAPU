@@ -25,6 +25,7 @@ interface Ticket {
  unit?: { nama_unit: string };
  sub_unit?: { nama_layanan: string };
  assigned_admin?: { id: number; name: string; username: string };
+ source?: 'web' | 'mobile' | string;
  status: string;
  created_at: string;
 }
@@ -71,8 +72,9 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  router.get(route('admin.tiket.index'), { tab }, {});
  };
 
- const applyFilter = () => {
- const params: Record<string, unknown> = { tab: currentTab };
+  const applyFilter = (searchOverride?: string) => {
+    const params: { [key: string]: string | string[] | undefined } = { tab: currentTab };
+    const keyword = searchOverride ?? search;
 
  if (unitId) params.unit_id = unitId;
 
@@ -88,7 +90,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
 
  if (orgUnitId) params.org_unit_id = orgUnitId;
 
- if (search) params.search = search;
+ if (keyword) params.search = keyword;
  router.get(route('admin.tiket.index'), params, { });
  };
 
@@ -144,6 +146,18 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  <p className="font-medium">{t.assigned_admin?.name || t.assigned_admin?.username || '-'}</p>
  ),
  },
+ {
+ key: 'source',
+ header: 'Sumber',
+ render: (t: Ticket) => {
+ const isMobile = (t.source || 'web') === 'mobile';
+ return (
+ <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${isMobile ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
+ {isMobile ? 'Mobile' : 'Web'}
+ </span>
+ );
+ },
+ },
  { key: 'status', header: 'Status', render: (t: Ticket) => <StatusBadge status={t.status} /> },
  {
  key: 'aksi',
@@ -173,9 +187,9 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  className="w-full rounded-md border border-input bg-transparent pl-9 pr-8 py-2 text-sm"
  />
  {search && (
- <button onClick={() => { setSearch(''); const p: Record<string, unknown> = { tab: currentTab }; if (unitId) p.unit_id = unitId; if (subUnitId) p.sub_unit_id = subUnitId; if (selectedStatuses.length > 0) p.status = selectedStatuses; if (dateFrom) p.date_from = dateFrom; if (dateTo) p.date_to = dateTo; if (divisiId) p.divisi_id = divisiId; if (orgUnitId) p.org_unit_id = orgUnitId; router.get(route('admin.tiket.index'), p, {}); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
- <X className="h-4 w-4" />
- </button>
+                  <button onClick={() => { setSearch(''); applyFilter(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <X className="h-4 w-4" />
+                  </button>
  )}
  </div>
  <div className="flex items-center gap-2">
@@ -245,7 +259,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </div>
 
  <div className="flex justify-end pt-2">
- <Button onClick={applyFilter} className="w-full md:w-auto">Terapkan Filter</Button>
+ <Button onClick={() => applyFilter()} className="w-full md:w-auto">Terapkan Filter</Button>
  </div>
  </div>
  )}

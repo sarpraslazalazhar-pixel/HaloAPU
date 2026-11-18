@@ -98,6 +98,7 @@ class TicketWizardController extends Controller
                 'sub_unit_id' => $request->sub_unit_id,
                 'form_data' => $request->form_data,
                 'status' => $initialStatus,
+                'source' => 'web',
             ]);
 
             // 2. Simpan attachments

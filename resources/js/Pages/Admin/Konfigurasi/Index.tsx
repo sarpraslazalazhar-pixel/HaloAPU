@@ -285,11 +285,11 @@ export default function KonfigurasiIndex({ configs }: any) {
  formData.append('sound', file);
  router.post(route('admin.konfigurasi.upload-sound'), formData, { preserveScroll: true });
  }} />
- {configs.notification_sound_path && (
- <audio controls className="mt-2" src={`${typeof route === 'function' && route().has('system.notification-sound') ? route('system.notification-sound') : '/system/notification-sound'}?v=${encodeURIComponent(configs.notification_sound_path)}`}>
- Browser kamu tidak mendukung elemen audio.
- </audio>
- )}
+              {configs.notification_sound_path && (
+                <audio controls className="mt-2" src={`${route('system.notification-sound')}?v=${encodeURIComponent(configs.notification_sound_path)}`}>
+                  Browser kamu tidak mendukung elemen audio.
+                </audio>
+              )}
  </div>
  </CardContent>
  </Card>

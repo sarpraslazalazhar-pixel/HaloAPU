@@ -295,6 +295,7 @@ class TicketController extends Controller
             $ticket->form_data = $formData;
             $ticket->status = $initialStatus;
             $ticket->priority = $validated['priority'] ?? 'normal';
+            $ticket->source = 'mobile';
             $ticket->save();
 
             // Handle file attachments
@@ -1109,6 +1110,7 @@ class TicketController extends Controller
             'createdAt' => $ticket->created_at->toIso8601String(),
             'requesterName' => $ticket->user ? ($ticket->user->name ?? $ticket->user->username ?? '') : ($ticket->createdByAdmin ? ($ticket->createdByAdmin->name ?? $ticket->createdByAdmin->username ?? 'Admin') : ''),
             'assignedTo' => $ticket->assignedAdmin ? $ticket->assignedAdmin->name : null,
+            'source' => $ticket->source ?? 'web',
             'priority' => $ticket->priority,
             'sla_response_time' => $responseDeadlineStr,
             'sla_resolution_time' => $resolutionDeadlineStr,

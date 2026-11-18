@@ -6,7 +6,7 @@ import { Button } from '@/Components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import MonthlyUnitChart from '@/Components/Charts/MonthlyUnitChart';
 import SubUnitChart from '@/Components/Charts/SubUnitChart';
-import { AlertTriangle, Eye, Clock, Hourglass, Folder, CheckCircle, XCircle, Calendar, Star, Plus } from 'lucide-react';
+import { AlertTriangle, Eye, Clock, Hourglass, Folder, CheckCircle, XCircle, Calendar, Star, Plus, UserCheck } from 'lucide-react';
 import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 
@@ -69,6 +69,15 @@ export interface FollowUpTicket {
     user?: FollowUpTicketUser | null;
     unit?: FollowUpTicketUnit | null;
     sub_unit?: FollowUpTicketSubUnit | null;
+}
+
+export interface AssignedToMeTicket {
+    id: number;
+    status: string;
+    source: string;
+    created_at: string;
+    user: { id: number; username: string } | null;
+    sub_unit: { nama_layanan: string } | null;
 }
 
 export interface UnitItem {
@@ -146,6 +155,7 @@ export interface DashboardProps {
     csatTrend?: CsatTrendItem[];
     tiketBulanan?: TiketBulananItem[];
     followUpTickets?: FollowUpTicket[];
+    assignedToMeTickets?: AssignedToMeTicket[];
     monthlyChartData?: ChartRow[];
     yearlyChartData?: ChartRow[];
     dailyChartData?: ChartRow[];
@@ -166,6 +176,7 @@ export default function DashboardIndex({
     statusCounts,
     topUsers: _topUsers = [],
     followUpTickets = [],
+    assignedToMeTickets = [],
     monthlyChartData = [],
     yearlyChartData = [],
     dailyChartData = [],
@@ -335,6 +346,58 @@ export default function DashboardIndex({
                     );
                 })}
             </div>
+
+            {/* ── Ditugaskan ke Saya ── */}
+            {assignedToMeTickets.length > 0 && (
+                <Card className="mb-8">
+                    <CardHeader className="flex flex-row items-center gap-2 pb-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50">
+                            <UserCheck className="h-4 w-4 text-indigo-500" />
+                        </div>
+                        <CardTitle className="text-sm font-semibold">Ditugaskan ke Saya</CardTitle>
+                        <span className="ml-auto rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-600">
+                            {assignedToMeTickets.length}
+                        </span>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-2">
+                            {assignedToMeTickets.map((t) => {
+                                const isMobile = (t.source || 'web') === 'mobile';
+                                return (
+                                    <div
+                                        key={t.id}
+                                        className="flex items-center justify-between rounded-lg border p-3 text-sm transition-colors hover:bg-muted/50"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <span className="shrink-0 font-semibold text-foreground">
+                                                #TKT-{formatTicketId(t.id)}
+                                            </span>
+                                            <StatusBadge status={t.status} />
+                                            <span
+                                                className={`shrink-0 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${isMobile ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}`}
+                                            >
+                                                {isMobile ? 'Mobile' : 'Web'}
+                                            </span>
+                                            <span className="text-muted-foreground truncate">{t.user?.username || '-'}</span>
+                                            <span className="hidden md:inline text-xs text-muted-foreground/60 truncate">
+                                                {t.sub_unit?.nama_layanan || '-'}
+                                            </span>
+                                        </div>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="h-8 w-8 shrink-0"
+                                            onClick={() => router.get(route('admin.tiket.show', t.id))}
+                                        >
+                                            <Eye className="h-4 w-4" />
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
 
             {/* ── Action Items & Status Summary ── */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">

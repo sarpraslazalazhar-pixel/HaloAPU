@@ -146,9 +146,21 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
         .notification((notification: any) => {
           // Cek preferensi notifikasi browser
           if (user?.notify_browser !== false && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification(notification.title || 'Pemberitahuan Baru', {
+            const n = new Notification(notification.title || 'Pemberitahuan Baru', {
               body: notification.message || '',
+              icon: '/images/logo.png',
+              tag: notification.id ? `notif-${notification.id}` : undefined,
             });
+
+            n.onclick = () => {
+              window.focus();
+
+              if (notification.url) {
+                window.location.href = notification.url;
+              }
+
+              n.close();
+            };
           }
 
           // Tampilkan juga toast fallback di in-app jika diizinkan

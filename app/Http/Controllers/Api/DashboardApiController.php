@@ -61,14 +61,51 @@ class DashboardApiController extends Controller
                     'requesterName' => $ticket->user ? ($ticket->user->name ?? $ticket->user->username) : 'Pengguna',
                     'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : 'General',
                     'status' => $flutterStatus,
+                    'source' => $ticket->source ?? 'web',
                     'createdAt' => $ticket->created_at ? $ticket->created_at->toIso8601String() : now()->toIso8601String(),
                 ];
             });
+
+        // Tiket yang ditugaskan ke admin ini (hanya untuk Admin).
+        $assignedToMe = collect();
+        if ($user instanceof \App\Models\Admin) {
+            $assignedToMe = Ticket::query()
+                ->where('assigned_admin_id', $user->id)
+                ->whereIn('status', ['open', 'pending', 'on_proses', 'need_revision'])
+                ->with(['subUnit:id,nama_layanan', 'user:id,name,username'])
+                ->orderBy('created_at', 'desc')
+                ->take(5)
+                ->get()
+                ->map(function ($ticket) {
+                    $flutterStatus = match(strtolower($ticket->status)) {
+                        'open' => 'open',
+                        'assigned', 'on_proses', 'processing' => 'on_proses',
+                        'solve', 'selesai', 'solved' => 'solve',
+                        'reject', 'rejected' => 'reject',
+                        'dibatalkan', 'cancelled' => 'dibatalkan',
+                        'need_revision' => 'need_revision',
+                        'pending' => 'pending',
+                        default => 'open'
+                    };
+
+                    return [
+                        'id' => $ticket->formatted_id ?? (string) $ticket->id,
+                        'title' => $ticket->judul ?? $ticket->title ?? 'Tiket Layanan',
+                        'description' => $ticket->deskripsi ?? '',
+                        'requesterName' => $ticket->user ? ($ticket->user->name ?? $ticket->user->username) : 'Pengguna',
+                        'category' => $ticket->subUnit ? $ticket->subUnit->nama_layanan : 'General',
+                        'status' => $flutterStatus,
+                        'source' => $ticket->source ?? 'web',
+                        'createdAt' => $ticket->created_at ? $ticket->created_at->toIso8601String() : now()->toIso8601String(),
+                    ];
+                });
+        }
 
         return response()->json([
             'data' => [
                 'stats' => $stats,
                 'recentTickets' => $recentTickets,
+                'assignedToMe' => $assignedToMe,
             ],
         ]);
     }

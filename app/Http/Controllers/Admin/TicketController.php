@@ -165,6 +165,7 @@ class TicketController extends Controller
                 'sub_unit_id' => $request->sub_unit_id,
                 'form_data' => $request->form_data,
                 'status' => $initialStatus,
+                'source' => 'web',
             ]);
 
             $saveFile = function ($file, $fieldId, $wajib) use ($ticket) {
@@ -359,7 +360,7 @@ class TicketController extends Controller
 
         $request->validate([
             'status' => 'required|string',
-            'catatan' => 'required|string|max:1000',
+            'catatan' => 'nullable|string|max:1000',
             'general_attachments' => 'nullable|array|max:3',
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);

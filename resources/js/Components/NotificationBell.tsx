@@ -22,7 +22,8 @@ export default function NotificationBell() {
   const currentUser = auth?.admin || auth?.user;
   const prefix = auth?.admin ? 'admin.notifications' : 'notifications';
   const notifySoundEnabled = currentUser?.notify_sound !== false;
-  const _notifyInappEnabled = currentUser?.notify_inapp !== false;
+  const notifyInappEnabled = currentUser?.notify_inapp !== false;
+  const notifyBrowserEnabled = currentUser?.notify_browser !== false;
 
   const soundUrl = appConfig?.notification_sound_path
     ? `/system/notification-sound?v=${encodeURIComponent(appConfig.notification_sound_path)}`
@@ -65,7 +66,7 @@ export default function NotificationBell() {
           playNotificationSound();
         }
         
-        if ('Notification' in window && Notification.permission === 'granted') {
+        if (notifyBrowserEnabled && 'Notification' in window && Notification.permission === 'granted') {
           axios.get(route(`${prefix}.index`), { params: { per_page: 1 } })
             .then(res => {
               const latest = res.data.notifications?.data?.[0];
@@ -74,11 +75,15 @@ export default function NotificationBell() {
                 const title = latest.data.title || latest.data.judul || 'Notifikasi Baru';
                 const body = latest.data.message || latest.data.pesan || 'Kamu memiliki notifikasi baru';
                 
-                toast.success(title, { id: `poll-notif-${latest.id || Date.now()}` });
+                if (notifyInappEnabled) {
+                  toast.success(title, { id: `poll-notif-${latest.id || Date.now()}` });
+                }
 
                 const notification = new Notification(title, {
                   body: body,
-                  icon: '/logo.png'
+                  icon: '/images/logo.png',
+                  // Tag sama dengan handler Echo => browser menggabungkan, bukan dobel.
+                  tag: `notif-${latest.id}`,
                 });
                 
                 notification.onclick = function() {
@@ -101,7 +106,7 @@ export default function NotificationBell() {
     } catch (error) {
       console.error('Gagal fetch unread count:', error);
     }
-  }, [playNotificationSound, prefix]);
+  }, [playNotificationSound, prefix, notifyBrowserEnabled, notifyInappEnabled]);
 
   useEffect(() => {
     fetchUnreadCount();

@@ -131,6 +131,25 @@ class DashboardController extends Controller
             ->values()
             ->toArray();
 
+        // ── 4b. Tiket yang Ditugaskan ke Saya (aktif, maks 10) ──
+        $assignedToMeTickets = Ticket::query()
+            ->where('assigned_admin_id', $admin->id)
+            ->whereIn('status', ['open', 'pending', 'on_proses', 'need_revision'])
+            ->with(['user:id,username', 'subUnit:id,nama_layanan'])
+            ->latest()
+            ->limit(10)
+            ->get()
+            ->map(fn ($ticket) => [
+                'id' => (int) $ticket->id,
+                'status' => (string) $ticket->status,
+                'source' => (string) ($ticket->source ?? 'web'),
+                'created_at' => $ticket->created_at?->toIso8601String(),
+                'user' => $ticket->user ? ['id' => (int) $ticket->user->id, 'username' => (string) $ticket->user->username] : null,
+                'sub_unit' => $ticket->subUnit ? ['nama_layanan' => (string) $ticket->subUnit->nama_layanan] : null,
+            ])
+            ->values()
+            ->toArray();
+
         // ── 5. Master Unit Aktif & Lookup Nama Unit ──
         if ($isSuperAdmin) {
             $unitsList = Unit::where('aktif', true)->orderBy('nama_unit')->get();
@@ -518,6 +537,7 @@ class DashboardController extends Controller
             'csatTrend' => $csatTrend,
             'tiketBulanan' => $tiketBulanan,
             'followUpTickets' => $followUpTickets,
+            'assignedToMeTickets' => $assignedToMeTickets,
             'monthlyChartData' => $monthlyChartData,
             'yearlyChartData' => $yearlyChartData,
             'dailyChartData' => $dailyChartData,

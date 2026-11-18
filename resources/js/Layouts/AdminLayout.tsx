@@ -484,9 +484,22 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
           }
 
           if (admin?.notify_browser !== false && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification(notification.title || 'Pemberitahuan Baru', {
+            const n = new Notification(notification.title || 'Pemberitahuan Baru', {
               body: notification.message || '',
+              icon: '/images/logo.png',
+              // Tag = id notifikasi, sama dengan jalur polling => tidak dobel.
+              tag: notification.id ? `notif-${notification.id}` : undefined,
             });
+
+            n.onclick = () => {
+              window.focus();
+
+              if (notification.url) {
+                window.location.href = notification.url;
+              }
+
+              n.close();
+            };
           }
 
           if (admin?.notify_inapp !== false) {

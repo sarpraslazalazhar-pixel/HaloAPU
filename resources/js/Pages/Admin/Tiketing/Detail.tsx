@@ -60,7 +60,7 @@ interface TicketDetailData {
   } | null;
   attachments?: Attachment[];
   edit_histories?: EditHistoryEntry[];
-  logs?: Array<{ id: number; ticket_id: number; admin_id?: number | null; aksi: string; catatan?: string | null; timestamp: string }>;
+  logs?: Array<{ id: number; ticket_id: number; admin_id: number | null; aksi: string; catatan: string | null; timestamp: string }>;
   sla_tracking?: {
     sla_response_deadline?: string | null;
     sla_resolution_deadline?: string | null;
@@ -793,13 +793,13 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
 
                         <div className="space-y-2">
                           <label className="text-sm font-medium">
-                            Catatan Admin {statusData.status && <span className="text-red-500">*</span>}
+                            Catatan Admin <span className="text-slate-400 font-normal">(Opsional)</span>
                           </label>
                           <textarea
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm min-h-[90px]"
                             value={statusData.catatan}
                             onChange={e => setStatusData('catatan', e.target.value)}
-                            placeholder={statusData.status ? "Wajib diisi saat ubah status..." : "Catatan admin (opsional jika hanya penugasan operator)..."}
+                            placeholder="Catatan admin (opsional)..."
                           />
                           {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
                         </div>

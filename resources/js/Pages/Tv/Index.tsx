@@ -75,9 +75,7 @@ export default function TvDashboard({ stats, recentTickets, upcomingBookings, no
  useEffect(() => {
  if (typeof window !== 'undefined') {
  const cacheBuster = notificationSound ?`?v=${encodeURIComponent(notificationSound)}`: '';
- const soundBaseUrl = typeof route === 'function' && route().has('system.notification-sound')
-   ? route('system.notification-sound')
-   : '/system/notification-sound';
+ const soundBaseUrl = route('system.notification-sound');
  const soundUrl = soundBaseUrl + cacheBuster;
 
  // Prepare HTML Audio fallback

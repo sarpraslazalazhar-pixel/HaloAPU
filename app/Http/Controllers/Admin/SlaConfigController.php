@@ -7,6 +7,7 @@ use App\Models\SlaConfig;
 use App\Models\SubUnit;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class SlaConfigController extends Controller
@@ -52,7 +53,9 @@ class SlaConfigController extends Controller
             ->exists();
 
         if ($exists) {
-            return back()->with('error', 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.');
+            throw ValidationException::withMessages([
+                'message' => 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.',
+            ]);
         }
 
         SlaConfig::create($validated);
@@ -77,7 +80,9 @@ class SlaConfigController extends Controller
             ->exists();
 
         if ($exists) {
-            return back()->with('error', 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.');
+            throw ValidationException::withMessages([
+                'message' => 'Konfigurasi untuk Sub Unit, Prioritas, dan Jenis ini sudah ada.',
+            ]);
         }
 
         $sla_config->update($validated);

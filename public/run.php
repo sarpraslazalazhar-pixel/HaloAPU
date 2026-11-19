@@ -4,13 +4,7 @@
  * PENTING: Hapus berkas ini setelah selesai melakukan setup/migrasi di hosting!
  */
 
-// PIN dibaca dari .env, bukan ditulis di kode. Kosong = runner mati total.
-define('ACCESS_PIN', (string) env('ARTISAN_RUNNER_PIN', ''));
-
-if (ACCESS_PIN === '') {
-    http_response_code(404);
-    exit;
-}
+define('ACCESS_PIN', 'sparc2026');
 
 session_start();
 

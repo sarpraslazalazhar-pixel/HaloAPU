@@ -155,6 +155,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/conversations/{conversation}/read', [ChatController::class, 'markAsRead'])->name('read');
         Route::post('/conversations/{conversation}/typing', [ChatController::class, 'typing'])->name('typing');
         Route::get('/download/{attachment}', [ChatController::class, 'downloadAttachment'])->name('download');
+        Route::get('/view/{attachment}', [ChatController::class, 'viewAttachment'])->name('view');
     });
 
     // Notifications User
@@ -356,6 +357,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/conversations/{conversation}/read', [App\Http\Controllers\Admin\ChatController::class, 'markAsRead'])->name('read');
             Route::post('/conversations/{conversation}/typing', [App\Http\Controllers\Admin\ChatController::class, 'typing'])->name('typing');
             Route::get('/download/{attachment}', [App\Http\Controllers\Admin\ChatController::class, 'downloadAttachment'])->name('download');
+            Route::get('/view/{attachment}', [App\Http\Controllers\Admin\ChatController::class, 'viewAttachment'])->name('view');
         });
 
         // HaloAPU AI (Admin)

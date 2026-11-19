@@ -77,16 +77,15 @@ if ($isAuthenticated && isset($_POST['command'])) {
                     }
                 }
             } else {
-                // Hanya perintah baca/bersih-bersih. Migrasi & seeder punya tombol
-                // sendiri, dan perintah destruktif tidak boleh lewat kolom bebas.
-                $allowed = [
-                    'route:list', 'config:clear', 'config:cache', 'route:clear', 'route:cache',
-                    'view:clear', 'view:cache', 'cache:clear', 'optimize:clear', 'optimize',
-                    'migrate:status', 'about', 'schedule:list', 'queue:restart',
+                // Runner ini memang untuk setup: migrate boleh. Yang diblokir
+                // hanya perintah yang menghapus data (db:seed men-truncate tabel).
+                $blocked = [
+                    'db:seed', 'db:wipe', 'migrate:fresh', 'migrate:reset', 'migrate:refresh',
+                    'migrate:rollback', 'schema:dump', 'tinker',
                 ];
                 $base = strtok($executedCmd, ' ');
-                if (! in_array($base, $allowed, true)) {
-                    throw new \RuntimeException("Perintah '{$base}' tidak diizinkan dari web runner.");
+                if (in_array($base, $blocked, true)) {
+                    throw new \RuntimeException("Perintah '{$base}' diblokir: berpotensi menghapus data.");
                 }
 
                 \Illuminate\Support\Facades\Artisan::call($executedCmd);

@@ -22,6 +22,7 @@ import {
   ChevronLeft,
   ChevronDown,
   Search,
+  Eye,
   Bot,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
@@ -34,6 +35,7 @@ import {
   DialogTitle,
 } from '@/Components/ui/dialog';
 import TicketReferenceCard from './TicketReferenceCard';
+import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import type { TicketRoomSummary } from './ConversationList';
 import { useChatSound } from '@/hooks/useChatSound';
 import { subscribe, type ChatEvents } from '@/lib/realtime';
@@ -947,6 +949,7 @@ export function ChatWindow({
                     <div className="mt-2 space-y-1.5">
                       {msg.attachments.map((att) => {
                         const isImg = att.file_type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.file_name);
+                        const isPdf = att.file_type === 'application/pdf' || /\.pdf$/i.test(att.file_name);
 
                         if (isImg) {
                           return (
@@ -961,25 +964,47 @@ export function ChatWindow({
                           );
                         }
 
-                        return (
-                          <a
-                            key={att.id}
-                            href={isAdmin ? route('admin.chat.download', { attachment: att.id }) : route('chat.download', { attachment: att.id })}
-                            download
-                            className={`flex items-center gap-2.5 p-2 rounded-xl text-xs transition-colors border ${
+                        const row = (
+                          <span
+                            className={`flex items-center gap-2.5 p-2 rounded-xl text-xs transition-colors border w-full text-left ${
                               isSelf
                                 ? 'bg-sky-700/50 border-white/20 text-white hover:bg-sky-700'
                                 : 'bg-zinc-50 border-zinc-200 text-zinc-800 hover:bg-zinc-100'
                             }`}
                           >
                             <FileText className="h-4 w-4 shrink-0 text-sky-400" />
-                            <div className="min-w-0 flex-1">
-                              <p className="font-medium truncate text-xs">{att.file_name}</p>
-                              <p className="text-[10px] opacity-75">
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium truncate text-xs">{att.file_name}</span>
+                              <span className="block text-[10px] opacity-75">
                                 {(att.file_size / 1024).toFixed(0)} KB
-                              </p>
-                            </div>
-                            <Download className="h-3.5 w-3.5 shrink-0 opacity-80" />
+                              </span>
+                            </span>
+                            {isPdf ? <Eye className="h-3.5 w-3.5 shrink-0 opacity-80" /> : <Download className="h-3.5 w-3.5 shrink-0 opacity-80" />}
+                          </span>
+                        );
+
+                        if (isPdf) {
+                          return (
+                            <AttachmentViewer
+                              key={att.id}
+                              attachment={{ id: att.id, original_name: att.file_name, file_path: att.file_path }}
+                              viewRoute={isAdmin ? 'admin.chat.view' : 'chat.view'}
+                              downloadRoute={isAdmin ? 'admin.chat.download' : 'chat.download'}
+                            >
+                              <button type="button" className="w-full" title="Lihat PDF">
+                                {row}
+                              </button>
+                            </AttachmentViewer>
+                          );
+                        }
+
+                        return (
+                          <a
+                            key={att.id}
+                            href={isAdmin ? route('admin.chat.download', { attachment: att.id }) : route('chat.download', { attachment: att.id })}
+                            download
+                          >
+                            {row}
                           </a>
                         );
                       })}

@@ -23,8 +23,15 @@ class SecurityHeaders
     {
         $response = $next($request);
 
+        // Inline files (PDF preview) are rendered in a same-origin <iframe>, so
+        // only those responses may be framed — by this origin alone.
+        $isInlineFile = str_starts_with(
+            strtolower((string) $response->headers->get('Content-Disposition')),
+            'inline'
+        );
+
         // Prevent clickjacking — page cannot be embedded in iframes
-        $response->headers->set('X-Frame-Options', 'DENY');
+        $response->headers->set('X-Frame-Options', $isInlineFile ? 'SAMEORIGIN' : 'DENY');
 
         // Prevent MIME type sniffing
         $response->headers->set('X-Content-Type-Options', 'nosniff');
@@ -63,7 +70,7 @@ class SecurityHeaders
             "img-src 'self' data: https: blob:",
             "connect-src 'self' ws: wss: https:",
             "media-src 'self' blob:",
-            "frame-ancestors 'none'",
+            $isInlineFile ? "frame-ancestors 'self'" : "frame-ancestors 'none'",
         ]);
         $response->headers->set('Content-Security-Policy', $csp);
 

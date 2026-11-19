@@ -448,6 +448,26 @@ class ChatController extends Controller
         return Storage::disk('public')->download($attachment->file_path, $attachment->file_name);
     }
 
+    public function viewAttachment(ChatAttachment $attachment)
+    {
+        $admin = Auth::guard('admin')->user();
+        $message = $attachment->message;
+        if (!$message || !$message->conversation) {
+            abort(404, 'File tidak ditemukan');
+        }
+
+        Gate::forUser($admin)->authorize('view', $message->conversation);
+
+        if (!Storage::disk('public')->exists($attachment->file_path)) {
+            abort(404, 'File tidak ditemukan');
+        }
+
+        return response()->file(Storage::disk('public')->path($attachment->file_path), [
+            'Content-Type' => $attachment->file_type ?: Storage::disk('public')->mimeType($attachment->file_path),
+            'Content-Disposition' => 'inline; filename="'.$attachment->file_name.'"',
+        ]);
+    }
+
     protected function markConversationRead(Conversation $conversation, Admin $admin): int
     {
         $unreadMessages = Message::where('conversation_id', $conversation->id)

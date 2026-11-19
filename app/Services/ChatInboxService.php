@@ -23,34 +23,52 @@ use Illuminate\Support\Collection;
 class ChatInboxService
 {
     /**
+     * Conversation identity columns are foreign keys, so a ticket row carrying a
+     * user/admin id that no longer exists (imported or deleted out-of-band) must
+     * not be copied verbatim — that insert fails with a FK violation.
+     *
+     * @param  array<int, int>  $validUserIds
+     * @param  array<int, int>  $validAdminIds
+     * @return array{user_id: ?int, admin_one_id: ?int, admin_two_id: ?int}
+     */
+    private static function roomIdentity(Ticket $ticket, array $validUserIds, array $validAdminIds): array
+    {
+        $pick = fn ($id, array $valid): ?int => $id !== null && in_array((int) $id, $valid, true) ? (int) $id : null;
+
+        return [
+            'user_id' => $pick($ticket->user_id, $validUserIds),
+            'admin_one_id' => $pick($ticket->assigned_admin_id, $validAdminIds),
+            'admin_two_id' => $pick($ticket->created_by_admin_id, $validAdminIds),
+        ];
+    }
+
+    /**
      * Ensure a ticket owns a `type = 'ticket'` conversation and backfill any
      * existing `balasan` timeline logs if the room was never populated.
      */
     public static function ensureTicketConversation(Ticket $ticket): Conversation
     {
+        $validUserIds = $ticket->user_id ? User::whereKey($ticket->user_id)->pluck('id')->all() : [];
+        $validAdminIds = Admin::whereIn('id', array_filter([$ticket->assigned_admin_id, $ticket->created_by_admin_id]))
+            ->pluck('id')
+            ->all();
+        $identity = self::roomIdentity($ticket, $validUserIds, $validAdminIds);
+
         $conversation = Conversation::firstOrCreate(
             ['type' => 'ticket', 'ticket_id' => $ticket->id],
-            [
-                'user_id' => $ticket->user_id ?: null,
-                'admin_one_id' => $ticket->assigned_admin_id ?: null,
-                'admin_two_id' => $ticket->created_by_admin_id ?: null,
-                'last_message_at' => $ticket->updated_at ?? $ticket->created_at ?? now(),
-            ]
+            $identity + ['last_message_at' => $ticket->updated_at ?? $ticket->created_at ?? now()]
         );
 
         $updates = [];
-        $expectedUserId = $ticket->user_id ? (int) $ticket->user_id : null;
-        $expectedAdminOne = $ticket->assigned_admin_id ? (int) $ticket->assigned_admin_id : null;
-        $expectedAdminTwo = $ticket->created_by_admin_id ? (int) $ticket->created_by_admin_id : null;
 
-        if ($conversation->user_id !== $expectedUserId) {
-            $updates['user_id'] = $expectedUserId;
+        if ($conversation->user_id !== $identity['user_id']) {
+            $updates['user_id'] = $identity['user_id'];
         }
-        if ($conversation->admin_one_id !== $expectedAdminOne) {
-            $updates['admin_one_id'] = $expectedAdminOne;
+        if ($conversation->admin_one_id !== $identity['admin_one_id']) {
+            $updates['admin_one_id'] = $identity['admin_one_id'];
         }
-        if ($conversation->admin_two_id !== $expectedAdminTwo) {
-            $updates['admin_two_id'] = $expectedAdminTwo;
+        if ($conversation->admin_two_id !== $identity['admin_two_id']) {
+            $updates['admin_two_id'] = $identity['admin_two_id'];
         }
         if (!empty($updates)) {
             $conversation->updateQuietly($updates);
@@ -78,39 +96,39 @@ class ChatInboxService
             ->get()
             ->keyBy('ticket_id');
 
+        // Conversation identity columns are FKs: resolve only ids that still exist.
+        $validUserIds = User::whereIn('id', $tickets->pluck('user_id')->filter()->unique()->all())
+            ->pluck('id')
+            ->all();
+        $validAdminIds = Admin::whereIn('id', $tickets->pluck('assigned_admin_id')->filter()->unique()->all())
+            ->orWhereIn('id', $tickets->pluck('created_by_admin_id')->filter()->unique()->all())
+            ->pluck('id')
+            ->all();
+
         $conversationsByTicket = [];
 
         foreach ($tickets as $ticket) {
+            $identity = self::roomIdentity($ticket, $validUserIds, $validAdminIds);
+
             /** @var Conversation|null $conv */
             $conv = $existing->get($ticket->id);
 
             if (!$conv) {
                 $conv = Conversation::firstOrCreate(
                     ['type' => 'ticket', 'ticket_id' => $ticket->id],
-                    [
-                        'user_id' => $ticket->user_id ?: null,
-                        'admin_one_id' => $ticket->assigned_admin_id ?: null,
-                        'admin_two_id' => $ticket->created_by_admin_id ?: null,
-                        'last_message_at' => $ticket->updated_at ?? $ticket->created_at ?? now(),
-                    ]
+                    $identity + ['last_message_at' => $ticket->updated_at ?? $ticket->created_at ?? now()]
                 );
             } else {
-                $updates = [];
-                $expectedUserId = $ticket->user_id ? (int) $ticket->user_id : null;
-                $expectedAdminOne = $ticket->assigned_admin_id ? (int) $ticket->assigned_admin_id : null;
-                $expectedAdminTwo = $ticket->created_by_admin_id ? (int) $ticket->created_by_admin_id : null;
+                $changes = [];
 
-                if ($conv->user_id !== $expectedUserId) {
-                    $updates['user_id'] = $expectedUserId;
+                foreach (['user_id', 'admin_one_id', 'admin_two_id'] as $column) {
+                    if ($conv->{$column} !== $identity[$column]) {
+                        $changes[$column] = $identity[$column];
+                    }
                 }
-                if ($conv->admin_one_id !== $expectedAdminOne) {
-                    $updates['admin_one_id'] = $expectedAdminOne;
-                }
-                if ($conv->admin_two_id !== $expectedAdminTwo) {
-                    $updates['admin_two_id'] = $expectedAdminTwo;
-                }
-                if (!empty($updates)) {
-                    $conv->updateQuietly($updates);
+
+                if ($changes !== []) {
+                    $conv->updateQuietly($changes);
                 }
             }
 

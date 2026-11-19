@@ -326,26 +326,39 @@ class DashboardController extends Controller
         });
 
         // ── 12. Data Kepatuhan SLA & Status SLA Aktif ──
+        $slaNow = now();
+        $slaClock = DB::query()->selectRaw('? as checked_at', [$slaNow->toDateTimeString()]);
+        $slaRunningSql = "ticket_sla_tracking.paused_at IS NULL AND tickets.status <> 'pending'";
+        $responseOverdueSql = "(ticket_sla_tracking.responded_at IS NULL AND {$slaRunningSql}
+            AND ticket_sla_tracking.sla_response_deadline IS NOT NULL
+            AND ticket_sla_tracking.sla_response_deadline < sla_clock.checked_at)";
+        $resolutionOverdueSql = "(ticket_sla_tracking.resolved_at IS NULL AND {$slaRunningSql}
+            AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL
+            AND ticket_sla_tracking.sla_resolution_deadline < sla_clock.checked_at)";
+
         // A. Status SLA Aktif (Real-time untuk tiket yang saat ini aktif: open, on_proses, pending)
         $activeBreachQuery = $scope(DB::table('ticket_sla_tracking')
             ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id'))
+            ->crossJoinSub($slaClock, 'sla_clock')
             ->whereIn('tickets.status', ['open', 'on_proses', 'pending'])
-            ->selectRaw('
+            ->selectRaw("
                 SUM(CASE WHEN 
                     ticket_sla_tracking.is_response_breached = 1 
                     OR (ticket_sla_tracking.responded_at IS NOT NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.responded_at > ticket_sla_tracking.sla_response_deadline)
-                    OR (ticket_sla_tracking.responded_at IS NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.sla_response_deadline < NOW())
+                    OR {$responseOverdueSql}
                     OR ticket_sla_tracking.is_resolution_breached = 1 
                     OR (ticket_sla_tracking.resolved_at IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.resolved_at > ticket_sla_tracking.sla_resolution_deadline)
-                    OR (ticket_sla_tracking.resolved_at IS NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline < NOW())
+                    OR {$resolutionOverdueSql}
                 THEN 1 ELSE 0 END) as active_breach,
                 SUM(CASE WHEN 
                     ticket_sla_tracking.resolved_at IS NULL 
                     AND ticket_sla_tracking.is_resolution_breached = 0
-                    AND (ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline >= NOW())
+                    AND {$slaRunningSql}
+                    AND (ticket_sla_tracking.sla_resolution_starts_at IS NULL OR ticket_sla_tracking.sla_resolution_starts_at <= sla_clock.checked_at)
+                    AND ticket_sla_tracking.sla_resolution_deadline >= sla_clock.checked_at
                     AND ticket_sla_tracking.sla_resolution_deadline <= ?
                 THEN 1 ELSE 0 END) as active_warning
-            ', [now()->addDay()])->first();
+            ", [$slaNow->copy()->addDay()])->first();
 
         $activeSlaBreach = (int) ($activeBreachQuery->active_breach ?? 0);
         $activeSlaWarning = (int) ($activeBreachQuery->active_warning ?? 0);
@@ -358,6 +371,7 @@ class DashboardController extends Controller
             ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id')
             ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
             ->join('units', 'sub_units.unit_id', '=', 'units.id')
+            ->crossJoinSub($slaClock, 'sla_clock')
             ->whereNotIn('tickets.status', ['reject', 'dibatalkan']);
         $scope($slaQuery);
 
@@ -372,25 +386,25 @@ class DashboardController extends Controller
         }
 
         // Ekspresi SQL Real-Time Evaluasi SLA Breach & On-Time
-        $respBreachSql = '(ticket_sla_tracking.is_response_breached = 1 
-            OR (ticket_sla_tracking.responded_at IS NOT NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.responded_at > ticket_sla_tracking.sla_response_deadline) 
-            OR (ticket_sla_tracking.responded_at IS NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.sla_response_deadline < NOW()))';
+        $respBreachSql = "(ticket_sla_tracking.is_response_breached = 1
+            OR (ticket_sla_tracking.responded_at IS NOT NULL AND ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.responded_at > ticket_sla_tracking.sla_response_deadline)
+            OR {$responseOverdueSql})";
 
-        $respEvalSql = '(ticket_sla_tracking.responded_at IS NOT NULL 
-            OR ticket_sla_tracking.is_response_breached = 1 
-            OR (ticket_sla_tracking.sla_response_deadline IS NOT NULL AND ticket_sla_tracking.sla_response_deadline < NOW()))';
+        $respEvalSql = "(ticket_sla_tracking.responded_at IS NOT NULL
+            OR ticket_sla_tracking.is_response_breached = 1
+            OR {$responseOverdueSql})";
 
         $respOnTimeSql = '(ticket_sla_tracking.responded_at IS NOT NULL 
             AND (ticket_sla_tracking.sla_response_deadline IS NULL OR ticket_sla_tracking.responded_at <= ticket_sla_tracking.sla_response_deadline) 
             AND ticket_sla_tracking.is_response_breached = 0)';
 
-        $resBreachSql = '(ticket_sla_tracking.is_resolution_breached = 1 
-            OR (ticket_sla_tracking.resolved_at IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.resolved_at > ticket_sla_tracking.sla_resolution_deadline) 
-            OR (ticket_sla_tracking.resolved_at IS NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline < NOW()))';
+        $resBreachSql = "(ticket_sla_tracking.is_resolution_breached = 1
+            OR (ticket_sla_tracking.resolved_at IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.resolved_at > ticket_sla_tracking.sla_resolution_deadline)
+            OR {$resolutionOverdueSql})";
 
-        $resEvalSql = '(ticket_sla_tracking.resolved_at IS NOT NULL 
-            OR ticket_sla_tracking.is_resolution_breached = 1 
-            OR (ticket_sla_tracking.sla_resolution_deadline IS NOT NULL AND ticket_sla_tracking.sla_resolution_deadline < NOW()))';
+        $resEvalSql = "(ticket_sla_tracking.resolved_at IS NOT NULL
+            OR ticket_sla_tracking.is_resolution_breached = 1
+            OR {$resolutionOverdueSql})";
 
         $resOnTimeSql = '(ticket_sla_tracking.resolved_at IS NOT NULL 
             AND (ticket_sla_tracking.sla_resolution_deadline IS NULL OR ticket_sla_tracking.resolved_at <= ticket_sla_tracking.sla_resolution_deadline) 
@@ -439,9 +453,10 @@ class DashboardController extends Controller
 
         // Kepatuhan SLA per Unit (Mengikuti filter Bulan/Tahun & Unit terpilih) — Cached 60s
         $slaBarCacheKey = 'admin_dashboard_sla_bar_' . md5(($year ?? 'all') . '_' . ($month ?? 'all') . '_' . ($slaUnitId ?? 'all') . "_{$adminKey}");
-        $slaBarChartData = Cache::remember($slaBarCacheKey, 60, function () use ($year, $month, $slaUnitId, $respBreachSql, $resBreachSql, $scope) {
+        $slaBarChartData = Cache::remember($slaBarCacheKey, 60, function () use ($year, $month, $slaUnitId, $respBreachSql, $resBreachSql, $slaClock, $scope) {
             $query = $scope(DB::table('ticket_sla_tracking')
                 ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id'))
+                ->crossJoinSub($slaClock, 'sla_clock')
                 ->join('sub_units', 'tickets.sub_unit_id', '=', 'sub_units.id')
                 ->join('units', 'sub_units.unit_id', '=', 'units.id')
                 ->whereNotIn('tickets.status', ['reject', 'dibatalkan'])
@@ -476,9 +491,10 @@ class DashboardController extends Controller
         // Tren Kepatuhan SLA Bulanan (Januari–Desember) — Mengikuti Tahun Terpilih (Cached 60s)
         $slaTrendYear = $year ?: (int) date('Y');
         $slaTrendCacheKey = "admin_dashboard_sla_trend_{$slaTrendYear}_{$adminKey}";
-        $slaTrendData = Cache::remember($slaTrendCacheKey, 60, function () use ($slaTrendYear, $respBreachSql, $resBreachSql, $scope) {
+        $slaTrendData = Cache::remember($slaTrendCacheKey, 60, function () use ($slaTrendYear, $respBreachSql, $resBreachSql, $slaClock, $scope) {
             $trendRaw = $scope(DB::table('ticket_sla_tracking')
                 ->join('tickets', 'ticket_sla_tracking.ticket_id', '=', 'tickets.id'))
+                ->crossJoinSub($slaClock, 'sla_clock')
                 ->whereYear('tickets.created_at', $slaTrendYear)
                 ->whereNotIn('tickets.status', ['reject', 'dibatalkan'])
                 ->select(

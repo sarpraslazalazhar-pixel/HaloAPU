@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Events\ChatMessageDeleted;
 use App\Events\ChatMessageEdited;
 use App\Events\ChatMessageRead;
-use App\Events\ChatMessageSent;
 use App\Events\UserTypingStatus;
 use App\Models\ChatAttachment;
 use App\Models\Conversation;
@@ -13,9 +12,12 @@ use App\Models\Message;
 use App\Models\MessageRead;
 use App\Models\Ticket;
 use App\Models\User;
-use App\Models\Admin;
+use App\Services\ChatInboxService;
+use App\Services\TicketChatBridgeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
@@ -23,11 +25,12 @@ use Inertia\Inertia;
 class ChatController extends Controller
 {
     /**
-     * Same inbox as the mobile app: forum, direct chat, and one room per ticket.
+     * User chat inbox: one room per ticket submitted by the signed-in user.
      * `?ticket=N` (from a ticket page) or `?active=N` preselects a room.
      */
     public function index(Request $request)
     {
+        /** @var User|null $user */
         $user = Auth::user();
         if (!$user) {
             return redirect()->route('login');
@@ -39,15 +42,17 @@ class ChatController extends Controller
 
         if (!$activeConversationId && $request->filled('ticket')) {
             $ticketId = (int) $request->query('ticket');
-            $ticket = $user->tickets()->find($ticketId);
+            $ticket = Ticket::ownedByUser($user)->find($ticketId);
 
             if (!$ticket) {
                 abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
             }
 
-            // Room may be brand new; resolve it before listing the inbox.
-            $activeConversationId = $this->conversationForTicket($ticket)->id;
+            $activeConversationId = ChatInboxService::ensureTicketConversation($ticket)->id;
         }
+
+        // Sync all tickets submitted by this user so every ticket has a room in the sidebar.
+        $conversations = ChatInboxService::userItems($user);
 
         $activeConversation = null;
         $activeMessages = [];
@@ -58,12 +63,12 @@ class ChatController extends Controller
             if ($conversation && Gate::allows('view', $conversation)) {
                 $this->markConversationRead($conversation, $user);
 
-                $activeConversation = \App\Services\ChatInboxService::present($conversation, $user, false);
+                $activeConversation = ChatInboxService::present($conversation, $user, false, 0);
                 $activeMessages = $this->serializeMessages(
                     Message::where('conversation_id', $conversation->id)
                         ->with([
                             'sender',
-                            'ticket:id,sub_unit_id,user_id,status,priority',
+                            'ticket:id,sub_unit_id,user_id,created_by_admin_id,form_data,status,priority',
                             'ticket.subUnit:id,nama_layanan',
                             'attachments',
                             'replyTo.sender',
@@ -73,11 +78,19 @@ class ChatController extends Controller
                         ->orderBy('created_at')
                         ->get()
                 );
+
+                // Reflect zeroed unread count in the sidebar list for the opened room.
+                foreach ($conversations as &$item) {
+                    if ((int) $item['id'] === (int) $conversation->id) {
+                        $item['unread_count'] = 0;
+                    }
+                }
+                unset($item);
             }
         }
 
         return Inertia::render('Chat/Index', [
-            'conversations' => \App\Services\ChatInboxService::items($user),
+            'conversations' => $conversations,
             'activeConversationId' => $activeConversation['id'] ?? null,
             'activeConversation' => $activeConversation,
             'activeMessages' => $activeMessages,
@@ -91,9 +104,10 @@ class ChatController extends Controller
     /** Tickets the composer may tag; scoped to the signed-in user. */
     public function userTickets()
     {
+        /** @var User $user */
         $user = Auth::user();
 
-        $tickets = Ticket::where('user_id', $user->id)
+        $tickets = Ticket::ownedByUser($user)
             ->orderByDesc('updated_at')
             ->limit(50)
             ->get()
@@ -111,16 +125,17 @@ class ChatController extends Controller
     /** Room for one ticket; created on first open so the room always exists. */
     public function ticketRoom(Request $request, Ticket $ticket)
     {
+        /** @var User $user */
         $user = Auth::user();
 
-        abort_unless((int) $ticket->user_id === (int) $user->id, 403, 'Kamu tidak memiliki akses ke tiket ini.');
+        abort_unless($ticket->isOwnedByUser($user), 403, 'Kamu tidak memiliki akses ke tiket ini.');
 
-        $conversation = $this->conversationForTicket($ticket);
+        $conversation = ChatInboxService::ensureTicketConversation($ticket);
 
         $messages = Message::where('conversation_id', $conversation->id)
             ->with([
                 'sender',
-                'ticket:id,sub_unit_id,user_id,status,priority',
+                'ticket:id,sub_unit_id,user_id,created_by_admin_id,form_data,status,priority',
                 'ticket.subUnit:id,nama_layanan',
                 'attachments',
                 'replyTo.sender',
@@ -133,34 +148,9 @@ class ChatController extends Controller
         $this->markConversationRead($conversation, $user);
 
         return response()->json([
-            'conversation' => [
-                'id' => $conversation->id,
-                'ticket_id' => $ticket->id,
-                'title' => 'Tiket #' . $ticket->formatted_id,
-                'subtitle' => $ticket->subUnit?->nama_layanan ?? 'Diskusi Tiket',
-                'ticket' => [
-                    'id' => $ticket->id,
-                    'formatted_id' => $ticket->formatted_id,
-                    'judul' => $ticket->judul,
-                    'status' => $ticket->status,
-                    'priority' => $ticket->priority,
-                ],
-            ],
+            'conversation' => ChatInboxService::present($conversation, $user, false, 0),
             'messages' => $this->serializeMessages($messages),
         ]);
-    }
-
-    /** The room that owns a ticket's chat, created on first visit. */
-    private function conversationForTicket(Ticket $ticket): Conversation
-    {
-        return Conversation::firstOrCreate(
-            ['type' => 'ticket', 'ticket_id' => $ticket->id],
-            [
-                'user_id' => $ticket->user_id,
-                'admin_one_id' => $ticket->assigned_admin_id,
-                'last_message_at' => now(),
-            ]
-        );
     }
 
     private function markConversationRead(Conversation $conversation, User $user): void
@@ -179,15 +169,20 @@ class ChatController extends Controller
         }
 
         if ($unread->isNotEmpty()) {
-            \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
-            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unread->count()));
+            Cache::forget("unread_chat_user_{$user->id}");
+
+            try {
+                broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unread->count()));
+            } catch (\Throwable $e) {
+                // Read state is already stored; a dead broker must not fail the GET.
+                \Log::warning('ChatMessageRead broadcast failed: '.$e->getMessage());
+            }
         }
     }
 
-    /** Shape messages exactly like the web chat client expects. */
-    private function serializeMessages($messages): array
+    private function serializeMessage(Message $msg): array
     {
-        return $messages->map(fn (Message $msg) => [
+        return [
             'id' => $msg->id,
             'conversation_id' => $msg->conversation_id,
             'sender_type' => $msg->sender_type,
@@ -198,6 +193,9 @@ class ChatController extends Controller
                 'id' => $msg->ticket->id,
                 'formatted_id' => $msg->ticket->formatted_id,
                 'judul' => $msg->ticket->judul,
+                'chat_label' => $msg->ticket->chatLabel(),
+                'created_at' => $msg->ticket->created_at?->toIso8601String(),
+                'nama_layanan' => $msg->ticket->subUnit?->nama_layanan,
                 'status' => $msg->ticket->status,
                 'priority' => $msg->ticket->priority,
             ] : null,
@@ -208,7 +206,7 @@ class ChatController extends Controller
                 'sender_name' => $msg->replyTo->sender ? ($msg->replyTo->sender->name ?? $msg->replyTo->sender->username) : 'User',
             ] : null,
             'body' => $msg->body,
-            'is_edited' => $msg->is_edited,
+            'is_edited' => (bool) $msg->is_edited,
             'attachments' => $msg->attachments->map(fn ($att) => [
                 'id' => $att->id,
                 'file_name' => $att->file_name,
@@ -222,13 +220,27 @@ class ChatController extends Controller
                 'read_at' => $r->read_at?->toIso8601String(),
             ])->all(),
             'created_at' => $msg->created_at->toIso8601String(),
-        ])->all();
+        ];
+    }
+
+    /** Shape messages exactly like the web chat client expects. */
+    private function serializeMessages($messages): array
+    {
+        return $messages->map(fn (Message $msg) => $this->serializeMessage($msg))->all();
     }
 
     public function storeMessage(Request $request, Conversation $conversation)
     {
         Gate::authorize('view', $conversation);
+        /** @var User $user */
         $user = Auth::user();
+
+        if ($conversation->type === 'ticket' && $conversation->ticket) {
+            $status = strtolower((string) $conversation->ticket->status);
+            if (in_array($status, ['solve', 'selesai', 'reject', 'dibatalkan'], true)) {
+                return response()->json(['error' => 'Tiket ini sudah ditutup. Tidak dapat mengirim pesan baru.'], 422);
+            }
+        }
 
         $request->validate([
             'body' => 'nullable|string',
@@ -240,14 +252,31 @@ class ChatController extends Controller
             'attachment.mimes' => 'Format file lampiran tidak diizinkan.',
         ]);
 
-        if (empty($request->body) && empty($request->ticket_id) && !$request->hasFile('attachment')) {
+        if (empty($request->body) && ! $request->hasFile('attachment')) {
             return response()->json(['error' => 'Pesan tidak boleh kosong.'], 422);
         }
 
-        $ticketId = $request->ticket_id;
-        if (!$ticketId && $conversation->type === 'ticket') {
-            $ticketId = $conversation->ticket_id;
+        if ($request->filled('reply_to_message_id')) {
+            $parent = Message::whereKey($request->reply_to_message_id)
+                ->where('conversation_id', $conversation->id)
+                ->first();
+
+            if (! $parent) {
+                return response()->json(['error' => 'Pesan yang dibalas tidak ditemukan di percakapan ini.'], 422);
+            }
         }
+
+        $ticketId = $conversation->type === 'ticket'
+            ? $conversation->ticket_id
+            : $request->ticket_id;
+
+        if ($ticketId && $conversation->type !== 'ticket') {
+            $ticket = Ticket::find($ticketId);
+            if (!$ticket || !$ticket->isOwnedByUser($user)) {
+                return response()->json(['error' => 'Tiket tidak ditemukan.'], 403);
+            }
+        }
+
         if (!$ticketId && $request->filled('reply_to_message_id')) {
             $parent = Message::find($request->reply_to_message_id);
             if ($parent && $parent->ticket_id) {
@@ -259,51 +288,63 @@ class ChatController extends Controller
                 ->whereNotNull('ticket_id')
                 ->latest('id')
                 ->value('ticket_id')
-                ?: Ticket::where('user_id', $user->id)
+                ?: Ticket::ownedByUser($user)
                     ->whereIn('status', ['open', 'on_proses', 'pending', 'need_revision'])
                     ->latest('updated_at')
                     ->value('id')
-                ?: Ticket::where('user_id', $user->id)
+                ?: Ticket::ownedByUser($user)
                     ->latest('id')
                     ->value('id');
         }
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_type' => User::class,
-            'sender_id' => $user->id,
-            'ticket_id' => $ticketId,
-            'reply_to_message_id' => $request->reply_to_message_id,
-            'body' => $request->body,
-        ]);
 
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $path = $file->store('chat_attachments', 'public');
-
-            ChatAttachment::create([
-                'message_id' => $message->id,
-                'file_name' => $file->getClientOriginalName(),
-                'file_path' => $path,
-                'file_type' => $file->getClientMimeType(),
-                'file_size' => $file->getSize(),
+        $message = DB::transaction(function () use ($conversation, $user, $ticketId, $request) {
+            $message = Message::create([
+                'conversation_id' => $conversation->id,
+                'sender_type' => User::class,
+                'sender_id' => $user->id,
+                'ticket_id' => $ticketId,
+                'reply_to_message_id' => $request->reply_to_message_id,
+                'body' => $request->body,
             ]);
-        }
 
-        MessageRead::create([
-            'message_id' => $message->id,
-            'user_type' => User::class,
-            'user_id' => $user->id,
-            'read_at' => now(),
+            if ($request->hasFile('attachment')) {
+                $file = $request->file('attachment');
+                $path = $file->store('chat_attachments', 'public');
+
+                ChatAttachment::create([
+                    'message_id' => $message->id,
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_path' => $path,
+                    'file_type' => $file->getClientMimeType(),
+                    'file_size' => $file->getSize(),
+                ]);
+            }
+
+            MessageRead::firstOrCreate([
+                'message_id' => $message->id,
+                'user_type' => User::class,
+                'user_id' => $user->id,
+            ], [
+                'read_at' => now(),
+            ]);
+
+            $conversation->update(['last_message_at' => now()]);
+
+            if ($conversation->type === 'ticket') {
+                TicketChatBridgeService::syncChatMessageToTicket($message->load('attachments'));
+            }
+
+            return $message;
+        });
+
+        TicketChatBridgeService::afterCommit(fn () => TicketChatBridgeService::emitChatMessage($message));
+
+        $message->load(['sender', 'attachments', 'ticket.subUnit', 'replyTo.sender', 'reads']);
+
+        return response()->json([
+            'success' => true,
+            'message' => $this->serializeMessage($message),
         ]);
-
-        $conversation->update(['last_message_at' => now()]);
-
-        broadcast(new ChatMessageSent($message))->toOthers();
-
-        // Bridge to Ticket Timeline (Mobile & Web)
-        \App\Services\TicketChatBridgeService::syncChatMessageToTicket($message->load('attachments'));
-
-        return response()->json(['success' => true, 'message' => $message->load(['sender', 'attachments', 'ticket', 'replyTo'])]);
     }
 
     public function updateMessage(Request $request, Message $message)
@@ -314,7 +355,7 @@ class ChatController extends Controller
         }
 
         $hasBeenRead = MessageRead::where('message_id', $message->id)
-            ->where('user_type', '!=', User::class)
+            ->where(fn ($q) => $q->where('user_type', '!=', User::class)->orWhere('user_id', '!=', $user->id))
             ->exists();
 
         if ($hasBeenRead) {
@@ -329,7 +370,11 @@ class ChatController extends Controller
             'edited_at' => now(),
         ]);
 
-        broadcast(new ChatMessageEdited($message))->toOthers();
+        try {
+            broadcast(new ChatMessageEdited($message))->toOthers();
+        } catch (\Throwable $e) {
+            \Log::warning('ChatMessageEdited broadcast failed: '.$e->getMessage());
+        }
 
         return response()->json(['success' => true]);
     }
@@ -345,7 +390,11 @@ class ChatController extends Controller
         $messageId = $message->id;
         $message->delete();
 
-        broadcast(new ChatMessageDeleted($messageId, $conversationId))->toOthers();
+        try {
+            broadcast(new ChatMessageDeleted($messageId, $conversationId))->toOthers();
+        } catch (\Throwable $e) {
+            \Log::warning('ChatMessageDeleted broadcast failed: '.$e->getMessage());
+        }
 
         return response()->json(['success' => true]);
     }
@@ -353,32 +402,10 @@ class ChatController extends Controller
     public function markAsRead(Conversation $conversation)
     {
         Gate::authorize('view', $conversation);
+        /** @var User $user */
         $user = Auth::user();
 
-        $unreadMessages = Message::where('conversation_id', $conversation->id)
-            ->where(function ($sq) use ($user) {
-                $sq->where('sender_type', '!=', User::class)
-                   ->orWhere('sender_id', '!=', $user->id);
-            })
-            ->whereDoesntHave('reads', function ($q) use ($user) {
-                $q->where('user_type', User::class)->where('user_id', $user->id);
-            })
-            ->get();
-
-        foreach ($unreadMessages as $uMsg) {
-            MessageRead::firstOrCreate([
-                'message_id' => $uMsg->id,
-                'user_type' => User::class,
-                'user_id' => $user->id,
-            ], [
-                'read_at' => now(),
-            ]);
-        }
-
-        if ($unreadMessages->isNotEmpty()) {
-            \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
-            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unreadMessages->count()));
-        }
+        $this->markConversationRead($conversation, $user);
 
         return response()->json(['success' => true]);
     }
@@ -403,40 +430,17 @@ class ChatController extends Controller
     public function show(Conversation $conversation)
     {
         Gate::authorize('view', $conversation);
+        /** @var User $user */
         $user = Auth::user();
 
-        // Mark as read
-        $unreadMessages = Message::where('conversation_id', $conversation->id)
-            ->where(function ($sq) use ($user) {
-                $sq->where('sender_type', '!=', User::class)
-                   ->orWhere('sender_id', '!=', $user->id);
-            })
-            ->whereDoesntHave('reads', function ($q) use ($user) {
-                $q->where('user_type', User::class)->where('user_id', $user->id);
-            })
-            ->get();
+        $this->markConversationRead($conversation, $user);
 
-        foreach ($unreadMessages as $uMsg) {
-            MessageRead::firstOrCreate([
-                'message_id' => $uMsg->id,
-                'user_type' => User::class,
-                'user_id' => $user->id,
-            ], [
-                'read_at' => now(),
-            ]);
-        }
-
-        if ($unreadMessages->isNotEmpty()) {
-            \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$user->id}");
-            broadcast(new ChatMessageRead($conversation->id, User::class, $user->id, $unreadMessages->count()));
-        }
-
-        $conversationData = \App\Services\ChatInboxService::present($conversation, $user, false);
+        $conversationData = ChatInboxService::present($conversation, $user, false, 0);
 
         $rawMessages = Message::where('conversation_id', $conversation->id)
             ->with([
                 'sender',
-                'ticket:id,sub_unit_id,user_id,status,priority',
+                'ticket:id,sub_unit_id,user_id,created_by_admin_id,form_data,status,priority',
                 'ticket.subUnit:id,nama_layanan',
                 'attachments',
                 'replyTo.sender',
@@ -446,48 +450,9 @@ class ChatController extends Controller
             ->orderBy('created_at', 'asc')
             ->get();
 
-        $messages = $rawMessages->map(function ($msg) {
-            return [
-                'id' => $msg->id,
-                'conversation_id' => $msg->conversation_id,
-                'sender_type' => $msg->sender_type,
-                'sender_id' => $msg->sender_id,
-                'sender_name' => $msg->sender ? ($msg->sender->name ?? $msg->sender->username) : 'Sistem',
-                'sender_avatar' => $msg->sender && !empty($msg->sender->avatar_path) ? '/storage/' . $msg->sender->avatar_path : null,
-                'ticket' => $msg->ticket ? [
-                    'id' => $msg->ticket->id,
-                    'formatted_id' => $msg->ticket->formatted_id,
-                    'judul' => $msg->ticket->judul,
-                    'status' => $msg->ticket->status,
-                    'priority' => $msg->ticket->priority,
-                ] : null,
-                'reply_to_message_id' => $msg->reply_to_message_id,
-                'reply_to' => $msg->replyTo ? [
-                    'id' => $msg->replyTo->id,
-                    'body' => $msg->replyTo->body,
-                    'sender_name' => $msg->replyTo->sender ? ($msg->replyTo->sender->name ?? $msg->replyTo->sender->username) : 'User',
-                ] : null,
-                'body' => $msg->body,
-                'is_edited' => $msg->is_edited,
-                'attachments' => $msg->attachments->map(fn($att) => [
-                    'id' => $att->id,
-                    'file_name' => $att->file_name,
-                    'file_path' => '/storage/' . $att->file_path,
-                    'file_type' => $att->file_type,
-                    'file_size' => $att->file_size,
-                ]),
-                'reads' => $msg->reads->map(fn($r) => [
-                    'user_type' => $r->user_type,
-                    'user_id' => $r->user_id,
-                    'read_at' => $r->read_at ? $r->read_at->toIso8601String() : null,
-                ]),
-                'created_at' => $msg->created_at->toIso8601String(),
-            ];
-        });
-
         return response()->json([
             'conversation' => $conversationData,
-            'messages' => $messages,
+            'messages' => $this->serializeMessages($rawMessages),
         ]);
     }
 
@@ -498,7 +463,7 @@ class ChatController extends Controller
             abort(404, 'File tidak ditemukan');
         }
 
-        \Illuminate\Support\Facades\Gate::authorize('view', $message->conversation);
+        Gate::authorize('view', $message->conversation);
 
         if (!Storage::disk('public')->exists($attachment->file_path)) {
             abort(404, 'File tidak ditemukan');

@@ -8,23 +8,27 @@ use Illuminate\Support\Facades\DB;
 
 class UnitSeeder extends Seeder
 {
+    // Mirrors the 3 units rows in apudevid_haloapu.sql.
     public function run(): void
     {
         DB::table('units')->truncate();
 
         $units = [
             [
-                'nama_unit' => 'GA (General Affair)',
+                'nama_unit' => 'GA',
+                'icon' => 'Wrench',
                 'deskripsi' => 'Menangani urusan umum seperti ruangan, kendaraan, dan aset perusahaan',
                 'aktif' => true,
             ],
             [
-                'nama_unit' => 'IT (Information Technology)',
+                'nama_unit' => 'IT',
+                'icon' => 'Cpu',
                 'deskripsi' => 'Menangani urusan teknologi informasi, jaringan, dan perangkat',
                 'aktif' => true,
             ],
             [
                 'nama_unit' => 'Humas',
+                'icon' => 'User',
                 'deskripsi' => 'Menangani urusan hubungan masyarakat dan komunikasi',
                 'aktif' => true,
             ],

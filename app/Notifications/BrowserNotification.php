@@ -32,7 +32,11 @@ class BrowserNotification extends Notification implements ShouldBroadcast
      */
     public function via(object $notifiable): array
     {
-        return ['broadcast']; // Only broadcast
+        // Without a realtime driver (cPanel has no Reverb) there is nobody to
+        // receive this, and broadcasting would fail on every call.
+        return in_array(config('broadcasting.default'), [null, 'null', 'log'], true)
+            ? ['database']
+            : ['broadcast'];
     }
 
     /**

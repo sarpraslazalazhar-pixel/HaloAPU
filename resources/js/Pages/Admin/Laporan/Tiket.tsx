@@ -161,6 +161,8 @@ export default function LaporanTiket({
  priority={t.priority || 'low'}
  isBreached={sla.is_response_breached || sla.is_resolution_breached}
  deadline={sla.sla_resolution_deadline}
+ resolutionStartsAt={sla.sla_resolution_starts_at}
+ resolutionBaseDeadline={sla.sla_resolution_base_deadline}
  respondedAt={sla.responded_at}
  resolvedAt={sla.resolved_at}
  pausedAt={sla.paused_at}

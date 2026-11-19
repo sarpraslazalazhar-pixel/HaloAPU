@@ -9,7 +9,9 @@ use App\Models\TicketLog;
 use App\Notifications\TicketCommentPushNotification;
 use App\Notifications\TicketStatusUpdatedNotification;
 use App\Notifications\TicketStatusUpdatedOperatorNotification;
+use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
@@ -41,65 +43,69 @@ class TicketStatusService
         ?string $deliverableUrl = null,
         bool $skipSparcLoop = false,
     ): void {
+        $updated = TicketWorkQueue::mutate($ticket, null, function (Ticket $lockedTicket, Carbon $at) use ($newStatus, $catatan, $actor, $attachments, $deliverableUrl, $skipSparcLoop) {
+            $oldStatus = $lockedTicket->status;
+            if ($oldStatus === $newStatus) {
+                return;
+            }
+
+            if ($newStatus === 'on_proses' && ($lockedTicket->assignment_queued_at !== null
+                || ($lockedTicket->assigned_admin_id !== null && TicketWorkQueue::hasOtherActive($lockedTicket, (int) $lockedTicket->assigned_admin_id)))) {
+                throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
+            }
+
+            if (! in_array($newStatus, self::VALID_TRANSITIONS[$oldStatus] ?? [], true)) {
+                throw new InvalidArgumentException("Transisi status dari '{$oldStatus}' ke '{$newStatus}' tidak diizinkan.");
+            }
+
+            $finalCatatan = self::applyLockedTransition($lockedTicket, $newStatus, $catatan, $actor, $attachments, $deliverableUrl, $at);
+            DB::afterCommit(fn () => self::notifyTransition($lockedTicket, $actor, $finalCatatan, $skipSparcLoop));
+        });
+
+        $ticket->setRawAttributes($updated->getAttributes(), true);
+    }
+
+    private static function applyLockedTransition(
+        Ticket $ticket,
+        string $newStatus,
+        ?string $catatan,
+        ?Admin $actor,
+        array $attachments,
+        ?string $deliverableUrl,
+        Carbon $at,
+    ): string {
         $oldStatus = $ticket->status;
+        $sla = $ticket->slaTracking()->lockForUpdate()->first();
 
-        if ($oldStatus === $newStatus) {
-            return;
-        }
-
-        if (! isset(self::VALID_TRANSITIONS[$oldStatus]) || ! in_array($newStatus, self::VALID_TRANSITIONS[$oldStatus], true)) {
-            throw new InvalidArgumentException("Transisi status dari '{$oldStatus}' ke '{$newStatus}' tidak diizinkan.");
-        }
-
-        $slaCalculator = new SlaCalculator;
-        $ticket->loadMissing('slaTracking');
-        $sla = $ticket->slaTracking;
-
-        // SLA: open -> on_proses
-        if ($oldStatus === 'open' && $newStatus === 'on_proses') {
-            if ($sla && ! $sla->responded_at) {
-                $respondedAt = now();
+        if ($sla) {
+            $sla->setRelation('ticket', $ticket);
+            if ($newStatus === 'pending') {
+                (new SlaCalculator)->pauseSla($sla, $at);
+            } elseif ($newStatus === 'on_proses') {
+                if ($oldStatus === 'pending') {
+                    (new SlaCalculator)->resumeSla($sla, $at);
+                }
+                if ($sla->responded_at === null) {
+                    $sla->update([
+                        'responded_at' => $at,
+                        'is_response_breached' => $sla->is_response_breached
+                            || ($sla->sla_response_deadline && $at->gt($sla->sla_response_deadline)),
+                    ]);
+                }
+            } elseif ($newStatus === 'solve' && $sla->resolved_at === null) {
                 $sla->update([
-                    'responded_at' => $respondedAt,
-                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
+                    'resolved_at' => $at,
+                    'is_resolution_breached' => $sla->is_resolution_breached
+                        || ($sla->sla_resolution_deadline && $at->gt($sla->sla_resolution_deadline)),
                 ]);
             }
         }
 
-        // SLA: pause when entering pending
-        if ($newStatus === 'pending' && $oldStatus !== 'pending') {
-            if ($sla) {
-                $slaCalculator->pauseSla($sla);
-            }
-        }
-
-        // SLA: resume when leaving pending into on_proses
-        if ($oldStatus === 'pending' && $newStatus === 'on_proses') {
-            if ($sla) {
-                $slaCalculator->resumeSla($sla);
-            }
-            if ($sla && ! $sla->responded_at) {
-                $respondedAt = now();
-                $sla->update([
-                    'responded_at' => $respondedAt,
-                    'is_response_breached' => $sla->sla_response_deadline && $respondedAt->gt($sla->sla_response_deadline),
-                ]);
-            }
-        }
-
-        // SLA: solve
+        $ticket->status = $newStatus;
         if ($newStatus === 'solve') {
-            if ($sla && ! $sla->resolved_at) {
-                $resolvedAt = now();
-                $sla->update([
-                    'resolved_at' => $resolvedAt,
-                    'is_resolution_breached' => $sla->sla_resolution_deadline && $resolvedAt->gt($sla->sla_resolution_deadline),
-                ]);
-            }
-            $ticket->update(['is_result_accepted' => false]);
+            $ticket->is_result_accepted = false;
         }
-
-        $ticket->update(['status' => $newStatus]);
+        $ticket->save();
 
         // Sync asset booking status if linked
         $ticket->loadMissing('booking');
@@ -156,6 +162,11 @@ class TicketStatusService
             }
         }
 
+        return $finalCatatan;
+    }
+
+    private static function notifyTransition(Ticket $ticket, ?Admin $actor, string $finalCatatan, bool $skipSparcLoop): void
+    {
         // Notification to user
         try {
             $ticket->loadMissing('user', 'subUnit');

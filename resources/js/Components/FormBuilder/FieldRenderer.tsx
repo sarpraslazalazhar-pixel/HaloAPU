@@ -61,6 +61,13 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  value={value || ''}
  min={minDate}
  onChange={e => onChange(field.id, e.target.value)}
+ onClick={(e) => {
+  try {
+    e.currentTarget.showPicker?.();
+  } catch {
+    // Native picker already open or not user-gesture initiated; the icon still works.
+  }
+ }}
  required={field.wajib}
  />
  );
@@ -88,6 +95,13 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  value={value || ''}
  min={minDateTime}
  onChange={e => onChange(field.id, e.target.value)}
+ onClick={(e) => {
+  try {
+    e.currentTarget.showPicker?.();
+  } catch {
+    // Native picker already open or not user-gesture initiated; the icon still works.
+  }
+ }}
  required={field.wajib}
  />
  );

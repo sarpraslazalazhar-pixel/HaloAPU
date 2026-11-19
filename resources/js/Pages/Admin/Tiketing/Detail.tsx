@@ -10,7 +10,6 @@ import { formatDateId, formatTicketId } from '@/lib/utils';
 import type { FormField } from '@/types';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
-import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import EditTicketFormDialog from '@/Components/EditTicketFormDialog';
 import { TicketEditHistory, type EditHistoryEntry } from '@/Components/TicketEditHistory';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
@@ -38,6 +37,8 @@ interface TicketDetailData {
   user_id?: number | null;
   created_by_admin_id?: number | null;
   assigned_admin_id?: number | null;
+  assignment_queued_at?: string | null;
+  created_at?: string | null;
   dikembalikan_at?: string | null;
   kondisi_kembali?: string | null;
   catatan_kembali?: string | null;
@@ -64,6 +65,7 @@ interface TicketDetailData {
   sla_tracking?: {
     sla_response_deadline?: string | null;
     sla_resolution_deadline?: string | null;
+    sla_resolution_starts_at?: string | null;
     responded_at?: string | null;
     resolved_at?: string | null;
     is_response_breached?: boolean;
@@ -88,10 +90,12 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     errors?: Record<string, string>;
   };
   const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
+  const slaPaused = ticket.sla_tracking?.paused_at != null || ticket.status.toLowerCase() === 'pending';
+  const slaNow = Math.floor(Date.now() / 1000) * 1000;
+  const resolutionStartsAt = ticket.sla_tracking?.sla_resolution_starts_at;
+  const resolutionNotStarted = resolutionStartsAt && slaNow < Date.parse(resolutionStartsAt);
 
   const [editFormOpen, setEditFormOpen] = useState(false);
-  const [editorOpen, setEditorOpen] = useState(false);
-  const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'admin'} | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelBookingConfirm, setShowCancelBookingConfirm] = useState(false);
   const [showCancelTicketConfirm, setShowCancelTicketConfirm] = useState(false);
@@ -126,12 +130,16 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     !isBookingPast
   );
 
-  // SAFETY: general_attachments is initialized as an empty array of uploaded File instances.
-  const { data: statusData, setData: setStatusData, post: postStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '', general_attachments: [] as File[], _method: 'patch' });
+  const { data: statusData, setData: setStatusData, patch: patchStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '' });
   const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
   const { data: assignData, setData: setAssignData, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
   // SAFETY: Look up ticket transitions by status using keyof; fallback to empty array if unknown.
   const transitions = (ticket?.status ? validTransitions[ticket.status as keyof typeof validTransitions] : undefined) || [];
+  const isQueued = Boolean(ticket.assignment_queued_at);
+
+  useEffect(() => {
+    if (isQueued) setStatusData('status', '');
+  }, [isQueued, setStatusData]);
 
   useEffect(() => {
     setAssignData('assigned_admin_id', ticket.assigned_admin_id || '');
@@ -173,89 +181,68 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     const selectedPriority = priorityData.priority || '';
     const isPriorityChanged = selectedPriority !== '' && selectedPriority !== currentPriority;
 
-    // Skenario 1: Ubah status dipilih
-    if (statusData.status) {
-      setIsSubmitting(true);
-      postStatus(route('admin.tiket.status', ticket.id), {
+    const selectedStatus = isQueued ? '' : statusData.status;
+    if (!selectedStatus && !isOperatorChanged && !isPriorityChanged) {
+      alert('Silakan pilih status, operator, atau prioritas yang ingin diubah terlebih dahulu.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    const stop = () => setIsSubmitting(false);
+    const afterSuccess = (next: (updatedTicket?: TicketDetailData) => void) => (page: { props: unknown }) => {
+      const { flash, ticket: updatedTicket } = page.props as { flash?: { error?: string }; ticket?: TicketDetailData };
+      if (flash?.error) {
+        stop();
+      } else {
+        next(updatedTicket);
+      }
+    };
+    const savePriority = () => {
+      if (!isPriorityChanged) {
+        stop();
+        return;
+      }
+      router.patch(route('admin.tiket.priority', ticket.id), { priority: selectedPriority }, {
         preserveScroll: true,
-        onSuccess: () => {
+        onFinish: stop,
+      });
+    };
+    const saveAssignment = (next: (updatedTicket?: TicketDetailData) => void) => {
+      router.patch(route('admin.tiket.assign', ticket.id), { assigned_admin_id: selectedAssignedId }, {
+        preserveScroll: true,
+        onSuccess: afterSuccess(next),
+        onError: stop,
+      });
+    };
+    const saveStatus = (next: () => void) => {
+      patchStatus(route('admin.tiket.status', ticket.id), {
+        preserveScroll: true,
+        onSuccess: afterSuccess(() => {
           resetStatus();
-
-          if (isOperatorChanged) {
-            router.patch(route('admin.tiket.assign', ticket.id), {
-              assigned_admin_id: selectedAssignedId,
-            }, {
-              preserveScroll: true,
-              onSuccess: () => {
-                if (isPriorityChanged) {
-                  router.patch(route('admin.tiket.priority', ticket.id), {
-                    priority: selectedPriority,
-                  }, {
-                    preserveScroll: true,
-                    onFinish: () => setIsSubmitting(false),
-                  });
-                } else {
-                  setIsSubmitting(false);
-                }
-              },
-              onError: () => setIsSubmitting(false),
-            });
-          } else if (isPriorityChanged) {
-            router.patch(route('admin.tiket.priority', ticket.id), {
-              priority: selectedPriority,
-            }, {
-              preserveScroll: true,
-              onFinish: () => setIsSubmitting(false),
-            });
-          } else {
-            setIsSubmitting(false);
-          }
-        },
-        onError: () => setIsSubmitting(false),
+          next();
+        }),
+        onError: stop,
       });
+    };
 
-      return;
-    }
-
-    // Skenario 2: Status tidak diubah, tapi Operator diubah
-    if (isOperatorChanged) {
-      setIsSubmitting(true);
-      router.patch(route('admin.tiket.assign', ticket.id), {
-        assigned_admin_id: selectedAssignedId,
-      }, {
-        preserveScroll: true,
-        onSuccess: () => {
-          if (isPriorityChanged) {
-            router.patch(route('admin.tiket.priority', ticket.id), {
-              priority: selectedPriority,
-            }, {
-              preserveScroll: true,
-              onFinish: () => setIsSubmitting(false),
-            });
-          } else {
-            setIsSubmitting(false);
-          }
-        },
-        onError: () => setIsSubmitting(false),
+    if (selectedStatus === 'on_proses' && isOperatorChanged) {
+      saveAssignment(updatedTicket => {
+        if (!updatedTicket) {
+          stop();
+        } else if (updatedTicket.assignment_queued_at) {
+          setStatusData('status', '');
+          savePriority();
+        } else {
+          saveStatus(savePriority);
+        }
       });
-
-      return;
+    } else if (selectedStatus) {
+      saveStatus(() => isOperatorChanged ? saveAssignment(savePriority) : savePriority());
+    } else if (isOperatorChanged) {
+      saveAssignment(savePriority);
+    } else {
+      savePriority();
     }
-
-    // Skenario 3: Hanya Prioritas yang diubah
-    if (isPriorityChanged) {
-      setIsSubmitting(true);
-      router.patch(route('admin.tiket.priority', ticket.id), {
-        priority: selectedPriority,
-      }, {
-        preserveScroll: true,
-        onFinish: () => setIsSubmitting(false),
-      });
-
-      return;
-    }
-
-    alert('Silakan pilih status, operator, atau prioritas yang ingin diubah terlebih dahulu.');
   };
 
  const renderFormValue = (field: any) => {
@@ -317,23 +304,24 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
    <AdminLayout title={`Detail Tiket #TKT-${formatTicketId(ticket.id)}`}>
      <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
-     <div className="flex items-center gap-3 mb-6">
+     <div className="flex flex-wrap items-center gap-3 mb-6">
        <Button variant="outline" size="sm" onClick={() => router.get(route('admin.tiket.index'))}>
          <ArrowLeft className="w-4 h-4 mr-1" /> Kembali
        </Button>
-       <h1 className="text-2xl font-bold flex items-center gap-3">
-         #TKT-{formatTicketId(ticket.id)} <StatusBadge status={ticket.status} />
+       <div className="flex min-w-0 flex-wrap items-center gap-2">
+         <h1 className="text-xl sm:text-2xl font-bold whitespace-nowrap">#TKT-{formatTicketId(ticket.id)}</h1>
+         <StatusBadge status={ticket.status} />
          {(ticket.edit_histories?.length ?? 0) > 0 && (
            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Diedit Admin</span>
          )}
-       </h1>
-       <div className="ml-auto">
-         {canEditForm && (
+       </div>
+       {canEditForm && (
+         <div className="sm:ml-auto">
            <Button variant="outline" size="sm" onClick={() => setEditFormOpen(true)}>
              <Edit2 className="w-4 h-4 mr-1" /> Edit Formulir
            </Button>
-         )}
-       </div>
+         </div>
+       )}
      </div>
 
      <div className="mb-6">
@@ -371,39 +359,97 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
               downloadRoute="admin.tiket.download"
               viewRoute="admin.tiket.view"
               canReply={['solve', 'reject', 'dibatalkan'].indexOf(ticket.status) === -1}
-              chatUrl={`/admin/chat?user_id=${ticket.user_id}&ticket_id=${ticket.id}`}
+              chatUrl={`/admin/chat?ticket_id=${ticket.id}`}
             />
           </TabsContent>
 
            {/* TAB 1: INFORMASI */}
-           <TabsContent value="informasi" className="space-y-6 mt-0">
-             <Card>
-               <CardHeader><CardTitle>Data Pengaju</CardTitle></CardHeader>
-               <CardContent className="grid grid-cols-2 gap-4">
-                 <div><span className="text-sm text-slate-500">Nama</span><p className="font-medium">{ticket.user ? (ticket.user.username || '-') : (ticket.created_by_admin ? `${ticket.created_by_admin.name || ticket.created_by_admin.username} (Admin)` : '-')}</p></div>
-                 <div><span className="text-sm text-slate-500">Email</span><p className="font-medium">{(ticket.user ? ticket.user.email : ticket.created_by_admin?.email) || '-'}</p></div>
-                 <div><span className="text-sm text-slate-500">No. WA</span><p className="font-medium">{(ticket.user ? ticket.user.no_wa : ticket.created_by_admin?.no_wa) || '-'}</p></div>
-                 <div><span className="text-sm text-slate-500">Divisi</span><p className="font-medium">{ticket.org_divisi?.nama_divisi || '-'}</p></div>
-                 <div><span className="text-sm text-slate-500">Unit Organisasi</span><p className="font-medium">{ticket.org_unit?.nama_unit_organisasi || '-'}</p></div>
-                 <div><span className="text-sm text-slate-500">Jabatan</span><p className="font-medium">{ticket.jabatan?.nama_jabatan || '-'}</p></div>
-               </CardContent>
-             </Card>
-
-             <Card>
-               <CardHeader><CardTitle>Data Pengajuan</CardTitle></CardHeader>
-               <CardContent className="space-y-3">
-                 <div className="grid grid-cols-2 gap-3 pb-3 border-b">
-                   <div><span className="text-sm text-slate-500">Unit</span><p className="font-medium">{ticket.unit?.nama_unit || '-'}</p></div>
-                   <div><span className="text-sm text-slate-500">Sub Unit</span><p className="font-medium">{ticket.sub_unit?.nama_layanan || '-'}</p></div>
-                 </div>
-                 {formFields?.map((field: any) => (
-                   <div key={field.id}>
-                     <span className="text-sm text-slate-500">{field.label}:</span>
-                     <p className="font-medium mt-0.5">{renderFormValue(field)}</p>
+           <TabsContent value="informasi" className="mt-0">
+             <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+               <Card className="min-w-0 self-start overflow-visible xl:col-span-2">
+                 <CardHeader><CardTitle className="text-sm">Data Pengajuan</CardTitle></CardHeader>
+                 <CardContent className="space-y-4">
+                   <div>
+                     <h2 className="text-lg sm:text-xl font-semibold text-slate-900 break-words">
+                       {ticket.sub_unit?.nama_layanan || 'Layanan tidak tercatat'}
+                     </h2>
+                     <p className="mt-1 text-sm text-slate-500 break-words">
+                       {ticket.unit?.nama_unit || '-'}
+                     </p>
                    </div>
-                 ))}
-               </CardContent>
-             </Card>
+
+                   <dl className="border-b border-slate-100 pb-4">
+                     <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                       <dt className="text-sm text-slate-500">Tanggal Pengajuan</dt>
+                       <dd className="text-sm font-medium text-slate-900 break-words">
+                         {formatDateId(ticket.created_at)}
+                       </dd>
+                     </div>
+                   </dl>
+
+                   {!formFields || formFields.length === 0 ? (
+                     <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-6 text-sm text-slate-500">
+                       Tidak ada data formulir pada tiket ini.
+                     </p>
+                   ) : (
+                     <dl className="divide-y divide-slate-100">
+                       {formFields.map((field) => (
+                         <div key={field.id} className="grid grid-cols-1 sm:grid-cols-[minmax(0,16rem)_1fr] gap-1 sm:gap-6 py-3">
+                           <dt className="text-sm text-slate-500 break-words">{field.label}</dt>
+                           <dd className="min-w-0 text-base font-medium text-slate-900 break-words whitespace-pre-wrap [&_button>span.truncate]:overflow-visible [&_button>span.truncate]:whitespace-normal">
+                             {renderFormValue(field)}
+                           </dd>
+                         </div>
+                       ))}
+                     </dl>
+                   )}
+                 </CardContent>
+               </Card>
+
+               <Card className="min-w-0 self-start overflow-visible">
+                 <CardHeader><CardTitle className="text-sm">Data Pengaju</CardTitle></CardHeader>
+                 <CardContent>
+                   <dl className="divide-y divide-slate-100">
+                     <div className="py-2.5 first:pt-0 last:pb-0">
+                       <dt className="text-xs font-medium text-slate-500">Nama</dt>
+                       <dd className="text-base font-semibold text-slate-900 break-words">
+                         {ticket.user ? (ticket.user.username || '-') : (ticket.created_by_admin ? `${ticket.created_by_admin.name || ticket.created_by_admin.username} (Admin)` : '-')}
+                       </dd>
+                     </div>
+                     <div className="py-2.5 first:pt-0 last:pb-0">
+                       <dt className="text-xs font-medium text-slate-500">Email</dt>
+                       <dd className="text-sm font-semibold text-slate-900 break-words">
+                         {(ticket.user ? ticket.user.email : ticket.created_by_admin?.email) || '-'}
+                       </dd>
+                     </div>
+                     <div className="py-2.5 first:pt-0 last:pb-0">
+                       <dt className="text-xs font-medium text-slate-500">No. WA</dt>
+                       <dd className="text-sm font-semibold text-slate-900 break-words">
+                         {(ticket.user ? ticket.user.no_wa : ticket.created_by_admin?.no_wa) || '-'}
+                       </dd>
+                     </div>
+                     <div className="py-2.5 first:pt-0 last:pb-0">
+                       <dt className="text-xs font-medium text-slate-500">Divisi</dt>
+                       <dd className="text-sm font-semibold text-slate-900 break-words">
+                         {ticket.org_divisi?.nama_divisi || '-'}
+                       </dd>
+                     </div>
+                     <div className="py-2.5 first:pt-0 last:pb-0">
+                       <dt className="text-xs font-medium text-slate-500">Unit Organisasi</dt>
+                       <dd className="text-sm font-semibold text-slate-900 break-words">
+                         {ticket.org_unit?.nama_unit_organisasi || '-'}
+                       </dd>
+                     </div>
+                     <div className="py-2.5 first:pt-0 last:pb-0">
+                       <dt className="text-xs font-medium text-slate-500">Jabatan</dt>
+                       <dd className="text-sm font-semibold text-slate-900 break-words">
+                         {ticket.jabatan?.nama_jabatan || '-'}
+                       </dd>
+                     </div>
+                   </dl>
+                 </CardContent>
+               </Card>
+             </div>
            </TabsContent>
 
            {/* TAB 2: TIMELINE */}
@@ -742,6 +788,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                     <div className="space-y-2">
                       <span className="text-sm text-slate-500">Status Saat Ini:</span>
                       <div><StatusBadge status={ticket.status} /></div>
+                      {isQueued && <p className="text-sm text-amber-700">Menunggu giliran petugas</p>}
                     </div>
 
                     {transitions.length > 0 ? (
@@ -751,6 +798,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                           <select
                             className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
                             value={statusData.status}
+                            disabled={isQueued}
                             onChange={e => setStatusData('status', e.target.value)}
                           >
                             <option value="">Pilih status baru (opsional jika hanya tugaskan operator)</option>
@@ -803,64 +851,9 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                             placeholder="Catatan admin (opsional)..."
                           />
                           {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Lampiran Tambahan (Opsional)</label>
-                          <p className="text-xs text-slate-500">Maks. 3 file, 3MB/file (JPG, PNG, PDF, DOC, DOCX).</p>
-                          <div className="flex items-center gap-3">
-                            <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 text-sm font-medium cursor-pointer transition-colors border border-blue-200">
-                              <Paperclip className="w-4 h-4" />
-                              <span>Pilih Berkas</span>
-                              <input
-                                type="file"
-                                multiple
-                                accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
-                                className="hidden"
-                                onChange={e => {
-                                  const files = Array.from(e.target.files || []);
-
-                                  if (statusData.general_attachments.length + files.length > 3) {
-                                    alert('Maksimal hanya 3 lampiran.');
-
-                                    return;
-                                  }
-
-                                  const validFiles = files.filter(f => {
-                                    if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`);
-
- return false; }
-
-                                    return true;
-                                  });
-
-                                  setStatusData('general_attachments', [...statusData.general_attachments, ...validFiles]);
-                                  e.target.value = '';
-                                }}
-                              />
-                            </label>
-                            <span className="text-xs text-slate-500">
-                              {statusData.general_attachments.length > 0
-                                ? `${statusData.general_attachments.length} berkas dipilih`
-                                : 'Belum ada berkas yang dipilih'}
-                            </span>
-                          </div>
-                          {errorsStatus.general_attachments && <p className="text-red-500 text-sm">{errorsStatus.general_attachments}</p>}
-                          {statusData.general_attachments.length > 0 && (
-                            <div className="mt-2 space-y-2">
-                              {statusData.general_attachments.map((file, idx) => (
-                                <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
-                                  <span className="truncate max-w-[200px]">{file.name}</span>
-                                  <div className="flex items-center gap-3">
-                                    {file.type.startsWith('image/') && (
-                                      <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'admin'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
-                                    )}
-                                    <button type="button" onClick={() => setStatusData('general_attachments', statusData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          <p className="text-xs text-slate-500">
+                            Lampiran tambahan dikirim melalui tab Chat.
+                          </p>
                         </div>
 
                         <Button type="submit" className="w-full" disabled={isSubmitting || processingStatus}>
@@ -958,21 +951,32 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                    <div className="space-y-1">
                      <div className="flex items-center justify-between">
                        <span className="text-sm text-slate-500">SLA Respon</span>
-                       {!ticket.sla_tracking.sla_response_deadline && !ticket.sla_tracking.responded_at ? (
+                       {ticket.sla_tracking.is_response_breached || (
+                         ticket.sla_tracking.responded_at && ticket.sla_tracking.sla_response_deadline
+                         && Date.parse(ticket.sla_tracking.responded_at) > Date.parse(ticket.sla_tracking.sla_response_deadline)
+                       ) ? (
+                         <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                           <XCircle className="w-3 h-3" /> Terlanggar
+                         </span>
+                       ) : ticket.sla_tracking.responded_at ? (
+                         <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                           <CheckCircle2 className="w-3 h-3" /> Tercapai
+                         </span>
+                       ) : slaPaused ? (
+                         ticket.status === 'pending' ? (
+                           <span className="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                             <PauseCircle className="w-3 h-3" /> Menunggu
+                           </span>
+                         ) : (
+                           <span className="inline-flex items-center gap-1 text-xs text-amber-700 font-medium">
+                             <PauseCircle className="w-3 h-3" /> Dijeda
+                           </span>
+                         )
+                       ) : !ticket.sla_tracking.sla_response_deadline ? (
                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
                            <Clock className="w-3 h-3" /> Belum Dimulai
                          </span>
-                      ) : ticket.sla_tracking.responded_at ? (
-                        ticket.sla_tracking.sla_response_deadline && new Date(ticket.sla_tracking.responded_at) > new Date(ticket.sla_tracking.sla_response_deadline) ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
-                             <XCircle className="w-3 h-3" /> Terlanggar
-                           </span>
-                         ) : (
-                           <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                             <CheckCircle2 className="w-3 h-3" /> Tercapai
-                           </span>
-                         )
-                       ) : ticket.sla_tracking.is_response_breached || (ticket.sla_tracking.sla_response_deadline && new Date() > new Date(ticket.sla_tracking.sla_response_deadline)) ? (
+                       ) : slaNow > Date.parse(ticket.sla_tracking.sla_response_deadline) ? (
                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                            <XCircle className="w-3 h-3" /> Terlanggar
                          </span>
@@ -1001,21 +1005,32 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                    <div className="space-y-1">
                      <div className="flex items-center justify-between">
                        <span className="text-sm text-slate-500">SLA Penyelesaian</span>
-                       {!ticket.sla_tracking.sla_resolution_deadline && !ticket.sla_tracking.resolved_at ? (
+                       {ticket.sla_tracking.is_resolution_breached || (
+                         ticket.sla_tracking.resolved_at && ticket.sla_tracking.sla_resolution_deadline
+                         && Date.parse(ticket.sla_tracking.resolved_at) > Date.parse(ticket.sla_tracking.sla_resolution_deadline)
+                       ) ? (
+                         <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
+                           <XCircle className="w-3 h-3" /> Terlanggar
+                         </span>
+                       ) : ticket.sla_tracking.resolved_at ? (
+                         <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
+                           <CheckCircle2 className="w-3 h-3" /> Tercapai
+                         </span>
+                       ) : slaPaused ? (
+                         ticket.status === 'pending' ? (
+                           <span className="inline-flex items-center gap-1 text-xs text-slate-600 font-medium">
+                             <PauseCircle className="w-3 h-3" /> Menunggu
+                           </span>
+                         ) : (
+                           <span className="inline-flex items-center gap-1 text-xs text-amber-700 font-medium">
+                             <PauseCircle className="w-3 h-3" /> Dijeda
+                           </span>
+                         )
+                       ) : resolutionNotStarted || !ticket.sla_tracking.sla_resolution_deadline ? (
                          <span className="inline-flex items-center gap-1 text-xs text-slate-500 font-medium">
                            <Clock className="w-3 h-3" /> Belum Dimulai
                          </span>
-                      ) : ticket.sla_tracking.resolved_at ? (
-                        ticket.sla_tracking.sla_resolution_deadline && new Date(ticket.sla_tracking.resolved_at) > new Date(ticket.sla_tracking.sla_resolution_deadline) ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
-                             <XCircle className="w-3 h-3" /> Terlanggar
-                           </span>
-                         ) : (
-                           <span className="inline-flex items-center gap-1 text-xs text-green-600 font-medium">
-                             <CheckCircle2 className="w-3 h-3" /> Tercapai
-                           </span>
-                         )
-                       ) : ticket.sla_tracking.is_resolution_breached || (ticket.sla_tracking.sla_resolution_deadline && new Date() > new Date(ticket.sla_tracking.sla_resolution_deadline)) ? (
+                       ) : slaNow > Date.parse(ticket.sla_tracking.sla_resolution_deadline) ? (
                          <span className="inline-flex items-center gap-1 text-xs text-red-600 font-medium">
                            <XCircle className="w-3 h-3" /> Terlanggar
                          </span>
@@ -1025,7 +1040,11 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                          </span>
                        )}
                      </div>
-                     {ticket.sla_tracking.sla_resolution_deadline ? (
+                     {resolutionNotStarted && !ticket.sla_tracking.resolved_at ? (
+                       <p className="text-xs text-slate-400">
+                         Mulai: {formatDateId(resolutionStartsAt)}
+                       </p>
+                     ) : ticket.sla_tracking.sla_resolution_deadline ? (
                        <p className="text-xs text-slate-400">
                          Deadline: {formatDateId(ticket.sla_tracking.sla_resolution_deadline)}
                        </p>
@@ -1065,23 +1084,6 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
          onOpenChange={setEditFormOpen}
          ticket={ticket}
          formFields={(formFields || []) as unknown as FormField[]}
-       />
-     )}
-
-     {fileToEdit && (
-       <ImageEditorModal
-         isOpen={editorOpen}
-         onClose={() => setEditorOpen(false)}
-         imageFile={fileToEdit.file}
-         onSave={(editedFile) => {
-           if (fileToEdit.form === 'admin') {
-             const newFiles = [...statusData.general_attachments];
-             newFiles[fileToEdit.index] = editedFile;
-             setStatusData('general_attachments', newFiles);
-           }
-
-           setEditorOpen(false);
-         }}
        />
      )}
    </AdminLayout>

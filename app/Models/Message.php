@@ -15,6 +15,7 @@ class Message extends Model
         'sender_type',
         'sender_id',
         'ticket_id',
+        'ticket_log_id',
         'reply_to_message_id',
         'body',
         'is_edited',
@@ -25,10 +26,47 @@ class Message extends Model
         'conversation_id' => 'integer',
         'sender_id' => 'integer',
         'ticket_id' => 'integer',
+        'ticket_log_id' => 'integer',
         'reply_to_message_id' => 'integer',
         'is_edited' => 'boolean',
         'edited_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        $invalidate = function (Message $message): void {
+            try {
+                $conv = $message->conversation;
+                if ($conv?->user_id) {
+                    \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$conv->user_id}");
+                }
+                if ($conv?->admin_one_id) {
+                    \Illuminate\Support\Facades\Cache::forget("unread_chat_admin_{$conv->admin_one_id}");
+                }
+                if ($conv?->admin_two_id) {
+                    \Illuminate\Support\Facades\Cache::forget("unread_chat_admin_{$conv->admin_two_id}");
+                }
+
+                $ticket = $message->ticket ?? $conv?->ticket;
+                if ($ticket) {
+                    if ($ticket->user_id) {
+                        \Illuminate\Support\Facades\Cache::forget("unread_chat_user_{$ticket->user_id}");
+                    }
+                    if ($ticket->created_by_admin_id) {
+                        \Illuminate\Support\Facades\Cache::forget("unread_chat_admin_{$ticket->created_by_admin_id}");
+                    }
+                    if ($ticket->assigned_admin_id) {
+                        \Illuminate\Support\Facades\Cache::forget("unread_chat_admin_{$ticket->assigned_admin_id}");
+                    }
+                }
+            } catch (\Throwable) {
+                // Ignore cache flush errors in CLI/test contexts.
+            }
+        };
+
+        static::created($invalidate);
+        static::deleted($invalidate);
+    }
 
     public function conversation()
     {

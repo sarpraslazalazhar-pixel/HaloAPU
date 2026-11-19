@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\UserAccountStatusService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
@@ -86,37 +88,30 @@ class UserManagementController extends Controller
             'divisi_id' => 'nullable|exists:org_divisi,id',
             'org_unit_id' => 'nullable|exists:org_unit,id',
             'jabatan_id' => 'nullable|exists:org_jabatan,id',
+            'is_active' => 'sometimes|boolean',
         ]);
 
-        $user->update([
-            'name' => $validated['name'],
-            'username' => $validated['username'],
-            'email' => $validated['email'],
-            'no_wa' => $validated['no_wa'],
-            'divisi_id' => $validated['divisi_id'],
-            'org_unit_id' => $validated['org_unit_id'],
-            'jabatan_id' => $validated['jabatan_id'],
-        ]);
+        DB::transaction(function () use ($user, $validated) {
+            $user->update([
+                'name' => $validated['name'],
+                'username' => $validated['username'],
+                'email' => $validated['email'],
+                'no_wa' => $validated['no_wa'],
+                'divisi_id' => $validated['divisi_id'],
+                'org_unit_id' => $validated['org_unit_id'],
+                'jabatan_id' => $validated['jabatan_id'],
+            ]);
 
-        if (!empty($validated['password'])) {
-            $user->update(['password' => Hash::make($validated['password'])]);
-        }
+            if (!empty($validated['password'])) {
+                $user->update(['password' => Hash::make($validated['password'])]);
+            }
+
+            if (array_key_exists('is_active', $validated)) {
+                UserAccountStatusService::setActive($user, (bool) $validated['is_active']);
+            }
+        });
 
         return back()->with('success', 'User berhasil diperbarui.');
-    }
-
-    public function destroy(User $manajemen_user)
-    {
-        $user = $manajemen_user;
-
-        $activeTickets = $user->tickets()->whereNotIn('status', ['Selesai'])->count();
-        if ($activeTickets > 0) {
-            return back()->with('error', "User ini memiliki {$activeTickets} tiket aktif. Selesaikan terlebih dahulu.");
-        }
-
-        $user->delete();
-
-        return back()->with('success', 'User berhasil dihapus.');
     }
 
     public function resetDevice(User $user)

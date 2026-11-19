@@ -81,13 +81,21 @@ class LaporanTiketExport implements FromQuery, WithMapping, WithHeadings, WithCo
         $this->rowNumber++;
 
         $sla = $ticket->slaTracking;
+        $isPaused = $sla?->paused_at !== null || $ticket->status === 'pending';
+        // Tiket Tertunda karena antrean menunggu giliran, bukan dijeda manual.
+        $pausedLabel = $ticket->status === 'pending' ? 'Menunggu' : 'Dijeda';
+        $slaNow = now()->timestamp;
 
         // SLA Respon
         $slaRespon = '-';
         if ($sla) {
-            if ($sla->responded_at) {
-                $slaRespon = $sla->is_response_breached ? 'Terlambat' : 'Tepat Waktu';
-            } elseif ($sla->sla_response_deadline && $sla->sla_response_deadline->isPast()) {
+            if ($sla->is_response_breached) {
+                $slaRespon = 'Terlambat';
+            } elseif ($sla->responded_at) {
+                $slaRespon = 'Tepat Waktu';
+            } elseif ($isPaused) {
+                $slaRespon = $pausedLabel;
+            } elseif ($sla->sla_response_deadline && $slaNow > $sla->sla_response_deadline->timestamp) {
                 $slaRespon = 'Terlambat';
             }
         }
@@ -95,9 +103,13 @@ class LaporanTiketExport implements FromQuery, WithMapping, WithHeadings, WithCo
         // SLA Resolusi
         $slaResolusi = '-';
         if ($sla) {
-            if ($sla->resolved_at) {
-                $slaResolusi = $sla->is_resolution_breached ? 'Terlambat' : 'Tepat Waktu';
-            } elseif ($sla->sla_resolution_deadline && $sla->sla_resolution_deadline->isPast()) {
+            if ($sla->is_resolution_breached) {
+                $slaResolusi = 'Terlambat';
+            } elseif ($sla->resolved_at) {
+                $slaResolusi = 'Tepat Waktu';
+            } elseif ($isPaused) {
+                $slaResolusi = $pausedLabel;
+            } elseif ($sla->sla_resolution_deadline && $slaNow > $sla->sla_resolution_deadline->timestamp) {
                 $slaResolusi = 'Terlambat';
             }
         }

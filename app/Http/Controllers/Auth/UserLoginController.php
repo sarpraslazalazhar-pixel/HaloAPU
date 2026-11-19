@@ -75,6 +75,20 @@ class UserLoginController extends Controller
             ])->onlyInput('username');
         }
 
+        // Deactivated accounts keep their tickets/chats but cannot open a new
+        // session. Admin identities are managed separately.
+        if ($userValid && ! $adminValid && ! $user->is_active) {
+            return back()->withErrors([
+                'username' => 'Akun tidak aktif. Hubungi admin untuk mengaktifkannya kembali.',
+            ])->onlyInput('username');
+        }
+
+        if ($userValid && $adminValid && $selectedRole === 'user' && ! $user->is_active) {
+            return back()->withErrors([
+                'username' => 'Akun tidak aktif. Hubungi admin untuk mengaktifkannya kembali.',
+            ])->onlyInput('username');
+        }
+
         if (($adminValid && $selectedRole === 'admin') || ($adminValid && !$userValid)) {
             if (Auth::guard('web')->check()) {
                 Auth::guard('web')->logout();
@@ -96,6 +110,7 @@ class UserLoginController extends Controller
             }
             Auth::guard('web')->login($user, $remember);
             $request->session()->regenerate();
+            $request->session()->put('user_session_version', (int) $user->session_version);
 
             $intended = $request->session()->pull('url.intended');
             $target = ($intended && !str_contains($intended, '/admin'))

@@ -265,7 +265,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('manajemen-operator/{manajemen_operator}/send-reset-link', [AdminManagementController::class, 'sendResetLink'])->name('manajemen-operator.send-reset-link');
 
             // Manajemen User
-            Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show'])->names('manajemen-user');
+            Route::resource('manajemen-user', UserManagementController::class)->except(['create', 'edit', 'show', 'destroy'])->names('manajemen-user');
             Route::post('manajemen-user/{user}/reset-device', [UserManagementController::class, 'resetDevice'])->name('manajemen-user.reset-device');
             Route::post('manajemen-user/{user}/send-reset-link', [UserManagementController::class, 'sendResetLink'])->name('manajemen-user.send-reset-link');
 
@@ -332,11 +332,13 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/', [TicketController::class, 'store'])->name('store');
             Route::get('/download/{attachment}', [TicketController::class, 'downloadAttachment'])->name('download');
             Route::get('/view/{attachment}', [TicketController::class, 'viewAttachment'])->name('view');
+            Route::get('/aktif', [TicketController::class, 'activeAssigned'])->name('aktif');
             Route::get('/{ticket}', [TicketController::class, 'show'])->name('show');
             Route::post('/{ticket}/reply', [TicketController::class, 'reply'])->name('reply');
             Route::patch('/{ticket}/assign', [TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [TicketController::class, 'updateStatus'])->name('status');
             Route::patch('/{ticket}/priority', [TicketController::class, 'updatePriority'])->name('priority');
+            Route::patch('/{ticket}/antrean', [TicketController::class, 'moveInQueue'])->name('queue-move');
             Route::patch('/{ticket}/form', [TicketController::class, 'updateForm'])->name('form');
             Route::patch('/{ticket}/cancel-booking', [TicketController::class, 'cancelBooking'])->name('cancel-booking');
             Route::patch('/{ticket}/batal', [TicketController::class, 'cancel'])->name('cancel');

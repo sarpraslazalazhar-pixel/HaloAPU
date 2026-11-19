@@ -13,6 +13,8 @@ class TicketSlaTracking extends Model
         'ticket_id',
         'sla_response_deadline',
         'sla_resolution_deadline',
+        'sla_resolution_starts_at',
+        'sla_resolution_base_deadline',
         'responded_at',
         'resolved_at',
         'paused_at',
@@ -27,6 +29,8 @@ class TicketSlaTracking extends Model
     protected $casts = [
         'sla_response_deadline' => 'datetime',
         'sla_resolution_deadline' => 'datetime',
+        'sla_resolution_starts_at' => 'datetime',
+        'sla_resolution_base_deadline' => 'datetime',
         'responded_at' => 'datetime',
         'resolved_at' => 'datetime',
         'paused_at' => 'datetime',

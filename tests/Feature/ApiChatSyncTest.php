@@ -253,7 +253,8 @@ class ApiChatSyncTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('conversations.0.id', $conversation->id);
         $response->assertJsonPath('conversations.0.ticket.id', $ticket->id);
-        $response->assertJsonPath('conversations.0.peer_name', 'Tiket #' . $ticket->formatted_id);
+        $response->assertJsonPath('conversations.0.peer_name', 'Perbaikan');
+        $response->assertJsonPath('conversations.0.ticket.chat_label', 'Perbaikan');
     }
 
     public function test_another_user_cannot_open_someone_elses_ticket_room(): void
@@ -295,5 +296,107 @@ class ApiChatSyncTest extends TestCase
 
         $this->getJson("/api/tickets/{$ticket->id}/chat")->assertForbidden();
         $this->assertDatabaseMissing('conversations', ['ticket_id' => $ticket->id]);
+    }
+
+    public function test_two_tickets_of_the_same_service_keep_separate_rooms_with_the_service_label(): void
+    {
+        $user = User::factory()->create();
+        $first = $this->ticketFor($user);
+        $second = $this->ticketFor($user);
+        $second->update(['form_data' => ['judul' => 'Lampu mati']]);
+
+        Sanctum::actingAs($user);
+
+        $firstRoom = $this->getJson("/api/tickets/{$first->id}/chat")
+            ->assertOk()
+            ->assertJsonPath('conversation.title', 'Perbaikan')
+            ->json('conversation.id');
+        $secondRoom = $this->getJson("/api/tickets/{$second->id}/chat")
+            ->assertOk()
+            ->json('conversation.id');
+
+        $this->assertNotSame($firstRoom, $secondRoom);
+        $this->assertSame(2, Conversation::where('type', 'ticket')->count());
+
+        $this->assertSame($firstRoom, (int) $this->getJson("/api/tickets/{$first->id}/chat")->json('conversation.id'));
+    }
+
+    public function test_identical_replies_and_attachment_only_messages_are_not_deduplicated(): void
+    {
+        $user = User::factory()->create();
+        $ticket = $this->ticketFor($user);
+
+        Sanctum::actingAs($user);
+
+        $roomId = $this->getJson("/api/tickets/{$ticket->id}/chat")->json('conversation.id');
+
+        $this->postJson("/api/conversations/{$roomId}/messages", ['body' => 'Siap'])->assertCreated();
+        $this->postJson("/api/conversations/{$roomId}/messages", ['body' => 'Siap'])->assertCreated();
+
+        $logs = \App\Models\TicketLog::where('ticket_id', $ticket->id)->where('aksi', 'balasan')->get();
+        $this->assertCount(2, $logs);
+        $this->assertCount(2, Message::where('conversation_id', $roomId)->get());
+    }
+
+    public function test_mobile_reply_and_web_room_share_one_message(): void
+    {
+        $user = User::factory()->create();
+        $ticket = $this->ticketFor($user);
+
+        Sanctum::actingAs($user);
+
+        $this->postJson("/api/tickets/{$ticket->id}/reply", ['catatan' => 'dari mobile'])->assertCreated();
+
+        $conversationId = $this->getJson("/api/tickets/{$ticket->id}/chat")->json('conversation.id');
+
+        $this->assertDatabaseHas('messages', [
+            'conversation_id' => $conversationId,
+            'ticket_id' => $ticket->id,
+            'body' => 'dari mobile',
+        ]);
+
+        $message = Message::where('conversation_id', $conversationId)->firstOrFail();
+        $this->assertNotNull($message->ticket_log_id);
+    }
+
+    public function test_soft_deleted_linked_message_disappears_from_mobile_timeline(): void
+    {
+        $user = User::factory()->create();
+        $ticket = $this->ticketFor($user);
+
+        Sanctum::actingAs($user);
+
+        $roomId = $this->getJson("/api/tickets/{$ticket->id}/chat")->json('conversation.id');
+        $messageId = $this->postJson("/api/conversations/{$roomId}/messages", ['body' => 'hapus aku'])
+            ->assertCreated()
+            ->json('message.id');
+
+        $this->assertSame('hapus aku', collect($this->getJson("/api/tickets/{$ticket->id}")->json('data.logs'))->firstWhere('note', 'hapus aku')['note'] ?? null);
+
+        Message::findOrFail($messageId)->delete();
+
+        $notes = collect($this->getJson("/api/tickets/{$ticket->id}")->json('data.logs'))->pluck('note');
+        $this->assertNotContains('hapus aku', $notes);
+        $this->assertDatabaseHas('ticket_logs', ['ticket_id' => $ticket->id, 'catatan' => 'hapus aku']);
+    }
+
+    public function test_editing_a_linked_message_updates_the_mobile_timeline(): void
+    {
+        $user = User::factory()->create();
+        $ticket = $this->ticketFor($user);
+
+        Sanctum::actingAs($user);
+
+        $roomId = $this->getJson("/api/tickets/{$ticket->id}/chat")->json('conversation.id');
+        $messageId = $this->postJson("/api/conversations/{$roomId}/messages", ['body' => 'awal'])
+            ->assertCreated()
+            ->json('message.id');
+
+        // Web edit writes the same row the mobile timeline projects.
+        Message::findOrFail($messageId)->update(['body' => 'diperbarui', 'is_edited' => true]);
+
+        $notes = collect($this->getJson("/api/tickets/{$ticket->id}")->json('data.logs'))->pluck('note');
+        $this->assertContains('diperbarui', $notes);
+        $this->assertNotContains('awal', $notes);
     }
 }

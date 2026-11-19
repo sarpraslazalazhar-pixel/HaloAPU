@@ -10,12 +10,12 @@ use App\Models\SubUnit;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
-use App\Models\TicketSlaTracking;
 use App\Models\Unit;
 use App\Notifications\TicketCreatedAdminNotification;
 use App\Notifications\TicketCreatedUserNotification;
 use App\Services\SlaCalculator;
 use App\Services\SparcIntegrationService;
+use App\Services\TicketSlaSchedule;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -82,7 +82,10 @@ class TicketWizardController extends Controller
             }
         }
 
-        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator) {
+        $subUnit = SubUnit::findOrFail($request->sub_unit_id);
+        $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $formFields, $request->form_data));
+
+        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $subUnit, $window) {
             $isWorkingHours = $slaCalculator->isWithinWorkingHours(now());
             $initialStatus = $isWorkingHours ? 'open' : 'pending';
 
@@ -167,28 +170,7 @@ class TicketWizardController extends Controller
                 }
             }
 
-            // 3. Buat SLA tracking
-            // Jika tiket dibuat di luar jam kerja (status=pending),
-            // SLA langsung di-pause. Deadline akan dihitung ulang saat admin resume.
-            if ($initialStatus === 'pending') {
-                TicketSlaTracking::create([
-                    'ticket_id' => $ticket->id,
-                    'sla_response_deadline' => null,
-                    'sla_resolution_deadline' => null,
-                    'current_tier' => 0,
-                    'paused_at' => now(),
-                ]);
-            } else {
-                $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
-                $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
-
-                TicketSlaTracking::create([
-                    'ticket_id' => $ticket->id,
-                    'sla_response_deadline' => $responseDeadline,
-                    'sla_resolution_deadline' => $resolutionDeadline,
-                    'current_tier' => 0,
-                ]);
-            }
+            $slaCalculator->createTracking($ticket, $window);
 
             // 4. Log awal
             TicketLog::create([
@@ -199,8 +181,7 @@ class TicketWizardController extends Controller
             ]);
 
             // 5. Integrasi Live Monitor (Booking Aset Generik)
-            $subUnit = SubUnit::find($request->sub_unit_id);
-            if ($subUnit && $subUnit->is_monitored) {
+            if ($subUnit->is_monitored) {
                 $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
 
                 // Ambil tanggal terpisah jika ada, atau gunakan default hari ini

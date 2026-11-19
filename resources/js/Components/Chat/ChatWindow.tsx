@@ -20,6 +20,8 @@ import {
   MessageSquare,
   Copy,
   ChevronLeft,
+  ChevronDown,
+  Search,
   Bot,
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
@@ -32,10 +34,45 @@ import {
   DialogTitle,
 } from '@/Components/ui/dialog';
 import TicketReferenceCard from './TicketReferenceCard';
+import type { TicketRoomSummary } from './ConversationList';
 import { useChatSound } from '@/hooks/useChatSound';
 import { subscribe, type ChatEvents } from '@/lib/realtime';
 import { format } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
+
+function ticketStatusLabel(status?: string | null) {
+  const s = (status || '').toLowerCase();
+
+  if (s === 'open') {
+    return { label: 'Baru', className: 'bg-sky-100 text-sky-800 border-sky-200' };
+  }
+
+  if (s === 'on_proses') {
+    return { label: 'Diproses', className: 'bg-blue-100 text-blue-800 border-blue-200' };
+  }
+
+  if (s === 'pending') {
+    return { label: 'Tertunda', className: 'bg-amber-100 text-amber-800 border-amber-200' };
+  }
+
+  if (s === 'need_revision') {
+    return { label: 'Perlu Revisi', className: 'bg-orange-100 text-orange-800 border-orange-200' };
+  }
+
+  if (s === 'solve' || s === 'selesai') {
+    return { label: 'Selesai', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' };
+  }
+
+  if (s === 'reject') {
+    return { label: 'Ditolak', className: 'bg-rose-100 text-rose-800 border-rose-200' };
+  }
+
+  if (s === 'dibatalkan') {
+    return { label: 'Dibatalkan', className: 'bg-zinc-200 text-zinc-700 border-zinc-300' };
+  }
+
+  return { label: status || 'Aktif', className: 'bg-zinc-100 text-zinc-700 border-zinc-200' };
+}
 
 export interface ChatMessage {
   id: number;
@@ -45,12 +82,22 @@ export interface ChatMessage {
   sender_name: string;
   sender_avatar?: string | null;
   sender?: { avatar_path?: string | null } | null;
+  requester_key?: string | null;
+  requester_type?: string | null;
+  requester_id?: number | null;
+  requester_name?: string | null;
+  requester_avatar?: string | null;
   ticket?: {
     id: number;
     formatted_id: string;
     judul?: string;
+    chat_label?: string | null;
+    created_at?: string | null;
+    nama_layanan?: string | null;
+    nama_unit?: string | null;
     status?: string;
     priority?: string;
+    created_by_admin_id?: number | null;
     requester?: string | null;
     handler?: string | null;
   } | null;
@@ -79,31 +126,41 @@ export interface ChatMessage {
 
 interface ChatWindowProps {
   conversation: {
-    id: number;
+    id: number | null;
+    group_key?: string | null;
+    requester_type?: string | null;
+    is_self_requester?: boolean;
     user?: {
       id: number;
       name: string;
       email?: string;
       avatar?: string | null;
       last_seen_at?: string | null;
+      entity_type?: string;
     } | null;
     ticket_id?: number | null;
     ticket?: {
       id: number;
       formatted_id: string;
       judul?: string;
+      chat_label?: string | null;
+      created_at?: string | null;
+      nama_layanan?: string | null;
+      nama_unit?: string | null;
       status?: string;
       priority?: string;
       requester?: string | null;
       handler?: string | null;
     } | null;
-    title: string;
+    title?: string;
     subtitle?: string;
     is_bot?: boolean;
     type?: string;
   } | null;
   initialMessages: ChatMessage[];
   initialTicket?: ChatMessage['ticket'] | null;
+  ticketRooms?: TicketRoomSummary[];
+  onSelectTicketRoom?: (conversationId: number) => void;
   currentUser: {
     id: number;
     name?: string;
@@ -124,6 +181,8 @@ export function ChatWindow({
   conversation,
   initialMessages,
   initialTicket = null,
+  ticketRooms,
+  onSelectTicketRoom,
   currentUser,
   isAdmin = false,
   onBack,
@@ -150,6 +209,8 @@ export function ChatWindow({
   const [loadingTickets, setLoadingTickets] = useState(false);
 
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showTicketSwitcher, setShowTicketSwitcher] = useState(false);
+  const [ticketRoomSearch, setTicketRoomSearch] = useState('');
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -171,10 +232,11 @@ export function ChatWindow({
     scrollToBottom(false);
   }, [initialMessages, conversation?.id, scrollToBottom]);
 
-  // Follow the room: arriving from /chat?ticket=N preselects that ticket.
+  // Follow the room: arriving from /chat?ticket=N preselects that ticket, but a
+  // ticket room already owns its destination so it never attaches another.
   useEffect(() => {
-    setSelectedTicket(initialTicket);
-  }, [initialTicket]);
+    setSelectedTicket(conversation?.ticket_id ? null : initialTicket);
+  }, [initialTicket, conversation?.ticket_id]);
 
   // Handle Realtime Echo Listener
   useEffect(() => {
@@ -259,6 +321,52 @@ export function ChatWindow({
       },
     });
   }, [conversation?.id, currentUser.id, currentUser.type, isAdmin, playSound, scrollToBottom]);
+
+  // Polling fallback: without a live socket a room would only refresh on
+  // navigation. Ticket rooms poll the existing show endpoint while visible.
+  useEffect(() => {
+    if (!conversation?.id || !conversation.ticket_id) return;
+
+    const conversationId = conversation.id;
+
+    const showUrl = isAdmin
+      ? route('admin.chat.conversations.show', { conversation: conversationId })
+      : route('chat.conversations.show', { conversation: conversationId });
+
+    let cancelled = false;
+    let inFlight = false;
+
+    const poll = async () => {
+      if (cancelled || inFlight) return;
+
+      if (typeof document !== 'undefined' && document.hidden) return;
+
+      if (window.Echo?.socketId()) return;
+
+      inFlight = true;
+
+      try {
+        const res = await axios.get(showUrl);
+        const next = res.data?.messages;
+
+        if (!cancelled && Array.isArray(next)) {
+          // The server snapshot is canonical: ids replace, never duplicate.
+          setMessages(next);
+        }
+      } catch {
+        // Keep the current history; the next tick retries.
+      } finally {
+        inFlight = false;
+      }
+    };
+
+    const timer = window.setInterval(poll, 10000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [conversation?.id, conversation?.ticket_id, isAdmin]);
 
   // Handle typing status broadcast trigger
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -384,7 +492,7 @@ export function ChatWindow({
 
     if (inputText.trim()) formData.append('body', inputText.trim());
 
-    if (selectedTicket) formData.append('ticket_id', String(selectedTicket.id));
+    if (selectedTicket && !conversation?.ticket_id) formData.append('ticket_id', String(selectedTicket.id));
 
     if (replyingTo) formData.append('reply_to_message_id', String(replyingTo.id));
 
@@ -477,25 +585,37 @@ export function ChatWindow({
     }
   };
 
-  if (!conversation) {
+  if (!conversation || !conversation.id) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-zinc-50 p-8 text-center text-zinc-400">
         <MessageSquare className="h-12 w-12 text-zinc-300 mb-3" />
         <p className="text-sm font-semibold text-zinc-700">Pilih Percakapan</p>
         <p className="text-xs text-zinc-500 max-w-sm mt-1">
-          Pilih salah satu ruang chat di sebelah kiri untuk mulai berkirim pesan realtime.
+          {isAdmin
+            ? 'Pilih salah satu pemohon tiket di sebelah kiri untuk membuka diskusi tiket.'
+            : 'Pilih salah satu tiket yang Anda ajukan di sebelah kiri untuk mulai berkirim pesan.'}
         </p>
       </div>
     );
   }
 
+  const normalizedTicketStatus = (conversation.ticket?.status || '').toLowerCase();
+
+  const isTicketClosed =
+    conversation.type === 'ticket' &&
+    ['solve', 'selesai', 'reject', 'dibatalkan'].includes(normalizedTicketStatus);
+
+  const currentTicketStatusMeta = conversation.ticket?.status
+    ? ticketStatusLabel(conversation.ticket.status)
+    : null;
+
   return (
     <div className="flex-1 flex flex-col h-full min-h-0 bg-zinc-50/50 relative overflow-hidden">
       {/* 1. Header */}
-      <motion.div 
+      <motion.div
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        className="h-14 px-4 bg-white/70 backdrop-blur-md border-b border-zinc-200/60 flex items-center justify-between shrink-0 shadow-sm z-10"
+        className="h-14 px-4 bg-white/90 backdrop-blur-md border-b border-zinc-200/70 flex items-center justify-between shrink-0 shadow-2xs z-10"
       >
         <div className="flex items-center gap-3 min-w-0">
           {onBack && (
@@ -506,15 +626,14 @@ export function ChatWindow({
           {/* Avatar with dynamic presence */}
           {(() => {
             const isBot = conversation.is_bot || conversation.type === 'admin_bot_reminder' || conversation.title?.includes('Bot Pengingat');
-            const isPublic = conversation.type === 'public_global' || conversation.subtitle === 'Grup Publik';
+            const isTicketRoomForUser = !isAdmin && conversation.type === 'ticket';
 
-            const isOnline = isBot || isPublic || (
+            const targetEntityType =
+              conversation.user?.entity_type || (conversation.requester_type === 'admin' ? 'admin' : 'user');
+
+            const isOnline = isBot || (
               conversation.user?.id ? (onlineUsers || []).some((u) => {
-                const sameId = u.id === conversation.user?.id;
-                const isTargetAdmin = conversation.subtitle?.includes('Admin') || conversation.type === 'admin_direct';
-                const sameType = isTargetAdmin ? u.type === 'admin' : u.type === 'user';
-
-                return sameId && sameType;
+                return u.id === conversation.user?.id && u.type === targetEntityType;
               }) : false
             );
 
@@ -522,38 +641,51 @@ export function ChatWindow({
               <>
                 <div className="relative shrink-0">
                   <div className={`h-8 w-8 rounded-full border overflow-hidden flex items-center justify-center text-xs font-semibold ${
-                    isBot ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-zinc-200 text-sky-700'
+                    isBot
+                      ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
+                      : isTicketRoomForUser
+                        ? 'bg-sky-50 border-sky-200 text-sky-700'
+                        : 'bg-white border-zinc-200 text-sky-700'
                   }`}>
                     {isBot ? (
                       <Bot className="h-5 w-5 text-indigo-600" />
+                    ) : isTicketRoomForUser ? (
+                      <TicketIcon className="h-4 w-4 text-sky-700" />
                     ) : conversation.user?.avatar ? (
                       <img src={conversation.user.avatar} alt="Avatar" className="h-full w-full object-cover" />
-                    ) : isPublic ? (
-                      <MessageSquare className="h-5 w-5 text-sky-600" />
                     ) : (
                       <img
-                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(conversation.title || 'Chat')}&background=0284c7&color=fff`}
+                        src={`https://ui-avatars.com/api/?name=${encodeURIComponent(conversation.user?.name || conversation.title || 'Chat')}&background=${
+                          conversation.is_self_requester ? '0f766e' : conversation.requester_type === 'admin' ? '4f46e5' : '0284c7'
+                        }&color=fff`}
                         alt="Avatar"
                         className="h-full w-full object-cover"
                       />
                     )}
                   </div>
-                  <span
-                    className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white transition-colors duration-300 ${
-                      isOnline ? 'bg-emerald-500 ring-1 ring-emerald-400' : 'bg-zinc-300'
-                    }`}
-                    title={isOnline ? 'Online' : 'Offline'}
-                  />
+                  {!isTicketRoomForUser && (
+                    <span
+                      className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white transition-colors duration-300 ${
+                        isOnline ? 'bg-emerald-500 ring-1 ring-emerald-400' : 'bg-zinc-300'
+                      }`}
+                      title={isOnline ? 'Online' : 'Offline'}
+                    />
+                  )}
                 </div>
 
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <h3 className="text-xs font-bold text-zinc-900 truncate">
-                      {conversation.title}
+                      {conversation.ticket?.chat_label || conversation.title || 'Percakapan'}
                     </h3>
-                    {isBot && (
-                      <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 border-indigo-200 text-[9px] font-bold px-1.5 py-0 h-4 shrink-0">
-                        BOT RESMI
+                    {isAdmin && conversation.is_self_requester && (
+                      <Badge className="bg-teal-50 text-teal-700 hover:bg-teal-50 border border-teal-200 text-[9px] font-bold px-1.5 py-0 h-4 shrink-0">
+                        Tiket Saya
+                      </Badge>
+                    )}
+                    {isAdmin && !conversation.is_self_requester && conversation.requester_type === 'admin' && (
+                      <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-50 border border-indigo-200 text-[9px] font-bold px-1.5 py-0 h-4 shrink-0">
+                        Admin Pemohon
                       </Badge>
                     )}
                   </div>
@@ -566,13 +698,9 @@ export function ChatWindow({
                         <span className="w-1 h-1 bg-sky-500 rounded-full animate-bounce" />
                       </span>
                     </div>
-                  ) : isBot ? (
-                    <p className="text-[11px] text-indigo-600 font-semibold truncate">
-                      Asisten Pengingat Otomatis
-                    </p>
-                  ) : isPublic ? (
+                  ) : isTicketRoomForUser ? (
                     <p className="text-[11px] text-zinc-500 truncate">
-                      Grup Publik
+                      {conversation.ticket?.judul || conversation.subtitle || 'Diskusi Tiket'}
                     </p>
                   ) : isOnline ? (
                     <p className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1.5 truncate">
@@ -592,23 +720,8 @@ export function ChatWindow({
 
         {conversation.ticket && (
           <div className="flex items-center gap-2 shrink-0">
-            <div className="hidden sm:flex flex-col items-end text-[10px] leading-tight">
-              {conversation.ticket.requester && (
-                <span className="text-zinc-500">
-                  Dari: <span className="font-semibold text-zinc-700">{conversation.ticket.requester}</span>
-                </span>
-              )}
-              <span className="text-zinc-500">
-                Ditangani:{' '}
-                <span className={`font-semibold ${conversation.ticket.handler ? 'text-zinc-700' : 'text-amber-600'}`}>
-                  {conversation.ticket.handler ?? 'Belum ditugaskan'}
-                </span>
-              </span>
-            </div>
             <a
               href={isAdmin ? `/admin/tiket/${conversation.ticket.id}` : `/tiket/${conversation.ticket.id}`}
-              target="_blank"
-              rel="noopener noreferrer"
               className="text-xs text-sky-600 hover:text-sky-700 font-semibold flex items-center gap-1 bg-sky-50 hover:bg-sky-100 px-2.5 py-1 rounded-lg border border-sky-200 transition-colors"
             >
               <span>Detail Tiket</span>
@@ -617,6 +730,87 @@ export function ChatWindow({
           </div>
         )}
       </motion.div>
+
+      {/* 1b. Admin ticket picker: one requester may hold many ticket rooms. */}
+      {isAdmin && ticketRooms && ticketRooms.length > 1 && (
+        <div className="px-3 py-2 bg-zinc-50/90 border-b border-zinc-200/70 flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => {
+              setTicketRoomSearch('');
+              setShowTicketSwitcher(true);
+            }}
+            className="inline-flex items-center gap-2 min-w-0 px-2.5 py-1.5 rounded-xl text-[11px] border bg-white text-zinc-700 border-zinc-200 hover:border-sky-300 hover:bg-sky-50/60 transition-colors"
+          >
+            <TicketIcon className="h-3.5 w-3.5 shrink-0 text-sky-600" />
+            <span className="font-semibold text-zinc-800 shrink-0">Tiket ({ticketRooms.length})</span>
+            <span className="text-zinc-300 shrink-0">|</span>
+            <span className="truncate max-w-[220px] text-zinc-700">
+              {conversation.ticket?.chat_label || conversation.ticket?.nama_layanan || 'Diskusi Tiket'}
+            </span>
+            {conversation.ticket?.created_at && (
+              <span className="text-zinc-500 shrink-0">
+                · {format(new Date(conversation.ticket.created_at), 'dd/MM/yy HH:mm')}
+              </span>
+            )}
+            <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+          </button>
+          <span className="hidden sm:block text-[10px] text-zinc-500 truncate">
+            Pilih tiket untuk dibalas
+          </span>
+        </div>
+      )}
+
+      {/* 1c. Active Ticket Banner: says which ticket this room replies to. */}
+      {conversation.ticket && (() => {
+        const manyTickets = Boolean(ticketRooms && ticketRooms.length > 1);
+        const otherTickets = ticketRooms ? ticketRooms.length - 1 : 0;
+        const ticketName = conversation.ticket.chat_label || conversation.ticket.nama_layanan || 'Diskusi Tiket';
+
+        return (
+          <div
+            className={`mx-3 mt-2.5 px-3 py-2 rounded-xl border flex items-center justify-between gap-2 shrink-0 ${
+              manyTickets ? 'bg-amber-50/90 border-amber-200/80' : 'bg-sky-50/90 border-sky-200/80'
+            }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <TicketIcon className={`h-4 w-4 shrink-0 ${manyTickets ? 'text-amber-700' : 'text-sky-700'}`} />
+              <div className="min-w-0">
+                <p className={`text-[11px] font-semibold ${manyTickets ? 'text-amber-800' : 'text-sky-800'}`}>
+                  {manyTickets
+                    ? `Pesan masuk ke tiket ini, bukan ${otherTickets} tiket lain pemohon`
+                    : 'Pesan masuk ke tiket ini'}
+                </p>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-xs font-bold truncate ${manyTickets ? 'text-amber-950' : 'text-sky-900'}`}>
+                    {ticketName}
+                  </span>
+                  {conversation.ticket.created_at && (
+                    <span className={`text-[10px] font-medium truncate ${manyTickets ? 'text-amber-700' : 'text-sky-700'}`}>
+                      · {format(new Date(conversation.ticket.created_at), 'dd/MM/yy HH:mm')}
+                    </span>
+                  )}
+                </div>
+                <p className={`text-[11px] truncate ${manyTickets ? 'text-amber-900/80' : 'text-sky-950/80'}`}>
+                  {conversation.ticket.judul || 'Diskusi Tiket'}
+                  {' · '}
+                  <span className={manyTickets ? 'text-amber-700' : 'text-sky-700'}>
+                    Ditangani: {conversation.ticket.handler ?? 'Menunggu petugas'}
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            {currentTicketStatusMeta && (
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border shrink-0 ${currentTicketStatusMeta.className}`}
+              >
+                {currentTicketStatusMeta.label}
+              </span>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 2. Messages Body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 scroll-smooth min-h-0 custom-scrollbar">
@@ -734,8 +928,10 @@ export function ChatWindow({
                     </div>
                   )}
 
-                  {/* Attached Ticket Reference Card */}
-                  {msg.ticket && (
+                  {/* The room header already names its own ticket, so repeating
+                      that card inside every bubble is noise. A ticket attached
+                      to a non-ticket room still needs its card. */}
+                  {msg.ticket && msg.ticket.id !== conversation.ticket_id && (
                     <TicketReferenceCard ticket={msg.ticket} isAdmin={isAdmin} isSelf={isSelf} />
                   )}
 
@@ -885,11 +1081,17 @@ export function ChatWindow({
       </div>
 
       {/* 3. Footer Input Area */}
-      <motion.div 
+      <motion.div
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         className="p-3 bg-white/80 backdrop-blur-md border-t border-zinc-200/80 shrink-0"
       >
+        {isTicketClosed && !editingMessage ? (
+          <div className="text-center py-2.5 px-3 text-xs text-zinc-500 bg-zinc-50 rounded-xl border border-zinc-200">
+            Tiket ini sudah ditutup ({currentTicketStatusMeta?.label || conversation.ticket?.status}). Tidak dapat mengirim pesan baru.
+          </div>
+        ) : (
+          <>
         {/* Reply Bar */}
         {replyingTo && (
           <div className="flex items-center justify-between bg-sky-50 border-l-4 border-sky-600 px-3 py-1.5 rounded-r-lg mb-2 text-xs">
@@ -1044,7 +1246,169 @@ export function ChatWindow({
             )}
           </Button>
         </form>
+          </>
+        )}
       </motion.div>
+
+      {/* Ticket Room Switcher Modal */}
+      <Dialog open={showTicketSwitcher} onOpenChange={setShowTicketSwitcher}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-base flex items-center gap-2">
+              <TicketIcon className="h-5 w-5 text-sky-600" />
+              <span>Pilih Tiket untuk Dibalas</span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="relative">
+            <Search className="h-4 w-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
+              autoFocus
+              value={ticketRoomSearch}
+              onChange={(e) => setTicketRoomSearch(e.target.value)}
+              placeholder="Cari layanan, tanggal, judul, nomor tiket, atau pesan..."
+              className="h-9 text-xs pl-9"
+            />
+          </div>
+
+          <div className="max-h-[22rem] overflow-y-auto divide-y divide-zinc-100">
+            {(() => {
+              const term = ticketRoomSearch.trim().toLowerCase();
+              const clean = term.replace(/[#\-\s]/g, '');
+
+              const closed = ['solve', 'selesai', 'reject', 'dibatalkan'];
+
+              const matches = (ticketRooms ?? [])
+                .filter((room) => {
+                  if (!term) return true;
+
+                  const created = room.created_at
+                    ? format(new Date(room.created_at), 'dd/MM/yy HH:mm').toLowerCase()
+                    : '';
+
+                  const haystack = [
+                    room.chat_label,
+                    room.nama_layanan,
+                    room.nama_unit,
+                    room.judul,
+                    room.formatted_id,
+                    room.requester,
+                    room.handler,
+                    room.last_message,
+                    ticketStatusLabel(room.status).label,
+                    created,
+                  ]
+                    .filter(Boolean)
+                    .join(' ')
+                    .toLowerCase();
+
+                  const cleanId = room.formatted_id.toLowerCase().replace(/[#\-\s]/g, '');
+
+                  return haystack.includes(term) || (clean.length > 0 && cleanId.includes(clean));
+                })
+                .sort((a, b) => {
+                  const aClosed = closed.includes((a.status || '').toLowerCase()) ? 1 : 0;
+                  const bClosed = closed.includes((b.status || '').toLowerCase()) ? 1 : 0;
+
+                  if (aClosed !== bClosed) return aClosed - bClosed;
+
+                  return (
+                    new Date(b.last_message_at || b.created_at || 0).getTime() -
+                    new Date(a.last_message_at || a.created_at || 0).getTime()
+                  );
+                });
+
+              if (matches.length === 0) {
+                return (
+                  <div className="p-6 text-center text-xs text-zinc-500">
+                    Tidak ada tiket yang cocok dengan “{ticketRoomSearch.trim()}”.
+                  </div>
+                );
+              }
+
+              return matches.map((room) => {
+                const isSelected = room.conversation_id === conversation.id;
+                const roomStatus = ticketStatusLabel(room.status);
+                const label = room.chat_label || room.nama_layanan || 'Diskusi Tiket';
+
+                const isClosed = closed.includes((room.status || '').toLowerCase());
+
+                const showTitle =
+                  room.judul && room.judul.trim() !== '' && room.judul.trim().toLowerCase() !== label.toLowerCase();
+
+                return (
+                  <button
+                    key={room.conversation_id}
+                    type="button"
+                    onClick={() => {
+                      setShowTicketSwitcher(false);
+                      onSelectTicketRoom?.(room.conversation_id);
+                    }}
+                    aria-current={isSelected ? 'true' : undefined}
+                    className={`w-full text-left p-3 transition-colors flex items-start gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-inset ${
+                      isSelected ? 'bg-sky-50' : 'hover:bg-zinc-50'
+                    }`}
+                  >
+                    <div
+                      className={`h-8 w-8 rounded-xl border flex items-center justify-center shrink-0 ${
+                        isSelected ? 'bg-sky-600 border-sky-600' : 'bg-white border-zinc-200'
+                      }`}
+                    >
+                      <TicketIcon className={`h-4 w-4 ${isSelected ? 'text-white' : 'text-sky-600'}`} />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs font-bold text-zinc-900 truncate">{label}</span>
+                        {room.created_at && (
+                          <span className="text-[10px] text-zinc-500 shrink-0">
+                            {format(new Date(room.created_at), 'dd MMM yyyy, HH:mm')}
+                          </span>
+                        )}
+                        {isSelected && (
+                          <span className="text-[9px] font-bold px-1.5 py-0 rounded-md bg-sky-600 text-white">
+                            Sedang dibuka
+                          </span>
+                        )}
+                      </div>
+
+                      <p className="text-[11px] text-zinc-600 truncate mt-0.5">
+                        #{room.formatted_id}
+                        {room.nama_unit ? ` · ${room.nama_unit}` : ''}
+                        {room.requester ? ` · ${room.requester}` : ''}
+                        {showTitle ? ` · ${room.judul}` : ''}
+                      </p>
+
+                      <p className="text-[11px] text-zinc-500 truncate mt-0.5">
+                        {room.handler ? `Ditangani: ${room.handler}` : 'Belum ditangani'}
+                        {room.last_message ? ` · ${room.last_message}` : ''}
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`text-[9px] font-bold px-1.5 py-0 rounded-md border ${roomStatus.className}`}>
+                        {roomStatus.label}
+                      </span>
+                      {room.unread_count > 0 && (
+                        <span className="h-4 min-w-[16px] px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center">
+                          {room.unread_count > 99 ? '99+' : room.unread_count}
+                        </span>
+                      )}
+                      {isClosed && (
+                        <span className="text-[9px] text-zinc-400">ditutup</span>
+                      )}
+                    </div>
+                  </button>
+                );
+              });
+            })()}
+          </div>
+
+          <p className="text-[11px] text-zinc-500">
+            Pesan yang Anda kirim masuk ke tiket yang dipilih, bukan ke tiket lain pemohon.
+          </p>
+        </DialogContent>
+      </Dialog>
 
       {/* Ticket Selection Modal */}
       <Dialog open={showTicketModal} onOpenChange={setShowTicketModal}>

@@ -193,8 +193,8 @@ class SlaCalculatorTest extends TestCase
 
         $sla = TicketSlaTracking::create([
             'ticket_id' => $ticket->id,
-            'sla_response_deadline' => $createdAt->copy()->addHours(2),
-            'sla_resolution_deadline' => $createdAt->copy()->addHours(4),
+            'sla_response_deadline' => $createdAt->copy()->addMinutes(30),
+            'sla_resolution_deadline' => $createdAt->copy()->addMinutes(120),
             'paused_at' => null,
             'total_paused_minutes' => 0,
             'is_response_breached' => false,

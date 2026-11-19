@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Inertia\Middleware;
 use App\Models\User;
 use App\Models\Admin;
+use App\Services\TicketWorkQueue;
 use Illuminate\Support\Facades\Cache;
 
 class HandleInertiaRequests extends Middleware
@@ -63,6 +64,9 @@ class HandleInertiaRequests extends Middleware
                     )
                     : [],
             ],
+            'activeAssignedTicket' => fn () => $adminUser && $request->is('admin/*')
+                ? TicketWorkQueue::payload((int) $adminUser->id)
+                : null,
             'flash' => [
                 'message' => fn () => $request->session()->get('message'),
                 'success' => fn () => $request->session()->get('success'),
@@ -103,22 +107,8 @@ class HandleInertiaRequests extends Middleware
     protected function calculateUnreadChatCountForAdmin(Admin $admin): int
     {
         return \App\Models\Message::whereHas('conversation', function ($q) use ($admin) {
-            $q->where('type', 'public_global')
-              ->orWhere(function ($q2) use ($admin) {
-                  $q2->where('type', 'admin_bot_reminder')->where('admin_one_id', $admin->id);
-              })
-              ->orWhere(function ($q2) use ($admin) {
-                  $q2->where('type', 'admin_direct')->where(function ($q3) use ($admin) {
-                      $q3->where('admin_one_id', $admin->id)->orWhere('admin_two_id', $admin->id);
-                  });
-              })
-              ->orWhere(function ($q2) use ($admin) {
-                  $q2->where('type', 'user_admin_direct')->where('admin_one_id', $admin->id);
-              })
-              ->orWhere(function ($q2) use ($admin) {
-                  $q2->where('type', 'ticket')
-                     ->whereHas('ticket', fn ($tq) => $tq->accessibleBy($admin));
-              });
+            $q->where('type', 'ticket')
+              ->whereHas('ticket', fn ($tq) => $tq->accessibleBy($admin));
         })
         ->where(function ($sq) use ($admin) {
             $sq->where('sender_type', '!=', \App\Models\Admin::class)
@@ -133,7 +123,7 @@ class HandleInertiaRequests extends Middleware
     protected function calculateUnreadChatCountForUser(User $user): int
     {
         return \App\Models\Message::whereHas('conversation', function ($q) use ($user) {
-            $q->where('type', 'ticket')->whereHas('ticket', fn ($t) => $t->where('user_id', $user->id));
+            $q->where('type', 'ticket')->whereHas('ticket', fn ($t) => $t->ownedByUser($user));
         })
         ->where(function ($sq) use ($user) {
             $sq->where('sender_type', '!=', \App\Models\User::class)

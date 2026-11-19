@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Events\ActiveAssignedTicketChanged;
 use App\Models\Admin;
 use App\Models\FormField;
 use App\Models\OrgDivisi;
@@ -12,18 +13,19 @@ use App\Models\SubUnit;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
-use App\Models\TicketSlaTracking;
 use App\Models\Unit;
 use App\Notifications\BrowserNotification;
-use App\Notifications\TicketAssignedOperatorNotification;
 use App\Notifications\TicketCreatedAdminNotification;
 use App\Notifications\TicketStatusUpdatedNotification;
 use App\Services\SlaCalculator;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
 use App\Services\TicketFormEditor;
+use App\Services\TicketSlaSchedule;
 use App\Services\TicketStatusService;
+use App\Services\TicketWorkQueue;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -44,7 +46,8 @@ class TicketController extends Controller
         if ($tab === 'saya_ajukan') {
             $query->submittedBy($admin);
         } else {
-            $query->incomingFor($admin);
+            // Tiket yang diajukan admin sendiri tetap harus terlihat di sini.
+            $query->accessibleBy($admin);
         }
 
         // Tiket selesai (solve/reject/dibatalkan) tidak tampil di daftar Tiketing utama, melainkan di Laporan Tiket
@@ -91,6 +94,53 @@ class TicketController extends Controller
 
         $activeCount = fn ($scope) => Ticket::query()->$scope($admin)->whereIn('status', $activeStatuses)->count();
 
+        // Beban kerja tiap petugas. Detail tiket hanya untuk yang berhak menugaskan.
+        $canSeeQueues = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || $admin->isCoordinator()
+            || $admin->hasPermissionTo('akses-assign-operator');
+
+        $operatorLoads = Ticket::query()
+            ->where(fn ($q) => $q->whereIn('status', TicketWorkQueue::ACTIVE_STATUSES)
+                ->orWhere(fn ($queued) => $queued->where('status', 'pending')
+                    ->whereNotNull('assignment_queued_at')
+                    ->whereNotNull('assignment_resume_status')))
+            ->whereNotNull('assigned_admin_id')
+            ->with(['assignedAdmin:id,name,username', 'subUnit:id,nama_layanan'])
+            ->get(['id', 'assigned_admin_id', 'status', 'priority', 'sub_unit_id', 'assignment_queued_at'])
+            ->groupBy('assigned_admin_id')
+            ->map(function ($rows) use ($canSeeQueues) {
+                $working = $rows->whereNotIn('status', ['pending']);
+                $queued = $rows->where('status', 'pending')
+                    ->sortBy(fn ($t) => [$t->priority === 'Urgen' ? 0 : 1, (string) $t->assignment_queued_at, (int) $t->id])
+                    ->values();
+
+                return [
+                    'admin_id' => (int) $rows->first()->assigned_admin_id,
+                    'name' => $rows->first()->assignedAdmin?->name ?? $rows->first()->assignedAdmin?->username ?? 'Petugas',
+                    'working' => $working->count(),
+                    'queued' => $queued->count(),
+                    'tickets' => $canSeeQueues
+                        ? $working->map(fn ($t) => [
+                            'id' => (int) $t->id,
+                            'formatted_id' => $t->formatted_id,
+                            'service' => $t->subUnit?->nama_layanan ?? 'Layanan tidak tersedia',
+                            'status' => $t->status,
+                            'urgent' => $t->priority === 'Urgen',
+                            'position' => null,
+                        ])->concat($queued->map(fn ($t, $i) => [
+                            'id' => (int) $t->id,
+                            'formatted_id' => $t->formatted_id,
+                            'service' => $t->subUnit?->nama_layanan ?? 'Layanan tidak tersedia',
+                            'status' => $t->status,
+                            'urgent' => $t->priority === 'Urgen',
+                            'position' => $i + 1,
+                        ]))->values()->all()
+                        : [],
+                ];
+            })
+            ->sortBy('name')
+            ->values();
+
         return Inertia::render('Admin/Tiketing/Index', [
             'tickets' => $tickets,
             'filters' => $request->only(['unit_id', 'sub_unit_id', 'status', 'date_from', 'date_to', 'divisi_id', 'org_unit_id', 'search']),
@@ -98,8 +148,9 @@ class TicketController extends Controller
             'divisiList' => $divisiList,
             'orgUnitList' => $orgUnitList,
             'currentTab' => $tab,
+            'operatorLoads' => $operatorLoads,
             'tabCounts' => [
-                'masuk' => $activeCount('incomingFor'),
+                'masuk' => $activeCount('accessibleBy'),
                 'saya_ajukan' => $activeCount('submittedBy'),
             ],
         ]);
@@ -153,9 +204,12 @@ class TicketController extends Controller
             }
         }
 
+        $subUnit = SubUnit::findOrFail($request->sub_unit_id);
+        $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $formFields, $request->form_data));
+
         $admin = auth('admin')->user();
 
-        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $admin) {
+        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $admin, $subUnit, $window) {
             $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
 
             $ticket = Ticket::create([
@@ -203,22 +257,7 @@ class TicketController extends Controller
                 $saveFile($file, null, false);
             }
 
-            if ($initialStatus === 'pending') {
-                TicketSlaTracking::create([
-                    'ticket_id' => $ticket->id,
-                    'sla_response_deadline' => null,
-                    'sla_resolution_deadline' => null,
-                    'current_tier' => 0,
-                    'paused_at' => now(),
-                ]);
-            } else {
-                TicketSlaTracking::create([
-                    'ticket_id' => $ticket->id,
-                    'sla_response_deadline' => $slaCalculator->calculateResponseDeadline($ticket),
-                    'sla_resolution_deadline' => $slaCalculator->calculateResolutionDeadline($ticket),
-                    'current_tier' => 0,
-                ]);
-            }
+            $slaCalculator->createTracking($ticket, $window);
 
             TicketLog::create([
                 'ticket_id' => $ticket->id,
@@ -227,8 +266,7 @@ class TicketController extends Controller
                 'catatan' => 'Tiket diajukan oleh admin '.($admin->name ?? $admin->username),
             ]);
 
-            $subUnit = SubUnit::find($request->sub_unit_id);
-            if ($subUnit && $subUnit->is_monitored) {
+            if ($subUnit->is_monitored) {
                 $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
 
                 $dateStr = $subUnit->monitor_date_field_id
@@ -316,6 +354,13 @@ class TicketController extends Controller
         return redirect()->route('admin.tiket.index')->with('success', 'Tiket berhasil diajukan!');
     }
 
+    public function activeAssigned(Request $request): JsonResponse
+    {
+        return response()->json([
+            'data' => TicketWorkQueue::payload((int) $request->user('admin')->id),
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
     public function show(Ticket $ticket)
     {
         $admin = auth('admin')->user();
@@ -361,8 +406,10 @@ class TicketController extends Controller
         $request->validate([
             'status' => 'required|string',
             'catatan' => 'nullable|string|max:1000',
-            'general_attachments' => 'nullable|array|max:3',
-            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            // Status changes no longer carry files: extra attachments go to chat.
+            'general_attachments' => 'prohibited',
+        ], [
+            'general_attachments.prohibited' => 'Kirim lampiran tambahan melalui chat tiket.',
         ]);
 
         try {
@@ -371,7 +418,7 @@ class TicketController extends Controller
                 $request->status,
                 $request->catatan,
                 $admin,
-                $request->file('general_attachments') ?? []
+                []
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()->back()->with('error', $e->getMessage());
@@ -414,21 +461,20 @@ class TicketController extends Controller
             'priority' => 'required|string|in:Rendah,Sedang,Tinggi,Urgen',
         ]);
 
-        $oldPriority = $ticket->priority;
-        $newPriority = $request->priority;
+        DB::transaction(function () use ($ticket, $request, $slaCalculator) {
+            $ticket = Ticket::lockForUpdate()->findOrFail($ticket->id);
+            $oldPriority = $ticket->priority;
+            $newPriority = $request->priority;
+            if ($oldPriority === $newPriority) {
+                return;
+            }
 
-        if ($oldPriority !== $newPriority) {
             $ticket->update(['priority' => $newPriority]);
 
-            // Recalculate SLA if ticket is still open/on_proses and tracking exists
-            if ($ticket->slaTracking && ! in_array($ticket->status, ['solve', 'reject'])) {
-                $responseDeadline = $slaCalculator->calculateResponseDeadline($ticket);
-                $resolutionDeadline = $slaCalculator->calculateResolutionDeadline($ticket);
-
-                $ticket->slaTracking->update([
-                    'sla_response_deadline' => $responseDeadline,
-                    'sla_resolution_deadline' => $resolutionDeadline,
-                ]);
+            $sla = $ticket->slaTracking()->lockForUpdate()->first();
+            if ($sla) {
+                $sla->setRelation('ticket', $ticket);
+                $slaCalculator->updatePriorityDeadlines($sla);
             }
 
             TicketLog::create([
@@ -437,7 +483,19 @@ class TicketController extends Controller
                 'aksi' => 'update_priority',
                 'catatan' => 'Prioritas diubah dari '.($oldPriority ?? 'Belum diset')." menjadi $newPriority",
             ]);
-        }
+
+            // Antrean diurutkan per prioritas, jadi posisi petugas bisa berubah.
+            if ($ticket->status === 'pending' && $ticket->assigned_admin_id !== null) {
+                $adminId = (int) $ticket->assigned_admin_id;
+                DB::afterCommit(function () use ($adminId) {
+                    try {
+                        broadcast(new ActiveAssignedTicketChanged($adminId));
+                    } catch (\Throwable $e) {
+                        \Log::warning("Gagal mengirim pembaruan antrean untuk petugas #{$adminId}: ".$e->getMessage());
+                    }
+                });
+            }
+        });
 
         return redirect()->back()->with('success', 'Prioritas tiket berhasil diatur.');
     }
@@ -488,28 +546,45 @@ class TicketController extends Controller
             'assigned_admin_id' => 'required|exists:admins,id',
         ]);
 
-        $admin = Admin::findOrFail($request->assigned_admin_id);
+        $operator = Admin::find($request->assigned_admin_id);
+        if (! $operator) {
+            return redirect()->back()->with('error', 'Petugas tidak ditemukan.');
+        }
 
-        if (! $admin->units()->where('units.id', $ticket->unit_id)->exists()) {
+        if (! $operator->units()->where('units.id', $ticket->unit_id)->exists()) {
             return redirect()->back()->with('error', 'Operator tidak terdaftar pada unit layanan ini.');
         }
 
-        $ticket->update(['assigned_admin_id' => $admin->id]);
+        try {
+            $assigned = TicketWorkQueue::assign($ticket, $operator, $admin);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
 
-        TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => auth('admin')->id(),
-            'aksi' => 'assign_operator',
-            'catatan' => 'Tiket ditugaskan ke operator: '.($admin->name ?? $admin->username),
+        $queued = $assigned->assignment_queued_at !== null && (int) $ticket->assigned_admin_id !== (int) $operator->id;
+
+        return redirect()->back()->with('success', $queued ? 'Tiket masuk antrean petugas.' : 'Operator berhasil ditugaskan.');
+    }
+
+    public function moveInQueue(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak mengubah antrean tiket ini.');
+        }
+
+        $validated = $request->validate([
+            'direction' => 'required|in:up,down',
         ]);
 
         try {
-            $admin->notify(new TicketAssignedOperatorNotification($ticket));
-        } catch (\Exception $e) {
-            \Log::error("Gagal mengirim notifikasi penugasan operator untuk tiket #{$ticket->id}: ".$e->getMessage());
+            TicketWorkQueue::moveInQueue($ticket, $validated['direction'] === 'up' ? -1 : 1);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->back()->with('success', 'Operator berhasil ditugaskan.');
+        return redirect()->back()->with('success', 'Urutan antrean diperbarui.');
     }
 
     public function cancel(Request $request, Ticket $ticket)
@@ -523,26 +598,31 @@ class TicketController extends Controller
             abort(403, 'Hanya pengaju tiket yang dapat membatalkan tiket ini.');
         }
 
-        if ($ticket->status !== 'open') {
-            return redirect()->back()->with('error', 'Tiket hanya dapat dibatalkan saat berstatus open.');
-        }
-
         $targetStatus = $isCreator ? 'dibatalkan' : 'reject';
         $catatan = $isCreator
             ? 'Tiket dibatalkan oleh pengaju ('.($admin->name ?? $admin->username).')'
             : 'Tiket ditolak/dibatalkan oleh Admin '.($admin->name ?? $admin->username);
 
-        DB::transaction(function () use ($ticket, $admin, $targetStatus, $catatan) {
-            $ticket->update(['status' => $targetStatus]);
-            $ticket->booking?->update(['status' => $targetStatus]);
+        try {
+            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($admin, $targetStatus, $catatan) {
+                if ($locked->status !== 'open') {
+                    throw new \InvalidArgumentException('Tiket hanya dapat dibatalkan saat berstatus open.');
+                }
 
-            TicketLog::create([
-                'ticket_id' => $ticket->id,
-                'admin_id' => $admin->id,
-                'aksi' => $targetStatus,
-                'catatan' => $catatan,
-            ]);
-        });
+                $locked->update(['status' => $targetStatus]);
+                $locked->booking?->update(['status' => $targetStatus]);
+
+                TicketLog::create([
+                    'ticket_id' => $locked->id,
+                    'admin_id' => $admin->id,
+                    'aksi' => $targetStatus,
+                    'catatan' => $catatan,
+                    'timestamp' => $at,
+                ]);
+            });
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
 
         if (! $isCreator) {
             try {
@@ -573,14 +653,6 @@ class TicketController extends Controller
             abort(403, 'Kamu tidak berhak membatalkan booking tiket ini.');
         }
 
-        if (! $ticket->booking) {
-            return redirect()->back()->with('error', 'Tidak ada data booking untuk tiket ini.');
-        }
-
-        if ($ticket->booking->tanggal_selesai && Carbon::parse($ticket->booking->tanggal_selesai)->isPast()) {
-            return redirect()->back()->with('error', 'Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
-        }
-
         $rawService = $ticket->subUnit?->nama_layanan ?? $ticket->booking?->tipe ?? 'Aset';
         $layananTitle = preg_match('/^peminjaman\s+/i', $rawService)
             ? $rawService
@@ -591,21 +663,36 @@ class TicketController extends Controller
         $isCreator = $ticket->isSubmittedBy($admin);
         $targetStatus = $isCreator ? 'dibatalkan' : 'reject';
 
-        $ticket->booking->update(['status' => $targetStatus]);
-        $ticket->update(['status' => $targetStatus]);
-
         $alasan = $request->input('catatan') ?: (
             $isCreator
                 ? "{$layananTitle} dibatalkan oleh pengaju dan aset telah dibebaskan."
                 : "{$layananTitle} ditolak oleh Admin dan aset telah dibebaskan."
         );
 
-        TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => $admin->id,
-            'aksi' => $targetStatus,
-            'catatan' => $alasan,
-        ]);
+        try {
+            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($admin, $targetStatus, $alasan) {
+                $booking = $locked->booking;
+                if (! $booking) {
+                    throw new \InvalidArgumentException('Tidak ada data booking untuk tiket ini.');
+                }
+                if ($booking->tanggal_selesai && $at->gt($booking->tanggal_selesai)) {
+                    throw new \InvalidArgumentException('Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+                }
+
+                $booking->update(['status' => $targetStatus]);
+                $locked->update(['status' => $targetStatus]);
+
+                TicketLog::create([
+                    'ticket_id' => $locked->id,
+                    'admin_id' => $admin->id,
+                    'aksi' => $targetStatus,
+                    'catatan' => $alasan,
+                    'timestamp' => $at,
+                ]);
+            });
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
 
         try {
             $ticket->load('user');
@@ -695,7 +782,7 @@ class TicketController extends Controller
             abort(403, 'Kamu tidak berhak membalas tiket ini.');
         }
 
-        if (in_array($ticket->status, ['solve', 'reject', 'dibatalkan'])) {
+        if (in_array($ticket->status, ['solve', 'selesai', 'reject', 'dibatalkan'])) {
             return redirect()->back()->with('error', 'Tidak dapat membalas tiket yang sudah selesai atau dibatalkan.');
         }
 
@@ -705,42 +792,55 @@ class TicketController extends Controller
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
-        $log = TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => $admin->id,
-            'aksi' => 'balasan',
-            'catatan' => filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]',
-            'timestamp' => now(),
-        ]);
+        $storedPaths = [];
 
-        $generalFiles = $request->file('general_attachments');
-        if (! empty($generalFiles) && is_array($generalFiles)) {
-            foreach ($generalFiles as $file) {
-                if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
-                    continue;
-                }
-
-                $path = Storage::disk('public')->putFileAs(
-                    "ticket-attachments/{$ticket->id}",
-                    $file->getPathname(),
-                    $file->hashName()
+        try {
+            $log = DB::transaction(function () use ($ticket, $admin, $request, &$storedPaths) {
+                $log = TicketChatBridgeService::createReplyLog(
+                    $ticket,
+                    $admin,
+                    filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]'
                 );
 
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'field_id' => null,
-                    'ticket_log_id' => $log->id,
-                    'file_path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getMimeType(),
-                    'file_size' => $file->getSize(),
-                    'wajib' => false,
-                ]);
-            }
+                $generalFiles = $request->file('general_attachments');
+                if (! empty($generalFiles) && is_array($generalFiles)) {
+                    foreach ($generalFiles as $file) {
+                        if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
+                            continue;
+                        }
+
+                        $path = Storage::disk('public')->putFileAs(
+                            "ticket-attachments/{$ticket->id}",
+                            $file->getPathname(),
+                            $file->hashName()
+                        );
+                        $storedPaths[] = $path;
+
+                        TicketAttachment::create([
+                            'ticket_id' => $ticket->id,
+                            'field_id' => null,
+                            'ticket_log_id' => $log->id,
+                            'file_path' => $path,
+                            'original_name' => $file->getClientOriginalName(),
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                            'wajib' => false,
+                        ]);
+                    }
+                }
+
+                $log->load('attachments');
+                TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+
+                return $log;
+            });
+        } catch (\Throwable $e) {
+            Storage::disk('public')->delete($storedPaths);
+
+            throw $e;
         }
 
-        $log->load('attachments');
-        TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+        TicketChatBridgeService::afterCommit(fn () => $log->broadcastTimeline());
 
         try {
             if ($ticket->user) {

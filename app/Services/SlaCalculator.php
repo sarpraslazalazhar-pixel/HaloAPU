@@ -11,6 +11,13 @@ use Illuminate\Support\Facades\Log;
 
 class SlaCalculator
 {
+    private const PHASES = [
+        'response' => ['respon', 'responded_at'],
+        'resolution' => ['penyelesaian', 'resolved_at'],
+    ];
+
+    private const ACTIVE_STATUSES = ['open', 'diajukan', 'baru', 'on_proses', 'in_progress', 'diproses', 'pending', 'need_revision'];
+
     protected array $workingHours;
 
     protected array $dayMap = [
@@ -126,7 +133,78 @@ class SlaCalculator
         return $this->addWorkingMinutes($ticket->created_at, $thresholdMinutes);
     }
 
-    public function pauseSla(TicketSlaTracking $sla): void
+    /** @param array{start: Carbon, end: Carbon}|null $window */
+    public function createTracking(Ticket $ticket, ?array $window): TicketSlaTracking
+    {
+        $pending = $ticket->status === 'pending';
+
+        return $ticket->slaTracking()->create([
+            'sla_response_deadline' => $pending ? null : $this->calculateResponseDeadline($ticket),
+            'sla_resolution_starts_at' => $window['start'] ?? null,
+            'sla_resolution_base_deadline' => $window['end'] ?? null,
+            'sla_resolution_deadline' => $window['end'] ?? ($pending ? null : $this->calculateResolutionDeadline($ticket)),
+            'paused_at' => $pending ? now() : null,
+            'current_tier' => 0,
+        ]);
+    }
+
+    public function updatePriorityDeadlines(TicketSlaTracking $sla): void
+    {
+        $ticket = $sla->ticket;
+        if (! in_array($ticket->status, self::ACTIVE_STATUSES, true)) {
+            return;
+        }
+
+        $updates = [];
+        foreach (self::PHASES as $phase => [$kind, $finishedAt]) {
+            $key = "sla_{$phase}_deadline";
+            if ($sla->$finishedAt !== null || $sla->$key === null
+                || ($phase === 'resolution' && $sla->sla_resolution_base_deadline !== null)) {
+                continue;
+            }
+
+            $updates[$key] = $this->deadlineWithPauseCredit($sla, $kind);
+        }
+
+        if ($updates !== []) {
+            $sla->update($updates);
+        }
+    }
+
+    /** @param array{start: Carbon, end: Carbon}|null $window */
+    public function updateScheduledResolution(TicketSlaTracking $sla, ?array $window): void
+    {
+        $baseEnd = $sla->sla_resolution_base_deadline;
+        if ($sla->resolved_at !== null || ($window === null && $baseEnd === null)) {
+            return;
+        }
+
+        if ($window !== null) {
+            $oldDeadline = $sla->sla_resolution_deadline;
+            $seconds = $baseEnd && $oldDeadline ? max(0, $oldDeadline->timestamp - $baseEnd->timestamp) : 0;
+            $deadline = $window['end']->copy()->setTimestamp($window['end']->timestamp + $seconds);
+        } else {
+            $initialPending = $sla->ticket->status === 'pending'
+                && $sla->sla_response_deadline === null && $sla->responded_at === null;
+            $deadline = $initialPending ? null : $this->deadlineWithPauseCredit($sla, 'penyelesaian');
+        }
+
+        $sla->update([
+            'sla_resolution_starts_at' => $window['start'] ?? null,
+            'sla_resolution_base_deadline' => $window['end'] ?? null,
+            'sla_resolution_deadline' => $deadline,
+        ]);
+    }
+
+    private function deadlineWithPauseCredit(TicketSlaTracking $sla, string $kind): Carbon
+    {
+        $ticket = $sla->ticket;
+        $threshold = SlaConfig::getThreshold($ticket->sub_unit_id, $ticket->priority ?? 'Sedang', $kind);
+
+        return $this->addWorkingMinutes($ticket->created_at, $threshold + $sla->total_paused_minutes);
+    }
+
+    public function pauseSla(TicketSlaTracking $sla, ?Carbon $at = null): void
     {
         if ($sla->paused_at !== null) {
             Log::warning("SLA #{$sla->id} sudah dalam status paused.");
@@ -134,112 +212,101 @@ class SlaCalculator
         }
 
         $sla->update([
-            'paused_at' => Carbon::now(),
+            'paused_at' => ($at ?? Carbon::now())->copy()->microsecond(0),
         ]);
 
         Log::info("SLA #{$sla->id} di-pause pada {$sla->paused_at}");
     }
 
-    public function resumeSla(TicketSlaTracking $sla): void
+    public function resumeSla(TicketSlaTracking $sla, ?Carbon $at = null): void
     {
-        if ($sla->paused_at === null) {
-            Log::warning("SLA #{$sla->id} tidak dalam status paused.");
-            return;
+        $resumeAt = ($at ?? Carbon::now())->copy()->microsecond(0);
+        $pausedAt = $sla->paused_at;
+        if ($pausedAt === null) {
+            if ($sla->ticket->status !== 'pending') {
+                Log::warning("SLA #{$sla->id} tidak dalam status paused.");
+                return;
+            }
+            $pausedAt = $resumeAt;
         }
 
-        // Jika deadline masih null (tiket dibuat di luar jam kerja),
-        // hitung deadline baru dari sekarang (fresh start)
-        if ($sla->sla_response_deadline === null || $sla->sla_resolution_deadline === null) {
-            $ticket = $sla->ticket;
-            $subUnitId = $ticket->sub_unit_id;
-            $priority = $ticket->priority ?? 'Sedang';
-            $now = Carbon::now();
-
-            $respThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'respon');
-            $resThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'penyelesaian');
-
-            $sla->update([
-                'paused_at' => null,
-                'sla_response_deadline' => $this->addWorkingMinutes($now, $respThreshold),
-                'sla_resolution_deadline' => $this->addWorkingMinutes($now, $resThreshold),
-            ]);
-
-            Log::info("SLA #{$sla->id} di-resume (fresh start). Deadline dihitung dari sekarang.");
-            return;
-        }
-
-        $pausedMinutes = $this->getWorkingMinutesBetween($sla->paused_at, Carbon::now());
-        $newTotalPaused = $sla->total_paused_minutes + $pausedMinutes;
-
-        $newResponseDeadline = $this->addWorkingMinutes(
-            $sla->sla_response_deadline,
-            $pausedMinutes
-        );
-        $newResolutionDeadline = $this->addWorkingMinutes(
-            $sla->sla_resolution_deadline,
-            $pausedMinutes
-        );
-
-        $sla->update([
+        $pausedMinutes = $this->getWorkingMinutesBetween($pausedAt, $resumeAt);
+        $updates = [
             'paused_at' => null,
-            'total_paused_minutes' => $newTotalPaused,
-            'sla_response_deadline' => $newResponseDeadline,
-            'sla_resolution_deadline' => $newResolutionDeadline,
-        ]);
+            'total_paused_minutes' => $sla->total_paused_minutes + $pausedMinutes,
+        ];
 
-        Log::info("SLA #{$sla->id} di-resume. Paused {$pausedMinutes} menit kerja. Total paused: {$newTotalPaused} menit.");
+        foreach (self::PHASES as $phase => [$kind, $finishedAt]) {
+            if ($sla->$finishedAt !== null) {
+                continue;
+            }
+
+            $key = "sla_{$phase}_deadline";
+            $deadline = $sla->$key;
+            if ($phase === 'resolution' && $sla->sla_resolution_starts_at && $sla->sla_resolution_base_deadline) {
+                $deadline ??= $sla->sla_resolution_base_deadline;
+                $seconds = max(0, $resumeAt->timestamp - max($pausedAt->timestamp, $sla->sla_resolution_starts_at->timestamp));
+                $updates[$key] = $deadline->copy()->setTimestamp($deadline->timestamp + $seconds);
+            } elseif ($deadline !== null) {
+                $updates[$key] = $this->addWorkingMinutes($deadline, $pausedMinutes);
+            } else {
+                $ticket = $sla->ticket;
+                $threshold = SlaConfig::getThreshold($ticket->sub_unit_id, $ticket->priority ?? 'Sedang', $kind);
+                $updates[$key] = $this->addWorkingMinutes($resumeAt, $threshold);
+            }
+        }
+
+        $sla->update($updates);
+        Log::info("SLA #{$sla->id} di-resume. Paused {$pausedMinutes} menit kerja. Total paused: {$sla->total_paused_minutes} menit.");
     }
 
     public function checkAndUpdateTier(TicketSlaTracking $sla): int
     {
+        $tier = $sla->current_tier ?? 0;
+        if ($sla->paused_at !== null || $sla->ticket->status === 'pending') {
+            return $tier;
+        }
+
         $ticket = $sla->ticket;
-        $subUnitId = $ticket->sub_unit_id;
-        $priority = $ticket->priority ?? 'Sedang';
-        $now = Carbon::now();
+        $now = Carbon::now()->microsecond(0);
+        $updates = [];
 
-        $effectiveNow = $sla->paused_at ?? $now;
-
-        $elapsedMinutes = $this->getWorkingMinutesBetween(
-            $ticket->created_at,
-            $effectiveNow
-        ) - $sla->total_paused_minutes;
-
-        if (!$sla->responded_at) {
-            $respThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'respon');
-            $halfRespThreshold = (int) ceil($respThreshold / 2);
-
-            if (!$sla->is_response_half_warned && $elapsedMinutes >= $halfRespThreshold) {
-                $sla->update([
-                    'is_response_half_warned' => true,
-                ]);
+        foreach (self::PHASES as $phase => [$kind, $finishedAt]) {
+            $deadline = $sla->{"sla_{$phase}_deadline"};
+            if ($deadline === null || $sla->$finishedAt !== null) {
+                continue;
             }
 
-            if ($elapsedMinutes >= $respThreshold) {
-                $sla->update([
-                    'is_response_breached' => true,
-                ]);
-            }
-        }
-
-        if (!$sla->resolved_at) {
-            $resThreshold = SlaConfig::getThreshold($subUnitId, $priority, 'penyelesaian');
-            $halfResThreshold = (int) ceil($resThreshold / 2);
-
-            if (!$sla->is_resolution_half_warned && $elapsedMinutes >= $halfResThreshold) {
-                $sla->update([
-                    'is_resolution_half_warned' => true,
-                ]);
+            $start = $phase === 'resolution' ? $sla->sla_resolution_starts_at : null;
+            $baseEnd = $start ? $sla->sla_resolution_base_deadline : null;
+            if ($baseEnd && $now->timestamp < $start->timestamp) {
+                continue;
             }
 
-            if ($elapsedMinutes >= $resThreshold) {
-                $sla->update([
-                    'is_resolution_breached' => true,
-                ]);
+            $breach = "is_{$phase}_breached";
+            if (! $sla->$breach && $now->timestamp > $deadline->timestamp) {
+                $updates[$breach] = true;
+            }
+
+            $halfWarning = "is_{$phase}_half_warned";
+            if (! $sla->$halfWarning) {
+                if ($baseEnd) {
+                    $halfReached = $now->timestamp >= $deadline->timestamp - intdiv($baseEnd->timestamp - $start->timestamp, 2);
+                } else {
+                    $threshold = SlaConfig::getThreshold($ticket->sub_unit_id, $ticket->priority ?? 'Sedang', $kind);
+                    $halfReached = $this->getWorkingMinutesBetween($now, $deadline) <= intdiv($threshold, 2);
+                }
+                if ($halfReached) {
+                    $updates[$halfWarning] = true;
+                }
             }
         }
 
-        // Return current tier for backward compatibility in calling functions, though it's no longer used for escalation.
-        return $sla->current_tier ?? 0;
+        if ($updates !== []) {
+            $sla->update($updates);
+        }
+
+        return $tier;
     }
 
     public function getWorkingMinutesBetween(Carbon $start, Carbon $end): int

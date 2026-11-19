@@ -4,7 +4,13 @@
  * PENTING: Hapus berkas ini setelah selesai melakukan setup/migrasi di hosting!
  */
 
-define('ACCESS_PIN', 'sparc2026');
+// PIN dibaca dari .env, bukan ditulis di kode. Kosong = runner mati total.
+define('ACCESS_PIN', (string) env('ARTISAN_RUNNER_PIN', ''));
+
+if (ACCESS_PIN === '') {
+    http_response_code(404);
+    exit;
+}
 
 session_start();
 
@@ -77,6 +83,18 @@ if ($isAuthenticated && isset($_POST['command'])) {
                     }
                 }
             } else {
+                // Hanya perintah baca/bersih-bersih. Migrasi & seeder punya tombol
+                // sendiri, dan perintah destruktif tidak boleh lewat kolom bebas.
+                $allowed = [
+                    'route:list', 'config:clear', 'config:cache', 'route:clear', 'route:cache',
+                    'view:clear', 'view:cache', 'cache:clear', 'optimize:clear', 'optimize',
+                    'migrate:status', 'about', 'schedule:list', 'queue:restart',
+                ];
+                $base = strtok($executedCmd, ' ');
+                if (! in_array($base, $allowed, true)) {
+                    throw new \RuntimeException("Perintah '{$base}' tidak diizinkan dari web runner.");
+                }
+
                 \Illuminate\Support\Facades\Artisan::call($executedCmd);
                 $output = \Illuminate\Support\Facades\Artisan::output();
             }
@@ -174,10 +192,6 @@ if ($isAuthenticated && isset($_POST['command'])) {
                     <button type="submit" class="btn-secondary" style="width: 100%;">Generate APP_KEY</button>
                 </form>
 
-                <form method="POST">
-                    <input type="hidden" name="command" value="db:seed --force">
-                    <button type="submit" class="btn-secondary" style="width: 100%;">Jalankan Seeder</button>
-                </form>
             </div>
 
             <h2 style="font-size: 13px; margin-bottom: 8px; color: #94a3b8;">Perintah Kustom:</h2>

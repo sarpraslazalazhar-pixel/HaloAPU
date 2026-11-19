@@ -25,14 +25,7 @@ class TicketLog extends Model
      */
     protected static function booted(): void
     {
-        static::created(function (self $log) {
-            try {
-                broadcast(new TicketMessagePosted($log));
-            } catch (\Throwable $e) {
-                // Realtime must never break ticket writes.
-                Log::warning('Ticket realtime broadcast failed: '.$e->getMessage());
-            }
-        });
+        static::created(fn (self $log) => $log->broadcastTimeline());
     }
 
     public function ticket()
@@ -48,5 +41,26 @@ class TicketLog extends Model
     public function attachments()
     {
         return $this->hasMany(TicketAttachment::class, 'ticket_log_id');
+    }
+
+    /** Chat message mirrored from this reply, if any. */
+    public function chatMessage()
+    {
+        return $this->hasOne(\App\Models\Message::class, 'ticket_log_id')->withTrashed();
+    }
+
+    public function broadcastTimeline(): void
+    {
+        // No realtime driver (cPanel): skip entirely so writes stay fast.
+        if (in_array(config('broadcasting.default'), [null, 'null', 'log'], true)) {
+            return;
+        }
+
+        try {
+            broadcast(new TicketMessagePosted($this));
+        } catch (\Throwable $e) {
+            // Realtime must never break ticket writes.
+            Log::warning('Ticket realtime broadcast failed: '.$e->getMessage());
+        }
     }
 }

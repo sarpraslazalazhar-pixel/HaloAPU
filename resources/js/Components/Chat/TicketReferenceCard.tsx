@@ -6,6 +6,7 @@ interface TicketData {
   id: number;
   formatted_id: string;
   judul?: string;
+  chat_label?: string | null;
   status?: string;
   priority?: string;
 }
@@ -50,7 +51,7 @@ export function TicketReferenceCard({ ticket, isAdmin = false, isSelf = false }:
         <div className="flex items-center gap-1.5 min-w-0">
           <TicketIcon className={`h-4 w-4 shrink-0 ${isSelf ? 'text-sky-100' : 'text-sky-600'}`} />
           <span className={`text-xs font-bold truncate ${isSelf ? 'text-white' : 'text-zinc-800'}`}>
-            Tiket #{ticket.formatted_id || ticket.id}
+            {ticket.chat_label || `Tiket #${ticket.formatted_id || ticket.id}`}
           </span>
         </div>
         {getStatusBadge(ticket.status)}

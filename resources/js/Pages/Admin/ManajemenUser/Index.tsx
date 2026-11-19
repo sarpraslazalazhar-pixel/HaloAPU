@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
-import { Users, Pencil, Trash2, Plus, Search, UserX, Smartphone, Unlock, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
+import { Users, Pencil, Plus, Search, UserX, Smartphone, Unlock, Eye, EyeOff, Sparkles, KeyRound } from 'lucide-react';
 import {
  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/Components/ui/dialog';
@@ -43,6 +43,7 @@ interface UserData {
  divisi_id: number | null;
  org_unit_id: number | null;
  jabatan_id: number | null;
+ is_active: boolean;
  created_at: string;
  divisi: Divisi | null;
  org_unit: OrgUnit | null;
@@ -104,8 +105,9 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  // SAFETY: org_unit_id can be an empty string before selection or a numeric ID when chosen.
  org_unit_id: '' as string | number,
  // SAFETY: jabatan_id can be an empty string before selection or a numeric ID when chosen.
- jabatan_id: '' as string | number,
- });
+    jabatan_id: '' as string | number,
+    is_active: true,
+  });
 
  const handleGeneratePassword = () => {
  const newPwd = generateRandomPassword();
@@ -149,28 +151,27 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  no_wa: user.no_wa || '',
  divisi_id: user.divisi_id || '',
  org_unit_id: user.org_unit_id || '',
- jabatan_id: user.jabatan_id || '',
- });
- setOpen(true);
- };
+      jabatan_id: user.jabatan_id || '',
+      is_active: user.is_active !== false,
+    });
+    setOpen(true);
+  };
 
- const handleSubmit = (e: React.FormEvent) => {
- e.preventDefault();
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
 
- if (editing) {
- put(route('admin.manajemen-user.update', editing.id), {
- onSuccess: () => { setOpen(false); reset(); setEditing(null); },
- });
- } else {
- post(route('admin.manajemen-user.store'), {
- onSuccess: () => { setOpen(false); reset(); setEditing(null); },
- });
- }
- };
-
- const handleDelete = (user: UserData) => {
- router.delete(route('admin.manajemen-user.destroy', user.id), { preserveScroll: true });
- };
+    if (editing) {
+      // `is_active` rides along with the profile data; the status service
+      // no-ops when the value did not change.
+      put(route('admin.manajemen-user.update', editing.id), {
+        onSuccess: () => { setOpen(false); reset(); setEditing(null); },
+      });
+    } else {
+      post(route('admin.manajemen-user.store'), {
+        onSuccess: () => { setOpen(false); reset(); setEditing(null); },
+      });
+    }
+  };
 
  const applyFilters = () => {
  router.get(route('admin.manajemen-user.index'), {
@@ -334,6 +335,9 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                       </td>
                       <td className="p-3 text-sm">
                         {user.org_unit?.nama_unit_organisasi || <span className="text-muted-foreground/50">-</span>}
+                        <span className={`block text-xs ${user.is_active ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {user.is_active ? 'Aktif' : 'Tidak Aktif'}
+                        </span>
                       </td>
                       <td className="p-3 text-sm">
                         {user.jabatan?.nama_jabatan || <span className="text-muted-foreground/50">-</span>}
@@ -396,28 +400,6 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
                           <Button variant="outline" size="icon" onClick={() => openEdit(user)} className="h-8 w-8">
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="outline" size="icon" className="h-8 w-8 text-red-500 hover:text-red-600 hover:bg-red-50 ">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Hapus User?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Apakah kamu yakin ingin menghapus user <strong>"{user.name || user.username}"</strong>?
-                                  {' '}Tindakan ini tidak dapat dibatalkan. User yang memiliki tiket aktif tidak bisa dihapus.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Batal</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleDelete(user)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                  Hapus
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
                         </div>
                       </td>
                     </tr>
@@ -466,7 +448,7 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  </DialogTitle>
  </DialogHeader>
  <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  {/* Nama Lengkap */}
  <div className="col-span-2">
  <Label htmlFor="name">Nama Lengkap <span className="text-destructive">*</span></Label>
@@ -612,6 +594,23 @@ export default function ManajemenUserIndex({ users, filters, divisiList, unitOrg
  </select>
  {errors.org_unit_id && <p className="text-xs text-destructive mt-1">{errors.org_unit_id}</p>}
  </div>
+
+ {/* Status Akun */}
+ {editing && (
+ <div>
+ <Label htmlFor="is_active">Status Akun</Label>
+ <select
+ id="is_active"
+ className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+ value={data.is_active ? '1' : '0'}
+ onChange={(e) => setData('is_active', e.target.value === '1')}
+ >
+ <option value="1">Aktif</option>
+ <option value="0">Tidak Aktif</option>
+ </select>
+ {errors.is_active && <p className="text-xs text-destructive mt-1">{errors.is_active}</p>}
+ </div>
+ )}
 
  {/* Jabatan */}
  <div className="col-span-2">

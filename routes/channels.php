@@ -25,6 +25,10 @@ Broadcast::channel('chat.conversation.{conversationId}', function ($user, $conve
     }
 
     if ($user instanceof \App\Models\User) {
+        if ($conversation->type === 'ticket') {
+            return $conversation->ticket?->isOwnedByUser($user) ?? false;
+        }
+
         return (int) $conversation->user_id === (int) $user->id;
     }
 

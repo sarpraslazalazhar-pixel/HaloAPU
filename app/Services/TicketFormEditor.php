@@ -32,6 +32,15 @@ class TicketFormEditor
      */
     public static function apply(Ticket $ticket, array $formData, ?string $priority, string $reason, Admin $editor): ?TicketEditHistory
     {
+        return DB::transaction(function () use ($ticket, $formData, $priority, $reason, $editor) {
+            $lockedTicket = Ticket::lockForUpdate()->findOrFail($ticket->id);
+
+            return self::applyLocked($lockedTicket, $formData, $priority, $reason, $editor);
+        });
+    }
+
+    private static function applyLocked(Ticket $ticket, array $formData, ?string $priority, string $reason, Admin $editor): ?TicketEditHistory
+    {
         if (! in_array(strtolower((string) $ticket->status), self::EDITABLE_STATUSES, true)) {
             throw ValidationException::withMessages([
                 'form_data' => 'Formulir tiket berstatus '.$ticket->status.' tidak dapat diedit.',
@@ -109,31 +118,53 @@ class TicketFormEditor
             return null;
         }
 
-        $history = DB::transaction(function () use ($ticket, $new, $newPriority, $changes, $reason, $editor) {
-            $ticket->form_data = $new;
-            $ticket->priority = $newPriority;
-            $ticket->save();
+        $scheduleChanged = false;
+        $window = null;
+        if ($old !== $new && ($subUnit = $ticket->subUnit)) {
+            $oldInputs = TicketSlaSchedule::inputs($subUnit, $fields, $old);
+            $newInputs = TicketSlaSchedule::inputs($subUnit, $fields, $new);
+            $scheduleChanged = $oldInputs !== $newInputs;
+            if ($scheduleChanged) {
+                $window = TicketSlaSchedule::window($newInputs);
+            }
+        }
 
-            TicketLog::create([
-                'ticket_id' => $ticket->id,
-                'admin_id' => $editor->id,
-                'aksi' => 'edit_form',
-                'catatan' => 'Formulir tiket diperbarui: '.implode(', ', array_map(
-                    fn ($c) => $c['label'],
-                    $changes
-                )).'. Alasan: '.$reason,
-                'timestamp' => now(),
-            ]);
+        $ticket->form_data = $new;
+        $ticket->priority = $newPriority;
+        $ticket->save();
 
-            return $ticket->editHistories()->create([
-                'edited_by' => $editor->id,
-                'edit_reason' => $reason,
-                'changes' => $changes,
-            ]);
-        });
+        $priorityChanged = $newPriority !== $oldPriority;
+        if ($scheduleChanged || $priorityChanged) {
+            $sla = $ticket->slaTracking()->lockForUpdate()->first();
+            if ($sla) {
+                $sla->setRelation('ticket', $ticket);
+                $calculator = new SlaCalculator;
+                if ($scheduleChanged && $sla->resolved_at === null) {
+                    $calculator->updateScheduledResolution($sla, $window);
+                }
+                if ($priorityChanged) {
+                    $calculator->updatePriorityDeadlines($sla);
+                }
+            }
+        }
 
-        self::recalculateSla($ticket, isset($changes['priority']));
-        self::notify($ticket, $history, $editor);
+        TicketLog::create([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $editor->id,
+            'aksi' => 'edit_form',
+            'catatan' => 'Formulir tiket diperbarui: '.implode(', ', array_map(
+                fn ($c) => $c['label'],
+                $changes
+            )).'. Alasan: '.$reason,
+            'timestamp' => now(),
+        ]);
+
+        $history = $ticket->editHistories()->create([
+            'edited_by' => $editor->id,
+            'edit_reason' => $reason,
+            'changes' => $changes,
+        ]);
+        DB::afterCommit(fn () => self::notify($ticket, $history, $editor));
 
         return $history;
     }
@@ -145,24 +176,6 @@ class TicketFormEditor
         }
 
         return is_string($value) ? trim($value) : $value;
-    }
-
-    private static function recalculateSla(Ticket $ticket, bool $priorityChanged): void
-    {
-        if (! $priorityChanged) {
-            return;
-        }
-
-        $ticket->loadMissing('slaTracking');
-        if (! $ticket->slaTracking || in_array($ticket->status, ['solve', 'reject', 'dibatalkan'], true)) {
-            return;
-        }
-
-        $sla = new SlaCalculator;
-        $ticket->slaTracking->update([
-            'sla_response_deadline' => $sla->calculateResponseDeadline($ticket),
-            'sla_resolution_deadline' => $sla->calculateResolutionDeadline($ticket),
-        ]);
     }
 
     private static function notify(Ticket $ticket, TicketEditHistory $history, Admin $editor): void

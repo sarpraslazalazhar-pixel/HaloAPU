@@ -7,7 +7,7 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { Eye, Filter, Inbox, Plus, Search, Send, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Plus, Search, Send, X } from 'lucide-react';
 import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
@@ -28,6 +28,7 @@ interface Ticket {
  source?: 'web' | 'mobile' | string;
  status: string;
  created_at: string;
+ assignment_queued_at?: string | null;
 }
 
 const TABS = [
@@ -35,7 +36,7 @@ const TABS = [
  { key: 'saya_ajukan', label: 'Tiket Saya Ajukan', Icon: Send },
 ];
 
-export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts }: any) {
+export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts, operatorLoads = [] }: any) {
  const [showFilter, setShowFilter] = useState(() => {
  return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
  });
@@ -55,6 +56,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [orgUnitId, setOrgUnitId] = useState(filters?.org_unit_id || '');
  const [subUnits, setSubUnits] = useState<any[]>([]);
  const [search, setSearch] = useState(filters?.search || '');
+ const [openOperator, setOpenOperator] = useState<number | null>(null);
 
  useEffect(() => {
  if (unitId) {
@@ -108,6 +110,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  priority={t.priority}
  isBreached={sla.is_response_breached || sla.is_resolution_breached}
  deadline={sla.sla_resolution_deadline}
+ resolutionStartsAt={sla.sla_resolution_starts_at}
+ resolutionBaseDeadline={sla.sla_resolution_base_deadline}
  respondedAt={sla.responded_at}
  resolvedAt={sla.resolved_at}
  pausedAt={sla.paused_at}
@@ -158,7 +162,18 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  );
  },
  },
- { key: 'status', header: 'Status', render: (t: Ticket) => <StatusBadge status={t.status} /> },
+ {
+ key: 'status',
+ header: 'Status',
+ render: (t: Ticket) => (
+ <div className="flex flex-col items-start gap-1">
+ <StatusBadge status={t.status} />
+ {t.assignment_queued_at && (
+ <span className="text-[11px] font-medium text-amber-700">Antrean petugas</span>
+ )}
+ </div>
+ ),
+ },
  {
  key: 'aksi',
  header: 'Aksi',
@@ -174,6 +189,81 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  return (
  <AdminLayout title="Daftar Tiket">
  <Head title="Daftar Tiket" />
+
+ {operatorLoads.length > 0 && (
+ <div className="mb-4 rounded-lg border bg-white p-3">
+ <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Beban Kerja Petugas</p>
+ <ul className="flex flex-col gap-1">
+ {operatorLoads.map((op: any) => {
+ const expanded = openOperator === op.admin_id;
+ const hasDetail = (op.tickets?.length ?? 0) > 0;
+ return (
+ <li key={op.admin_id} className="rounded-md border">
+ <button
+ type="button"
+ onClick={() => hasDetail && setOpenOperator(expanded ? null : op.admin_id)}
+ aria-expanded={expanded}
+ className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+ >
+ <span className="font-medium text-slate-700">{op.name}</span>
+ <span className="rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-800">{op.working} dikerjakan</span>
+ {op.queued > 0 && (
+ <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">{op.queued} antre</span>
+ )}
+ {hasDetail && (
+ <ChevronDown className={`ml-auto h-3.5 w-3.5 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+ )}
+ </button>
+ {expanded && hasDetail && (
+ <ul className="space-y-1 border-t px-2.5 py-2">
+ {op.tickets.map((tk: any) => (
+ <li key={tk.id} className="flex flex-wrap items-center gap-2 text-xs">
+ <span className="font-mono font-medium">#TKT-{tk.formatted_id}</span>
+ <span className="text-slate-500">{tk.service}</span>
+ <StatusBadge status={tk.status} />
+ <span className={`font-medium ${tk.position === null ? 'text-sky-700' : 'text-amber-700'}`}>
+ {tk.position === null ? 'Sedang dikerjakan' : `Antrean ke-${tk.position}`}
+ </span>
+ {tk.urgent && (
+ <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Urgen</span>
+ )}
+ <div className="ml-auto flex items-center gap-1">
+ {tk.position !== null && (
+ <>
+ <Button
+ variant="outline"
+ size="icon-sm"
+ aria-label={`Naikkan antrean #TKT-${tk.formatted_id}`}
+ disabled={tk.position <= 1}
+ onClick={() => router.patch(route('admin.tiket.queue-move', tk.id), { direction: 'up' }, { preserveScroll: true, preserveState: true })}
+ >
+ <ArrowUp className="size-3.5" />
+ </Button>
+ <Button
+ variant="outline"
+ size="icon-sm"
+ aria-label={`Turunkan antrean #TKT-${tk.formatted_id}`}
+ disabled={tk.position >= op.queued}
+ onClick={() => router.patch(route('admin.tiket.queue-move', tk.id), { direction: 'down' }, { preserveScroll: true, preserveState: true })}
+ >
+ <ArrowDown className="size-3.5" />
+ </Button>
+ </>
+ )}
+ <Button variant="ghost" size="sm" onClick={() => router.get(route('admin.tiket.show', tk.id))}>
+ Lihat
+ </Button>
+ </div>
+ </li>
+ ))}
+ </ul>
+ )}
+ </li>
+ );
+ })}
+ </ul>
+ </div>
+ )}
 
  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
  <div className="relative w-full sm:max-w-sm">

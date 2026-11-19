@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rules\Password;
@@ -52,6 +53,72 @@ class AuthController extends Controller
             ], 401);
         }
 
+        // Account deactivation keeps the row (tickets/chats survive) but blocks
+        // every new session. Admin identities are managed separately.
+        if (! $isAdmin && ! $user->is_active) {
+            return response()->json([
+                'message' => 'Akun tidak aktif. Hubungi admin untuk mengaktifkannya kembali.',
+                'error_code' => 'ACCOUNT_INACTIVE',
+            ], 403);
+        }
+
+        if ($isAdmin) {
+            $token = $this->issueLoginToken($request, $user, true, $deviceId, $deviceName);
+        } else {
+            // Serialize status re-check, device binding, FCM and token issuance so
+            // a deactivation cannot interleave with a login that just passed.
+            $result = DB::transaction(function () use ($request, $user, $deviceId, $deviceName) {
+                /** @var User $locked */
+                $locked = User::whereKey($user->getKey())->lockForUpdate()->firstOrFail();
+
+                if (! $locked->is_active) {
+                    return response()->json([
+                        'message' => 'Akun tidak aktif. Hubungi admin untuk mengaktifkannya kembali.',
+                        'error_code' => 'ACCOUNT_INACTIVE',
+                    ], 403);
+                }
+
+                return [
+                    'user' => $locked,
+                    'token' => $this->issueLoginToken($request, $locked, false, $deviceId, $deviceName),
+                ];
+            });
+
+            if ($result instanceof \Illuminate\Http\JsonResponse) {
+                return $result;
+            }
+
+            [$user, $token] = [$result['user'], $result['token']];
+        }
+
+        if ($token instanceof \Illuminate\Http\JsonResponse) {
+            return $token;
+        }
+
+        // Load relationships for full profile data
+        if (!$isAdmin) {
+            $user->load(['divisi', 'orgUnit', 'jabatan']);
+        }
+
+        return response()->json([
+            'data' => [
+                'user' => $isAdmin ? $this->formatAdminProfile($user) : $this->formatUserProfile($user),
+                'token' => $token,
+                'role' => $isAdmin ? 'admin' : 'user',
+                // Public websocket settings so Flutter can subscribe without VITE_*.
+                'realtime' => \App\Providers\AppServiceProvider::realtimeConfig(),
+            ],
+            'message' => 'Login berhasil'
+        ], 200);
+    }
+
+    /**
+     * Finish a validated login: device lock, FCM token, bearer token.
+     *
+     * @return string|\Illuminate\Http\JsonResponse
+     */
+    private function issueLoginToken(Request $request, User|Admin $user, bool $isAdmin, ?string $deviceId, ?string $deviceName): string|\Illuminate\Http\JsonResponse
+    {
         // 1 Akun 1 HP: Validasi Pengikatan Perangkat (Device ID Binding)
         $isDeviceLockEnabled = (bool) \App\Models\SystemConfig::getValue('device_lock_enabled', true);
         $deviceLockTarget = \App\Models\SystemConfig::getValue('device_lock_target', 'all');
@@ -130,24 +197,7 @@ class AuthController extends Controller
             $user->save();
         }
 
-        // Revoke existing tokens for this device if needed, or just create new
-        $token = $user->createToken('mobile-app-token')->plainTextToken;
-
-        // Load relationships for full profile data
-        if (!$isAdmin) {
-            $user->load(['divisi', 'orgUnit', 'jabatan']);
-        }
-
-        return response()->json([
-            'data' => [
-                'user' => $isAdmin ? $this->formatAdminProfile($user) : $this->formatUserProfile($user),
-                'token' => $token,
-                'role' => $isAdmin ? 'admin' : 'user',
-                // Public websocket settings so Flutter can subscribe without VITE_*.
-                'realtime' => \App\Providers\AppServiceProvider::realtimeConfig(),
-            ],
-            'message' => 'Login berhasil'
-        ], 200);
+        return $user->createToken('mobile-app-token')->plainTextToken;
     }
 
     public function storeFcmToken(Request $request)
@@ -292,25 +342,21 @@ class AuthController extends Controller
     }
 
     /**
-     * Delete user account permanently.
+     * Deactivate the signed-in requester. The row, tickets, chats and files
+     * stay; only access is revoked until an admin re-activates the account.
      */
-    public function deleteAccount(Request $request)
+    public function deactivateAccount(Request $request)
     {
         $user = $request->user();
 
-        // Delete avatar file if exists
-        if ($user->avatar_path && Storage::disk('public')->exists($user->avatar_path)) {
-            Storage::disk('public')->delete($user->avatar_path);
+        if (! $user instanceof User) {
+            return response()->json(['message' => 'Hanya akun pengaju yang dapat dinonaktifkan.'], 403);
         }
 
-        // Revoke all tokens
-        $user->tokens()->delete();
-
-        // Delete user record from database
-        $user->delete();
+        \App\Services\UserAccountStatusService::setActive($user, false);
 
         return response()->json([
-            'message' => 'Akun berhasil dihapus dari database'
+            'message' => 'Akun berhasil dinonaktifkan.',
         ], 200);
     }
 
@@ -406,6 +452,8 @@ class AuthController extends Controller
 
         $users = $query->orderBy('name')->paginate($request->get('per_page', 50));
 
+        $canManageAccounts = $admin->can('akses-manajemen-akun');
+
         $formatted = $users->getCollection()->map(function ($u) {
             return [
                 'id' => $u->id,
@@ -416,6 +464,7 @@ class AuthController extends Controller
                 'deviceId' => $u->device_id,
                 'deviceName' => $u->device_name,
                 'isDeviceLocked' => !empty($u->device_id),
+                'is_active' => (bool) $u->is_active,
             ];
         });
 
@@ -427,6 +476,34 @@ class AuthController extends Controller
                 'total' => $users->total(),
             ],
             'device_lock_enabled' => (bool) \App\Models\SystemConfig::getValue('device_lock_enabled', true),
+            'can_manage_accounts' => (bool) $canManageAccounts,
+        ], 200);
+    }
+
+    /**
+     * Activate / deactivate a requester account from the admin app.
+     */
+    public function updateUserStatus(Request $request, User $user)
+    {
+        $admin = $request->user();
+
+        if (!$admin instanceof Admin || !$admin->can('akses-manajemen-akun')) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        $validated = $request->validate([
+            'is_active' => 'required|boolean',
+        ]);
+
+        $isActive = (bool) $validated['is_active'];
+        \App\Services\UserAccountStatusService::setActive($user, $isActive);
+
+        return response()->json([
+            'data' => [
+                'id' => $user->id,
+                'is_active' => $isActive,
+            ],
+            'message' => $isActive ? 'Akun berhasil diaktifkan.' : 'Akun berhasil dinonaktifkan.',
         ], 200);
     }
 

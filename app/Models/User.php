@@ -44,12 +44,24 @@ class User extends Authenticatable
     protected $hidden = [
         'password',
         'remember_token',
+        'session_version',
+    ];
+
+    /**
+     * Column defaults so a freshly created model (before any refresh) is active
+     * and versioned like a migrated row.
+     */
+    protected $attributes = [
+        'is_active' => true,
+        'session_version' => 0,
     ];
 
     protected function casts(): array
     {
         return [
             'password' => 'hashed',
+            'is_active' => 'boolean',
+            'session_version' => 'integer',
             'notify_browser' => 'boolean',
             'notify_inapp' => 'boolean',
             'notify_sound' => 'boolean',

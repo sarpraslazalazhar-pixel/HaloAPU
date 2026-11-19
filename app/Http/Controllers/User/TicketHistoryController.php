@@ -14,9 +14,12 @@ use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\TicketCommentPushNotification;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
+use App\Services\TicketWorkQueue;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -144,34 +147,33 @@ class TicketHistoryController extends Controller
             abort(403);
         }
 
-        $isBooking = $ticket->booking !== null;
-        if ($isBooking && $ticket->booking->tanggal_selesai && now()->gte($ticket->booking->tanggal_selesai)) {
-            return redirect()->back()->with('error', 'Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+        try {
+            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) {
+                $booking = $locked->booking;
+                if ($booking?->tanggal_selesai && $at->gte($booking->tanggal_selesai)) {
+                    throw new \InvalidArgumentException('Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+                }
+
+                $canCancelBooking = $booking && $at->lt($booking->tanggal_mulai)
+                    && ! in_array($booking->status, ['dibatalkan', 'reject', 'selesai'], true);
+                if ($locked->status !== 'open' && ! $canCancelBooking) {
+                    throw new \InvalidArgumentException('Hanya tiket berstatus Open atau peminjaman yang belum dimulai yang bisa dibatalkan.');
+                }
+
+                $locked->update(['status' => 'dibatalkan']);
+                $booking?->update(['status' => 'dibatalkan']);
+
+                TicketLog::create([
+                    'ticket_id' => $locked->id,
+                    'admin_id' => null,
+                    'aksi' => 'dibatalkan',
+                    'catatan' => 'Tiket/peminjaman dibatalkan oleh user '.auth()->user()->username,
+                    'timestamp' => $at,
+                ]);
+            });
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
-
-        $canCancelBooking = false;
-        if ($isBooking) {
-            // Bisa dibatalkan jika belum mulai atau belum lewat tanggal_selesai
-            $canCancelBooking = now()->lt($ticket->booking->tanggal_mulai)
-                && ! in_array($ticket->booking->status, ['dibatalkan', 'reject', 'selesai']);
-        }
-
-        if ($ticket->status !== 'open' && ! $canCancelBooking) {
-            return redirect()->back()->with('error', 'Hanya tiket berstatus Open atau peminjaman yang belum dimulai yang bisa dibatalkan.');
-        }
-
-        $ticket->update(['status' => 'dibatalkan']);
-
-        if ($ticket->booking) {
-            $ticket->booking->update(['status' => 'dibatalkan']);
-        }
-
-        TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => null,
-            'aksi' => 'dibatalkan',
-            'catatan' => 'Tiket/peminjaman dibatalkan oleh user '.auth()->user()->username,
-        ]);
 
         // Notifikasi ke Admin unit terkait
         try {
@@ -199,7 +201,7 @@ class TicketHistoryController extends Controller
             abort(403);
         }
 
-        if (in_array($ticket->status, ['solve', 'reject', 'dibatalkan'])) {
+        if (in_array($ticket->status, ['solve', 'selesai', 'reject', 'dibatalkan'])) {
             return redirect()->back()->with('error', 'Tidak dapat membalas tiket yang sudah selesai atau dibatalkan.');
         }
 
@@ -209,41 +211,55 @@ class TicketHistoryController extends Controller
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
-        $log = TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => null,
-            'aksi' => 'balasan',
-            'catatan' => filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]',
-            'timestamp' => now(),
-        ]);
+        $storedPaths = [];
 
-        $generalFiles = $request->file('general_attachments');
-        if (! empty($generalFiles) && is_array($generalFiles)) {
-            foreach ($generalFiles as $file) {
-                if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
-                    continue;
-                }
-
-                $path = Storage::disk('public')->putFileAs(
-                    "ticket-attachments/{$ticket->id}",
-                    $file->getPathname(),
-                    $file->hashName()
+        try {
+            $log = DB::transaction(function () use ($ticket, $request, &$storedPaths) {
+                $log = TicketChatBridgeService::createReplyLog(
+                    $ticket,
+                    null,
+                    filled($request->catatan) ? $request->catatan : '[Lampiran Tiket]'
                 );
 
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'field_id' => null,
-                    'ticket_log_id' => $log->id,
-                    'file_path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getMimeType(),
-                    'file_size' => $file->getSize(),
-                    'wajib' => false,
-                ]);
-            }
+                $generalFiles = $request->file('general_attachments');
+                if (! empty($generalFiles) && is_array($generalFiles)) {
+                    foreach ($generalFiles as $file) {
+                        if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
+                            continue;
+                        }
+
+                        $path = Storage::disk('public')->putFileAs(
+                            "ticket-attachments/{$ticket->id}",
+                            $file->getPathname(),
+                            $file->hashName()
+                        );
+                        $storedPaths[] = $path;
+
+                        TicketAttachment::create([
+                            'ticket_id' => $ticket->id,
+                            'field_id' => null,
+                            'ticket_log_id' => $log->id,
+                            'file_path' => $path,
+                            'original_name' => $file->getClientOriginalName(),
+                            'mime_type' => $file->getMimeType(),
+                            'file_size' => $file->getSize(),
+                            'wajib' => false,
+                        ]);
+                    }
+                }
+
+                $log->load('attachments');
+                TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+
+                return $log;
+            });
+        } catch (\Throwable $e) {
+            Storage::disk('public')->delete($storedPaths);
+
+            throw $e;
         }
-        $log->load('attachments');
-        TicketChatBridgeService::syncTicketReplyToChat($ticket, $log);
+
+        TicketChatBridgeService::afterCommit(fn () => $log->broadcastTimeline());
 
         $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {
             $query->where('units.id', $ticket->subUnit->unit_id);
@@ -316,42 +332,49 @@ class TicketHistoryController extends Controller
             'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
         ]);
 
-        $ticket->update([
-            'status' => 'need_revision',
-            'revision_count' => $ticket->revision_count + 1,
-        ]);
-
-        $log = TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => null,
-            'aksi' => 'need_revision',
-            'catatan' => $request->catatan,
-        ]);
-
-        $generalFiles = $request->file('general_attachments');
-        if (! empty($generalFiles) && is_array($generalFiles)) {
-            foreach ($generalFiles as $file) {
-                if (! $file || ! is_a($file, UploadedFile::class) || ! $file->isValid()) {
-                    continue;
+        try {
+            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($request, $maxRevisions) {
+                if ($locked->status !== 'solve') {
+                    throw new \InvalidArgumentException('Tiket tidak dalam status selesai.');
+                }
+                if ($locked->revision_count >= $maxRevisions) {
+                    throw new \InvalidArgumentException('Kamu telah mencapai batas maksimal revisi ('.$maxRevisions.' kali).');
                 }
 
-                $path = Storage::disk('public')->putFileAs(
-                    "ticket-attachments/{$ticket->id}",
-                    $file->getPathname(),
-                    $file->hashName()
-                );
-
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'field_id' => null,
-                    'ticket_log_id' => $log->id,
-                    'file_path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getMimeType(),
-                    'file_size' => $file->getSize(),
-                    'wajib' => false,
+                $log = TicketLog::create([
+                    'ticket_id' => $locked->id,
+                    'admin_id' => null,
+                    'aksi' => 'need_revision',
+                    'catatan' => $request->catatan,
+                    'timestamp' => $at,
                 ]);
-            }
+                $locked->revision_count++;
+                TicketWorkQueue::place($locked, 'need_revision', $at);
+
+                foreach ($request->file('general_attachments', []) as $file) {
+                    if (! $file instanceof UploadedFile || ! $file->isValid()) {
+                        continue;
+                    }
+
+                    $path = Storage::disk('public')->putFileAs(
+                        "ticket-attachments/{$locked->id}",
+                        $file->getPathname(),
+                        $file->hashName()
+                    );
+                    TicketAttachment::create([
+                        'ticket_id' => $locked->id,
+                        'field_id' => null,
+                        'ticket_log_id' => $log->id,
+                        'file_path' => $path,
+                        'original_name' => $file->getClientOriginalName(),
+                        'mime_type' => $file->getClientMimeType(),
+                        'file_size' => $file->getSize(),
+                        'wajib' => false,
+                    ]);
+                }
+            });
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
         }
 
         $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {

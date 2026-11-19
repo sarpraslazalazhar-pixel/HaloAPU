@@ -34,10 +34,10 @@ class CsatController extends Controller
             ]
         );
 
-        if (in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
-            if (strtolower($ticket->status) === 'solve' || $ticket->status !== 'Selesai') {
-                $ticket->update(['status' => 'Selesai']);
-            }
+        if ($ticket->status !== 'Selesai' && Ticket::whereKey($ticket->id)
+            ->whereRaw('LOWER(status) IN (?, ?)', ['solve', 'selesai'])
+            ->update(['status' => 'Selesai'])) {
+            $ticket->status = 'Selesai';
         }
 
         $notifiedAdmins = \App\Models\Admin::whereHas('units', function ($query) use ($ticket) {

@@ -15,14 +15,14 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/contact-admin', [AuthController::class, 'contactAdmin'])->middleware('throttle:10,1');
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive::class.':api'])->group(function () {
     // Proxy to serve attachments with CORS headers for Flutter Web
     Route::get('/attachments/serve', [TicketController::class, 'serveAttachment']);
 
     // Auth & Profile
     Route::get('/user', [AuthController::class, 'profile']);
     Route::put('/user', [AuthController::class, 'updateProfile']);
-    Route::delete('/user', [AuthController::class, 'deleteAccount']);
+    Route::post('/user/deactivate', [AuthController::class, 'deactivateAccount']);
     Route::post('/user/avatar', [AuthController::class, 'uploadAvatar']);
     Route::post('/user/change-password', [AuthController::class, 'changePassword']);
     Route::post('/fcm-token', [AuthController::class, 'storeFcmToken']);
@@ -81,6 +81,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Admin Device & User Management
     Route::get('/admin/users', [AuthController::class, 'getAdminUsersList']);
+    Route::patch('/admin/users/{user}/status', [AuthController::class, 'updateUserStatus']);
     Route::post('/admin/users/{id}/reset-device', [AuthController::class, 'resetUserDevice']);
     Route::post('/admin/admins/{id}/reset-device', [AuthController::class, 'resetAdminDevice']);
     Route::get('/admin/settings/device-lock', [AuthController::class, 'getDeviceLockSetting']);

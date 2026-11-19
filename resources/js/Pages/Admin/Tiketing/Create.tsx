@@ -272,11 +272,11 @@ export default function Create({ unitList }: WizardProps) {
     );
   }
 
-  function ReviewRow({ label, value }: { label: string; value: React.ReactNode }) {
+  function ReviewRow({ label, value, multiline = false }: { label: string; value: React.ReactNode; multiline?: boolean }) {
     return (
-      <div className="flex justify-between items-center py-0.5 border-b border-dashed border-slate-100 last:border-0">
+      <div className={`flex justify-between py-0.5 border-b border-dashed border-slate-100 last:border-0 ${multiline ? 'items-start gap-2' : 'items-center'}`}>
         <span className="text-slate-500">{label}</span>
-        <span className="font-medium text-right max-w-[60%] truncate">{value}</span>
+        <span className={`font-medium text-right max-w-[60%] ${multiline ? 'whitespace-pre-wrap wrap-anywhere' : 'truncate'}`}>{value}</span>
       </div>
     );
   }
@@ -469,7 +469,7 @@ export default function Create({ unitList }: WizardProps) {
                                 displayValue = String(value);
                               }
 
-                              return <ReviewRow key={field.id} label={field.label} value={displayValue} />;
+                              return <ReviewRow key={field.id} label={field.label} value={displayValue} multiline={field.tipe_field === 'teks_panjang'} />;
                             })}
                         </ReviewSection>
                       )}

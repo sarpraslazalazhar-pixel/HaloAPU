@@ -7,200 +7,279 @@ use App\Models\Admin;
 use App\Models\ChatAttachment;
 use App\Models\Conversation;
 use App\Models\Message;
+use App\Models\MessageRead;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Two-way bridge between the ticket timeline (`ticket_logs`) and the shared
+ * chat rooms (`conversations`/`messages`).
+ *
+ * Identity is `messages.ticket_log_id`: one reply log maps to exactly one chat
+ * message, so identical text, attachment-only replies and replayed imports can
+ * never be mistaken for each other or duplicated.
+ */
 class TicketChatBridgeService
 {
     /**
-     * Sinkronkan balasan dari tiket (Mobile / Web Ticket Detail) ke ruang percakapan Chat Web.
-     *
-     * @param Ticket $ticket
-     * @param TicketLog $log
-     * @return Message|null
+     * Mirror one ticket reply into its chat room. Returns null when the ticket
+     * has no requester identity (legacy admin-only rows).
      */
     public static function syncTicketReplyToChat(Ticket $ticket, TicketLog $log): ?Message
     {
-        try {
-            $userId = (int) $ticket->user_id;
-            if (!$userId) {
-                return null;
-            }
+        $userId = $ticket->user_id ? (int) $ticket->user_id : null;
+        $createdByAdminId = $ticket->created_by_admin_id ? (int) $ticket->created_by_admin_id : null;
 
-            $body = trim((string) $log->catatan);
-            if (empty($body) && $log->attachments && $log->attachments->isNotEmpty()) {
-                $body = '[Lampiran Tiket]';
-            }
+        if (! $userId && ! $createdByAdminId) {
+            return null;
+        }
 
-            // Chat is per ticket now, so a timeline reply lands in that ticket's room.
+        if ($log->admin_id) {
+            $senderType = Admin::class;
+            $senderId = (int) $log->admin_id;
+        } elseif ($userId) {
+            $senderType = User::class;
+            $senderId = $userId;
+        } else {
+            $senderType = Admin::class;
+            $senderId = $createdByAdminId;
+        }
+
+        $body = trim((string) $log->catatan);
+        $log->loadMissing('attachments');
+        if ($body === '' && $log->attachments->isNotEmpty()) {
+            $body = '[Lampiran Tiket]';
+        }
+
+        $ts = $log->timestamp ?? now();
+
+        [$message, $created] = DB::transaction(function () use ($ticket, $log, $userId, $createdByAdminId, $senderType, $senderId, $body, $ts) {
             $conversation = Conversation::firstOrCreate(
                 ['type' => 'ticket', 'ticket_id' => $ticket->id],
                 [
                     'user_id' => $userId,
                     'admin_one_id' => $ticket->assigned_admin_id,
-                    'last_message_at' => now(),
+                    'admin_two_id' => $createdByAdminId,
+                    'last_message_at' => $ts,
                 ]
             );
 
-            $alreadyBridged = Message::where('conversation_id', $conversation->id)
-                ->where('body', $body)
-                ->where('created_at', '>=', now()->subSeconds(10))
-                ->exists();
+            /** @var Message $message */
+            $message = Message::withTrashed()->firstOrCreate(
+                ['ticket_log_id' => $log->id],
+                [
+                    'conversation_id' => $conversation->id,
+                    'sender_type' => $senderType,
+                    'sender_id' => $senderId,
+                    'ticket_id' => $ticket->id,
+                    'body' => $body,
+                    'created_at' => $ts,
+                    'updated_at' => $ts,
+                ]
+            );
 
-            if ($alreadyBridged) {
-                return null;
+            ChatInboxService::copyLogAttachments($log, $message);
+
+            if (! $message->wasRecentlyCreated) {
+                return [$message, false];
             }
 
-            $chatMessage = Message::create([
-                'conversation_id' => $conversation->id,
-                'sender_type' => $log->admin_id ? Admin::class : User::class,
-                'sender_id' => $log->admin_id ? (int) $log->admin_id : $userId,
-                'ticket_id' => $ticket->id,
-                'body' => $body,
-            ]);
+            MessageRead::firstOrCreate([
+                'message_id' => $message->id,
+                'user_type' => $senderType,
+                'user_id' => $senderId,
+            ], ['read_at' => $ts]);
 
-            if ($log->attachments && $log->attachments->isNotEmpty()) {
-                foreach ($log->attachments as $att) {
-                    ChatAttachment::create([
-                        'message_id' => $chatMessage->id,
-                        'file_name' => $att->original_name ?: basename($att->file_path),
-                        'file_path' => $att->file_path,
-                        'file_type' => $att->mime_type ?: 'application/octet-stream',
-                        'file_size' => (int) ($att->file_size ?: 0),
-                    ]);
-                }
+            if ($conversation->last_message_at === null || $ts->gt($conversation->last_message_at)) {
+                $conversation->updateQuietly(['last_message_at' => $ts]);
             }
 
-            $conversation->update(['last_message_at' => now()]);
+            return [$message, true];
+        });
 
-            try {
-                broadcast(new ChatMessageSent($chatMessage))->toOthers();
-            } catch (\Throwable $be) {
-                // Socket offline: the message is still persisted.
-            }
-
-            $firstMessage = $chatMessage;
-
-            return $firstMessage;
-        } catch (\Throwable $e) {
-            Log::error("TicketChatBridgeService Error (syncTicketReplyToChat): " . $e->getMessage(), [
-                'ticket_id' => $ticket->id ?? null,
-                'log_id' => $log->id ?? null,
-            ]);
-            return null;
+        if ($created) {
+            self::afterCommit(fn () => self::emitChatMessage($message));
         }
+
+        return $message;
     }
 
     /**
-     * Sinkronkan pesan dari ruang Chat Web ke riwayat tiket (agar muncul di mobile & web timeline).
-     *
-     * @param Message $message
-     * @return TicketLog|null
+     * Mirror one chat message into the ticket timeline. Only ticket rooms are
+     * mirrored; direct conversations keep their old behaviour.
      */
     public static function syncChatMessageToTicket(Message $message): ?TicketLog
     {
-        try {
-            $ticketId = $message->ticket_id;
+        $conversation = $message->conversation;
 
-            // Jika tidak langsung ada ticket_id, cari dari reply pesan atau percakapan user
-            if (!$ticketId && $message->reply_to_message_id) {
-                $parent = Message::find($message->reply_to_message_id);
-                if ($parent && $parent->ticket_id) {
-                    $ticketId = $parent->ticket_id;
-                    $message->update(['ticket_id' => $ticketId]);
+        // A ticket room always owns one ticket; direct rooms keep the legacy
+        // resolution (explicit tag, reply parent, then the requester's ticket).
+        if ($conversation && $conversation->type === 'ticket' && $conversation->ticket_id) {
+            $ticket = $conversation->ticket;
+
+            if (! $ticket) {
+                return null;
+            }
+        } else {
+            $ticket = self::resolveLegacyTicket($message);
+
+            if (! $ticket) {
+                return null;
+            }
+        }
+
+        [$log, $created] = DB::transaction(function () use ($message, $ticket) {
+            /** @var Message $locked */
+            $locked = Message::whereKey($message->getKey())->lockForUpdate()->firstOrFail();
+
+            if ($locked->ticket_id !== $ticket->id) {
+                $locked->update(['ticket_id' => $ticket->id]);
+            }
+
+            if ($locked->ticket_log_id) {
+                $existing = TicketLog::find($locked->ticket_log_id);
+
+                if ($existing) {
+                    return [$existing, false];
                 }
             }
 
-            if (!$ticketId) {
-                $conversation = $message->conversation;
-                if ($conversation && $conversation->user_id) {
-                    // Cari tiket yang pernah disebut di percakapan ini
-                    $ticketId = Message::where('conversation_id', $conversation->id)
-                        ->whereNotNull('ticket_id')
-                        ->latest('id')
-                        ->value('ticket_id');
-
-                    // Jika belum pernah disebut, cari tiket aktif milik user
-                    if (!$ticketId) {
-                        $ticketId = Ticket::where('user_id', $conversation->user_id)
-                            ->whereIn('status', ['open', 'on_proses', 'pending', 'need_revision'])
-                            ->latest('updated_at')
-                            ->value('id');
-                    }
-
-                    // Fallback ke tiket terbaru apapun milik user ini
-                    if (!$ticketId) {
-                        $ticketId = Ticket::where('user_id', $conversation->user_id)
-                            ->latest('id')
-                            ->value('id');
-                    }
-
-                    if ($ticketId) {
-                        $message->update(['ticket_id' => $ticketId]);
-                    }
-                }
-            }
-
-            if (!$ticketId) {
-                return null;
-            }
-
-            $ticket = Ticket::find($ticketId);
-            if (!$ticket) {
-                return null;
-            }
-
-            $body = trim((string) $message->body);
-            if (empty($body) && $message->attachments()->exists()) {
+            $attachments = $locked->attachments;
+            $body = trim((string) $locked->body);
+            if ($body === '' && $attachments->isNotEmpty()) {
                 $body = '[Lampiran Chat]';
             }
 
-            // Cegah duplikasi jika log persis sama baru saja dibuat < 10 detik
-            $alreadyBridged = TicketLog::where('ticket_id', $ticket->id)
-                ->where('catatan', $body)
-                ->where('timestamp', '>=', now()->subSeconds(10))
-                ->exists();
+            $isAdmin = $locked->sender_type === Admin::class;
 
-            if ($alreadyBridged) {
-                return null;
-            }
-
-            $isAdmin = $message->sender_type === Admin::class;
-
-            $log = TicketLog::create([
+            $log = TicketLog::createQuietly([
                 'ticket_id' => $ticket->id,
-                'admin_id' => $isAdmin ? $message->sender_id : null,
+                'admin_id' => $isAdmin ? $locked->sender_id : null,
                 'aksi' => 'balasan',
                 'catatan' => $body,
                 'timestamp' => now(),
             ]);
 
-            // Salin lampiran chat jika ada
-            $attachments = $message->attachments;
-            if ($attachments && $attachments->isNotEmpty()) {
-                foreach ($attachments as $att) {
-                    TicketAttachment::create([
-                        'ticket_id' => $ticket->id,
-                        'field_id' => null,
-                        'ticket_log_id' => $log->id,
-                        'file_path' => $att->file_path,
-                        'original_name' => $att->file_name,
-                        'mime_type' => $att->file_type,
-                        'file_size' => (int) ($att->file_size ?: 0),
-                        'wajib' => false,
-                    ]);
-                }
+            foreach ($attachments as $att) {
+                TicketAttachment::create([
+                    'ticket_id' => $ticket->id,
+                    'field_id' => null,
+                    'ticket_log_id' => $log->id,
+                    'file_path' => $att->file_path,
+                    'original_name' => $att->file_name,
+                    'mime_type' => $att->file_type,
+                    'file_size' => (int) ($att->file_size ?: 0),
+                    'wajib' => false,
+                ]);
             }
 
-            return $log;
-        } catch (\Throwable $e) {
-            Log::error("TicketChatBridgeService Error (syncChatMessageToTicket): " . $e->getMessage(), [
-                'message_id' => $message->id ?? null,
-            ]);
-            return null;
+            $locked->update(['ticket_log_id' => $log->id]);
+
+            return [$log, true];
+        });
+
+        if ($created) {
+            $log->loadMissing(['admin', 'attachments']);
+            self::afterCommit(fn () => $log->broadcastTimeline());
         }
+
+        return $log;
+    }
+
+    /**
+     * Legacy direct-room resolution, kept for non-ticket conversations.
+     */
+    private static function resolveLegacyTicket(Message $message): ?Ticket
+    {
+        $ticketId = $message->ticket_id;
+
+        if (! $ticketId && $message->conversation?->ticket_id) {
+            $ticketId = $message->conversation->ticket_id;
+            $message->update(['ticket_id' => $ticketId]);
+        }
+
+        if (! $ticketId && $message->reply_to_message_id) {
+            $parent = Message::find($message->reply_to_message_id);
+            if ($parent && $parent->ticket_id) {
+                $ticketId = $parent->ticket_id;
+                $message->update(['ticket_id' => $ticketId]);
+            }
+        }
+
+        if (! $ticketId) {
+            $conversation = $message->conversation;
+            if ($conversation && $conversation->user_id) {
+                $ticketId = Message::where('conversation_id', $conversation->id)
+                    ->whereNotNull('ticket_id')
+                    ->latest('id')
+                    ->value('ticket_id');
+
+                if (! $ticketId) {
+                    $ticketId = Ticket::where('user_id', $conversation->user_id)
+                        ->whereIn('status', ['open', 'on_proses', 'pending', 'need_revision'])
+                        ->latest('updated_at')
+                        ->value('id');
+                }
+
+                if (! $ticketId) {
+                    $ticketId = Ticket::where('user_id', $conversation->user_id)
+                        ->latest('id')
+                        ->value('id');
+                }
+
+                if ($ticketId) {
+                    $message->update(['ticket_id' => $ticketId]);
+                }
+            }
+        }
+
+        return $ticketId ? Ticket::find($ticketId) : null;
+    }
+
+    /**
+     * Create a reply log that already knows its chat message, so the timeline
+     * event fires once after files and the link are committed.
+     */
+    public static function createReplyLog(Ticket $ticket, ?Admin $admin, string $body): TicketLog
+    {
+        return TicketLog::createQuietly([
+            'ticket_id' => $ticket->id,
+            'admin_id' => $admin?->id,
+            'aksi' => 'balasan',
+            'catatan' => $body,
+            'timestamp' => now(),
+        ]);
+    }
+
+    /**
+     * Run a broker emit after the surrounding transaction commits (immediately
+     * when there is no transaction). Broker failures never undo stored data.
+     */
+    public static function afterCommit(callable $callback): void
+    {
+        $run = function () use ($callback) {
+            try {
+                $callback();
+            } catch (\Throwable $e) {
+                Log::warning('Realtime emit failed: '.$e->getMessage());
+            }
+        };
+
+        if (DB::transactionLevel() > 0) {
+            DB::afterCommit($run);
+
+            return;
+        }
+
+        $run();
+    }
+
+    public static function emitChatMessage(Message $message): void
+    {
+        broadcast(new ChatMessageSent($message))->toOthers();
     }
 }

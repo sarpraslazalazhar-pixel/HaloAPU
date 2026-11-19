@@ -8,172 +8,239 @@ use Illuminate\Support\Facades\DB;
 
 class FormFieldSeeder extends Seeder
 {
-    // sub_unit IDs are deterministic based on SubUnitSeeder order:
-    // 1=Peminjaman Alat, 2=Penggunaan Ruangan, 3=Penggunaan Kendaraan,
-    // 4=Pengadaan Jasa & Barang, 5=Perbaikan & Perawatan, 6=Perpanjang Pajak,
-    // 7=Support SDM(GA), 8=Request Akun Donasi, 9=Data Sistem Penerimaan,
-    // 10=Void Bukti Setor, 11=Akun & Reset Sandi, 12=Penggunaan Link Zoom,
-    // 13=Maintenance HW/SW, 14=Support SDM(IT), 15=Editing & Produksi Video,
-    // 16=Pengajuan Desain Grafis, 17=Dokumentasi Event/Kegiatan
-
+    // Mirrors the 109 form_fields rows in apudevid_haloapu.sql.
     public function run(): void
     {
         DB::table('form_fields')->truncate();
 
-        $fields = [
-            // Peminjaman Alat (sub_unit_id: 1)
-            [1, 'Aturan Peminjaman Alat Bila terjadi kerusakan yang bertanggung jawab adalah peminjam. Alat yang dipinjam dikembalikan dalam keadaan bersih dan rapih.', 'info_peraturan', false, [], null, null, 1],
-            [1, 'Pilih Alat',        'multi_pilih',  true, ['Peralatan Live Streaming','Infokus','Infokus Portabel','TV','Kabel Roll','Kabel HDMI','Screen Infokus','Printer','Sound Portabel','HT Baofeng','Termos Listrik','Yang lain:'], null, null, 3],
-            [1, 'Tujuan Penggunaan',  'teks_pendek',  true, [], null, null, 4],
-            [1, 'Lokasi Penggunaan',  'teks_pendek',  true, [], null, null, 5],
-            [1, 'Tanggal Mulai',      'tanggal',      true, [], null, null, 6],
-            [1, 'Tanggal Selesai',    'tanggal',      true, [], null, null, 7],
-            [1, 'Keterangan Tambahan','teks_panjang', false, [], null, null, 8],
+        $subUnitIds = [];
+        foreach (DB::table('sub_units')
+            ->join('units', 'units.id', '=', 'sub_units.unit_id')
+            ->get(['units.nama_unit', 'sub_units.nama_layanan', 'sub_units.id']) as $subUnit) {
+            $subUnitIds[$subUnit->nama_unit][$subUnit->nama_layanan] = $subUnit->id;
+        }
 
-            // Penggunaan Ruangan (sub_unit_id: 2)
-            [2, 'Pilih Ruangan',       'dropdown',    true, ['Meeting Room LAZ Cirendeu','Meeting Room RGI Depok','Ruang SCC RGI Depok','Aula Nurhayati RGI Depok','Meeting Room LAZ Pusat','Dasamas Center Bogor Utara'], null, null, 1],
-            [2, 'Tanggal Pakai',       'tanggal',     true, [], null, null, 2],
-            [2, 'Jam Mulai',           'waktu',       true, [], null, null, 3],
-            [2, 'Jam Selesai',         'waktu',       true, [], null, null, 4],
-            [2, 'Jumlah Peserta',      'angka',       true, [], null, null, 5],
-            [2, 'Keterangan Tambahan', 'teks_panjang', false, [], null, null, 6],
-
-            // Penggunaan Kendaraan (sub_unit_id: 3)
-            [3, 'Pilih Kendaraan',               'dropdown',    true, ['Panther','APV','Grand Max','ELF','Innova Silver','Innova Putih'], null, null, 1],
-            [3, 'Lokasi Tujuan',                 'teks_pendek', true, [], null, null, 2],
-            [3, 'Tanggal Peminjaman',            'tanggal',     true, [], null, null, 3],
-            [3, 'Waktu Pengajuan',               'waktu',       true, [], null, null, 4],
-            [3, 'Waktu Pengembalian',            'waktu',       true, [], null, null, 5],
-            [3, 'Jumlah Penumpang',              'angka',       false, [], null, null, 6],
-            [3, 'Keterangan Tambahan',           'teks_panjang',false, [], null, null, 7],
-            [3, 'Keperluan Penggunaan Kendaraan', 'dropdown',   true, ['Tugas Dinas','Tugas Non Dinas'], null, null, 8],
-            // child of "Keperluan Penggunaan Kendaraan" — parent label resolved by name
-            [3, 'Upload SIM', 'upload_file', true, [], 'Keperluan Penggunaan Kendaraan', 'Tugas Non Dinas', 9],
-
-            // Pengadaan Jasa & Barang (sub_unit_id: 4)
-            [4, 'Nama Barang/Jasa',    'teks_pendek',  true, [], null, null, 1],
-            [4, 'Spesifikasi Detai',   'teks_panjang', true, [], null, null, 2],
-            [4, 'Keterangan Tambahan', 'teks_panjang', false, [], null, null, 3],
-
-            // Perbaikan & Perawatan (sub_unit_id: 5)
-            [5, 'Lokasi/Area',         'teks_pendek',  true, [], null, null, 1],
-            [5, 'Kategori',            'multi_pilih',  true, ['Kelistrikan','Sanitasi/Air','AC/Pendingin','Mebel/Furniture','IT/Jaringan','Layanan Lainnya'], null, null, 2],
-            [5, 'Keterangan Tambahan', 'teks_panjang', false, [], null, null, 3],
-
-            // Perpanjang Pajak (sub_unit_id: 6)
-            [6, 'Jenis Pajak',          'multi_pilih', true, ['Perpanjangan Pajak Tahunan','Perpanjangan STNK 5 Tahunan','Ganti Plat Nomor','Balik Nama,Mutasi Kendaraan','Lainnya'], null, null, 1],
-            [6, 'Tanggal Jatuh Tempo',  'tanggal',     true, [], null, null, 2],
-            [6, 'Keterangan Tambahan',  'teks_panjang',false, [], null, null, 3],
-
-            // Support SDM GA (sub_unit_id: 7)
-            [7, 'Tanggal Selesai',      'tanggal',     true, [], null, null, 1],
-            [7, 'Tanggal Selesai',      'tanggal',     true, [], null, null, 2],
-            [7, 'Keterangan Tambahan',  'teks_panjang',false, [], null, null, 3],
-
-            // Request Akun Donasi (sub_unit_id: 8)
-            [8, 'Nama Akun Donasi',    'teks_pendek',  true, [], null, null, 1],
-            [8, 'Jenis Campaign',      'dropdown',     true, ['Admin','CrowdFunding'], null, null, 2],
-            [8, 'Target Donasi',       'nominal_rp',   true, [], null, null, 3],
-            [8, 'Tanggal Donasi',      'tanggal',      true, [], null, null, 4],
-            [8, 'Keterangan Tambahan', 'teks_panjang', false, [], null, null, 5],
-            [8, 'Data Copywriting',    'upload_file',  true, [], null, null, 6],
-
-            // Data Sistem Penerimaan (sub_unit_id: 9)
-            [9, 'Jenis Data',             'dropdown',    true, ['Rekap Donatur','Data Donatur','Data Transaksi','Lainnya'], null, null, 1],
-            [9, 'Jika Lainnya',           'teks_pendek', true, [], 'Jenis Data', 'Lainnya', 2],
-            [9, 'Data dari Tanggal',      'tanggal',     true, [], null, null, 3],
-            [9, 'Data sampai Tanggal',    'tanggal',     true, [], null, null, 4],
-            [9, 'Keterangan Tambahan',    'teks_panjang',false, [], null, null, 5],
-
-            // Void Bukti Setor (sub_unit_id: 10)
-            [10, 'NO KWITANSI',        'teks_panjang', true, [], null, null, 1],
-            [10, 'Nama Donatur',       'teks_pendek',  true, [], null, null, 2],
-            [10, 'Tanggal Transaksi',  'tanggal',      true, [], null, null, 3],
-            [10, 'Nominal',            'nominal_rp',   true, [], null, null, 4],
-            [10, 'Keterangan Tambahan','teks_panjang', false, [], null, null, 5],
-
-            // Akun & Reset Sandi (sub_unit_id: 11)
-            [11, 'Sistem/Aplikasi',     'multi_pilih', true, ['Admin (Penerimaan & Penyaluran)','POS','Surveyor','HRIS','Email','Cloud','Sistem Asset'], null, null, 1],
-            [11, 'Username/Email',      'teks_pendek', true, [], null, null, 2],
-            [11, 'Jenis Ajuan',         'dropdown',    true, ['Buat Baru','Reset Sandi','Hapus'], null, null, 3],
-            [11, 'Keterangan Tambahan', 'teks_panjang',false, [], null, null, 4],
-
-            // Penggunaan Link Zoom (sub_unit_id: 12)
-            [12, 'Room Zoom dibuka 30 menit sebelum acara dimulai Harap Hubungi tim IT jika 30 menit sebelum acara room zoom belum di buka.', 'info_peraturan', false, [], null, null, 1],
-            [12, 'Tipe Zoom',            'dropdown',    true, ['Zoom Meeting Standar','Zoom Hybird (Offline dan Online)'], null, null, 2],
-            [12, 'Tanggal Penggunaan',   'tanggal',     true, [], null, null, 3],
-            [12, 'Jam Mulai',            'waktu',       true, [], null, null, 4],
-            [12, 'Jam Selesai',          'waktu',       true, [], null, null, 5],
-            [12, 'Topik Meeting',        'teks_pendek', true, [], null, null, 6],
-            [12, 'Keterangan Tambahan',  'teks_pendek', false, [], null, null, 7],
-
-            // Maintenance Hardware & Software (sub_unit_id: 13)
-            [13, 'Jenis Bantuan', 'dropdown', true, ['Hardware','Software'], null, null, 1],
-            [13, 'Hardware',      'dropdown', true, ['Laptop','Desktop PC','Printer','Scanner','Monitor','Smartphone','Tablet','Server','CCTV','Access Point / WiFi','Proyektor','Lainnya'], 'Jenis Bantuan', 'Hardware', 2],
-            [13, 'Software',      'dropdown', true, ['Instalasi Software','Update Software','Aktivasi Lisensi','Microsoft Office','Windows Error','Antivirus','Lainnya'], 'Jenis Bantuan', 'Software', 3],
-
-            // Support SDM IT (sub_unit_id: 14)
-            [14, 'Jenis Support',        'dropdown',    true, ['Surat Keterangan','Slip Gaji','Perubahan Data'], null, null, 1],
-            [14, 'Nama Karyawan',        'teks_pendek', true, [], null, null, 2],
-            [14, 'Keterangan Tambahan',  'teks_panjang',false, [], null, null, 3],
-
-            // Editing & Produksi Video (sub_unit_id: 15)
-            [15, 'Judul/Tema Video',     'teks_pendek',  true, [], null, null, 1],
-            [15, 'Tanggal Pengajuan',    'tanggal',      true, [], null, null, 2],
-            [15, 'Durasi Estimasi',      'dropdown',     true, ['1 Menit','3 Menit','5 Menit','>5 Menit'], null, null, 3],
-            [15, 'Ukuran Video',         'dropdown',     true, ['Landscape','Portrait'], null, null, 4],
-            [15, 'Deadline Tayang',      'tanggal',      true, [], null, null, 5],
-            [15, 'Link Referensi',       'teks_pendek',  false, [], null, null, 6],
-            [15, 'Jenis Video',          'dropdown',     true, ['Event,Profile','Reels','Motion Graphic','Testimoni','Lainnya'], null, null, 7],
-            [15, 'Jenis Video Lainnya',  'teks_panjang', true, [], 'Jenis Video', 'Lainnya', 8],
-            [15, 'Brief Video',          'teks_panjang', true, [], null, null, 9],
-            [15, 'Brief Dokumen / Referensi', 'upload_file', false, [], null, null, 10],
-            [15, 'Keterangan Tambahan',  'teks_panjang', false, [], null, null, 11],
-
-            // Pengajuan Desain Grafis (sub_unit_id: 16)
-            [16, 'Jenis Desain',          'dropdown',    true, ['Banner','Feed IG','Poster','Brosur','Custom'], null, null, 1],
-            [16, 'Tanggal Pengajuan',     'tanggal',     true, [], null, null, 2],
-            [16, 'Ukuran (px/cm)',        'teks_pendek', true, [], null, null, 3],
-            [16, 'Jenis Produksi Desain', 'dropdown',    true, ['Feed Instagram / Meme','Spanduk','Backdrop','Roll/X Banner','Mockup Penyerahan','Standing Frame','Umbul-Umbul','Stiker','Sertifikat','Proposal','Laporan','Akrilik','Thumbnail Campaign','Meme Al-Kisah','Banner Website','Banner Umum','Lainnya'], null, null, 4],
-            [16, 'Jika lainnya',          'teks_pendek', true, [], 'Jenis Produksi Desain', 'Lainnya', 5],
-            [16, 'Tujuan Penggunaan',     'teks_panjang',true, [], null, null, 6],
-            [16, 'Brief Materi',          'teks_panjang',true, [], null, null, 7],
-            [16, 'Brief Dokumen',         'upload_file', true, [], null, null, 8],
-            [16, 'Jumlah Produksi',       'angka',       true, [], null, null, 9],
-            [16, 'Distribusi',            'dropdown',    true, ['Instagram','Facebook','Website','WhatsApp','Email','Cetak','Internal','Eksternal','Lainnya'], null, null, 10],
-            [16, 'Jika Lainnya',          'teks_pendek', true, [], 'Distribusi', 'Lainnya', 11],
-            [16, 'Deadline',              'tanggal',     true, [], null, null, 12],
-            [16, 'Keterangan Tambahan',   'teks_panjang',false, [], null, null, 13],
-
-            // Dokumentasi Event/Kegiatan (sub_unit_id: 17)
-            [17, 'Jenis Support',        'dropdown',    true, ['Surat Keterangan','Slip Gaji','Perubahan Data'], null, null, 1],
-            [17, 'Nama Karyawan',        'teks_pendek', true, [], null, null, 2],
-            [17, 'Keterangan Tambahan',  'teks_panjang',false, [], null, null, 3],
+        $forms = [
+            ['GA', 'Peminjaman Alat', [
+                ['Aturan Peminjaman Alat Bila terjadi kerusakan yang bertanggung jawab adalah peminjam. Alat yang dipinjam dikembalikan dalam keadaan bersih dan rapih.', 'info_peraturan', false, [], 1],
+                ['Pilih Alat', 'multi_pilih', true, ['Peralatan Live Streaming', 'Infokus', 'Infokus Portabel', 'TV', 'Kabel Roll', 'Kabel HDMI', 'Screen Infokus', 'Printer', 'Sound Portabel', 'HT Baofeng', 'Termos Listrik', 'Yang lain:'], 3],
+                ['Tujuan Penggunaan', 'teks_pendek', true, [], 4],
+                ['Lokasi Penggunaan', 'teks_pendek', true, [], 5],
+                ['Tanggal Mulai', 'tanggal', true, [], 6],
+                ['Tanggal Selesai', 'tanggal', true, [], 7],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 8],
+            ]],
+            ['GA', 'Penggunaan Ruangan', [
+                ['Pilih Ruangan', 'dropdown', true, ['Ruang Rapat Cirendeu', 'Ruang Rapat RGI', 'Ruang SCC RGI', 'Aula Nurhayati RGI', 'Ruang Rapat Pusat', 'Dasamas Center'], 1],
+                ['Tanggal Pakai', 'tanggal', true, [], 2],
+                ['Jam Mulai', 'waktu', true, [], 3],
+                ['Jam Selesai', 'waktu', true, [], 4],
+                ['Jumlah Peserta', 'angka', true, [], 5],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 6],
+            ]],
+            ['GA', 'Penggunaan Kendaraan', [
+                ['Pilih Kendaraan', 'dropdown', true, ['Panther', 'APV', 'Grand Max', 'ELF', 'Innova Silver', 'Innova Putih'], 1],
+                ['Lokasi Tujuan', 'teks_pendek', true, [], 2],
+                ['Tanggal Peminjaman', 'tanggal', true, [], 3],
+                ['Waktu Pengajuan', 'waktu', true, [], 4],
+                ['Waktu Pengembalian', 'waktu', true, [], 5],
+                ['Jumlah Penumpang', 'angka', false, [], 7],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 10],
+                ['Keperluan Penggunaan Kendaraan', 'dropdown', true, ['Tugas Dinas', 'Tugas Non Dinas'], 9],
+                ['Upload SIM', 'upload_file', true, [], 9, 'Keperluan Penggunaan Kendaraan', 'Tugas Non Dinas'],
+            ]],
+            ['GA', 'Pengadaan Jasa & Barang', [
+                ['Nama Barang/Jasa', 'teks_pendek', true, [], 1],
+                ['Spesifikasi Detai', 'teks_panjang', true, [], 2],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 3],
+            ]],
+            ['GA', 'Perbaikan & Perawatan', [
+                ['Lokasi/Area', 'teks_pendek', true, [], 1],
+                ['Kategori', 'multi_pilih', true, ['Kelistrikan', 'Sanitasi/Air', 'AC/Pendingin', 'Mebel/Furniture', 'Kendaraan', 'Layanan Lainnya'], 2],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 3],
+            ]],
+            ['GA', 'Perpanjang Pajak', [
+                ['Jenis Pajak', 'multi_pilih', true, ['Perpanjangan Pajak Tahunan', 'Perpanjangan STNK 5 Tahunan', 'Ganti Plat Nomor', 'Balik Nama,Mutasi Kendaraan', 'Lainnya'], 1],
+                ['Tanggal Jatuh Tempo', 'tanggal', true, [], 2],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 3],
+            ]],
+            ['GA', 'Support SDM', [
+                ['Tanggal Mulai', 'tanggal', true, [], 2],
+                ['Tanggal Selesai', 'tanggal', true, [], 3],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 4],
+            ]],
+            ['IT', 'Request Akun Donasi', [
+                ['Nama Akun Donasi', 'teks_pendek', true, [], 1],
+                ['Jenis Campaign', 'dropdown', true, ['Admin', 'CrowdFunding'], 2],
+                ['Target Donasi', 'nominal_rp', true, [], 3],
+                ['Tanggal Donasi', 'tanggal', true, [], 4],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 5],
+                ['Data Copywriting', 'upload_file', true, [], 6],
+            ]],
+            ['IT', 'Data Sistem Penerimaan', [
+                ['Jenis Data', 'dropdown', true, ['Rekap Donatur', 'Data Donatur', 'Data Transaksi', 'Lainnya'], 1],
+                ['Jika Lainnya', 'teks_pendek', true, [], 2, 'Jenis Data', 'Lainnya'],
+                ['Data dari Tanggal', 'tanggal', true, [], 3],
+                ['Data sampai Tanggal', 'tanggal', true, [], 4],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 5],
+            ]],
+            ['IT', 'Void Bukti Setor', [
+                ['NO KWITANSI', 'teks_panjang', true, [], 1],
+                ['Nama Donatur', 'teks_pendek', true, [], 2],
+                ['Tanggal Transaksi', 'tanggal', true, [], 3],
+                ['Nominal', 'nominal_rp', true, [], 4],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 5],
+            ]],
+            ['IT', 'Akun & Reset Sandi', [
+                ['Sistem/Aplikasi', 'multi_pilih', true, ['Admin (Penerimaan & Penyaluran)', 'POS', 'Surveyor', 'HRIS', 'Email', 'Cloud', 'Sistem Asset'], 1],
+                ['Username/Email', 'teks_pendek', true, [], 2],
+                ['Jenis Ajuan', 'dropdown', true, ['Buat Baru', 'Reset Sandi', 'Hapus'], 3],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 4],
+            ]],
+            ['IT', 'Penggunaan Link Zoom', [
+                ['Room Zoom dibuka 30 menit sebelum acara dimulai Harap Hubungi tim IT jika 30 menit sebelum acara room zoom belum di buka.', 'info_peraturan', false, [], 1],
+                ['Tipe Zoom', 'dropdown', true, ['Zoom Meeting Standar', 'Zoom Hybird (Offline dan Online)'], 2],
+                ['Tanggal Penggunaan', 'tanggal', true, [], 3],
+                ['Jam Mulai', 'waktu', true, [], 4],
+                ['Jam Selesai', 'waktu', true, [], 5],
+                ['Topik Meeting', 'teks_pendek', true, [], 6],
+                ['Keterangan Tambahan', 'teks_pendek', false, [], 7],
+            ]],
+            ['IT', 'Maintenance Hardware & Software', [
+                ['Jenis Bantuan', 'dropdown', true, ['Hardware', 'Software'], 1],
+                ['Hardware', 'dropdown', true, ['Laptop', 'Desktop PC', 'Printer', 'Scanner', 'Monitor', 'Smartphone', 'Tablet', 'Server', 'CCTV', 'Access Point / WiFi', 'Proyektor', 'Lainnya'], 2, 'Jenis Bantuan', 'Hardware'],
+                ['Software', 'dropdown', true, ['Instalasi Software', 'Update Software', 'Aktivasi Lisensi', 'Microsoft Office', 'Windows Error', 'Antivirus', 'Lainnya'], 3, 'Jenis Bantuan', 'Software'],
+            ]],
+            ['IT', 'Support SDM', [
+                ['Tanggal Mulai', 'tanggal', true, [], 2],
+                ['Tanggal Selesai', 'tanggal', true, [], 3],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 4],
+            ]],
+            ['Humas', 'Editing & Produksi Video', [
+                ['Judul/Tema Video', 'teks_pendek', true, [], 1],
+                ['Tanggal Pengajuan', 'tanggal', true, [], 2],
+                ['Durasi Estimasi', 'dropdown', true, ['1 Menit', '3 Menit', '5 Menit', '>5 Menit'], 4],
+                ['Ukuran Video', 'dropdown', true, ['Landscape', 'Portrait'], 5],
+                ['Link Referensi', 'teks_pendek', false, [], 6],
+                ['Jenis Video', 'dropdown', true, ['Event,Profile', 'Reels', 'Motion Graphic', 'Testimoni', 'Lainnya'], 7],
+                ['Jenis Video Lainnya', 'teks_panjang', true, [], 8, 'Jenis Video', 'Lainnya'],
+                ['Brief Video', 'teks_panjang', true, [], 8],
+                ['Brief Dokumen / Referensi', 'upload_file', false, [], 9],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 10],
+            ]],
+            ['Humas', 'Pengajuan Desain Grafis', [
+                ['Jenis Desain', 'dropdown', true, ['Banner', 'Feed IG', 'Poster', 'Brosur', 'Custom'], 1],
+                ['Tanggal Pengajuan', 'tanggal', true, [], 2],
+                ['Ukuran (px/cm)', 'teks_pendek', false, [], 4],
+                ['Jenis Produksi Desain', 'dropdown', true, ['Feed Instagram / Meme', 'Spanduk', 'Backdrop', 'Roll/X Banner', 'Mockup Penyerahan', 'Standing Frame', 'Umbul-Umbul', 'Stiker', 'Sertifikat', 'Proposal', 'Laporan', 'Akrilik', 'Thumbnail Campaign', 'Meme Al-Kisah', 'Banner Website', 'Banner Umum', 'Lainnya'], 5],
+                ['Jika lainnya', 'teks_pendek', true, [], 5, 'Jenis Produksi Desain', 'Lainnya'],
+                ['Tujuan Penggunaan', 'teks_panjang', true, [], 6],
+                ['Brief Materi', 'teks_panjang', true, [], 7],
+                ['Brief Dokumen', 'upload_file', false, [], 8],
+                ['Jumlah Produksi', 'angka', true, [], 9],
+                ['Distribusi', 'dropdown', true, ['Instagram', 'Facebook', 'Website', 'WhatsApp', 'Email', 'Cetak', 'Internal', 'Eksternal', 'Lainnya'], 10],
+                ['Jika Lainnya', 'teks_pendek', true, [], 11, 'Distribusi', 'Lainnya'],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 11],
+            ]],
+            ['Humas', 'Dokumentasi Event/Kegiatan', [
+                ['Tanggal Mulai', 'tanggal', true, [], 2],
+                ['Tanggal Selesai', 'tanggal', true, [], 3],
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 4],
+            ]],
+            ['IT', 'Maintenance Hardware & Software', [
+                ['Keterangan Tambahan', 'teks_panjang', false, [], 4],
+            ]],
+            ['GA', 'Perbaikan & Perawatan', [
+                ['Gambar', 'upload_gambar', false, [], 4],
+            ]],
+            ['GA', 'Penggunaan Kendaraan', [
+                ['Tanggal Selesai (Jika berhari-hari)', 'tanggal', false, [], 6],
+            ]],
+            ['IT', 'Short Link', [
+                ['Tujuan Penggunaan', 'teks_pendek', true, [], 1],
+                ['URL untuk di short', 'teks_panjang', true, [], 2],
+                ['Keterangan tambahan', 'teks_panjang', false, [], 4],
+                ['Tanggal Pemakaian', 'tanggal', false, [], 3],
+            ]],
+            ['GA', 'Peminjaman Alat', [
+                ['nama alat/barang', 'teks_pendek', true, [], 9, 'Pilih Alat', 'Yang lain:'],
+            ]],
+            ['IT', 'Support SDM', [
+                ['Nama Kegiatan', 'teks_pendek', true, [], 1],
+            ]],
+            ['GA', 'Support SDM', [
+                ['Nama Kegiatan', 'teks_pendek', true, [], 1],
+            ]],
+            ['Humas', 'Dokumentasi Event/Kegiatan', [
+                ['Nama Kegiatan', 'teks_pendek', true, [], 1],
+            ]],
+            ['Humas', 'Pengajuan Desain Grafis', [
+                ['Deadline', 'tanggal', true, [], 3],
+            ]],
+            ['Humas', 'Editing & Produksi Video', [
+                ['Deadline', 'tanggal', true, [], 3],
+            ]],
+            ['IT', 'Data Rekaman CCTV', [
+                ['Lokasi', 'dropdown', true, ['Al Azhar Pusat', 'Cirende', 'Al Azhar Bintaro'], 1],
+                ['Tanggal', 'tanggal', true, [], 2],
+                ['Jam Mulai', 'waktu', true, [], 3],
+                ['Jam Akhir', 'waktu', true, [], 4],
+            ]],
         ];
 
-        // Map: sub_unit_id + label => new ID (for parent-child)
-        $idMap = [];
+        $fieldIds = [];
+        foreach ($forms as [$unit, $service, $rows]) {
+            $subUnitId = $subUnitIds[$unit][$service]
+                ?? throw new \RuntimeException("Sub-unit {$unit} / {$service} was not seeded.");
 
-        foreach ($fields as $f) {
-            [$subUnitId, $label, $tipe, $wajib, $opsi, $parentLabel, $trigger, $urutan] = $f;
+            foreach ($rows as $row) {
+                [$label, $type, $required, $options, $order] = $row;
+                $parentLabel = $row[5] ?? null;
+                $parentId = $parentLabel === null ? null : ($fieldIds[$subUnitId][$parentLabel]
+                    ?? throw new \RuntimeException("Cannot resolve parent '{$parentLabel}' for {$unit} / {$service} / {$label}."));
 
-            $parentId = null;
-            if ($parentLabel) {
-                $parentId = $idMap["{$subUnitId}::{$parentLabel}"] ?? null;
+                $field = FormField::create([
+                    'sub_unit_id' => $subUnitId,
+                    'label' => $label,
+                    'tipe_field' => $type,
+                    'wajib' => $required,
+                    'opsi' => $options,
+                    'urutan' => $order,
+                    'parent_field_id' => $parentId,
+                    'trigger_value' => $row[6] ?? null,
+                ]);
+
+                $fieldIds[$subUnitId][$label] = $field->id;
             }
+        }
 
-            $field = FormField::create([
-                'sub_unit_id' => $subUnitId,
-                'label' => $label,
-                'tipe_field' => $tipe,
-                'wajib' => $wajib,
-                'opsi' => $opsi,
-                'parent_field_id' => $parentId,
-                'trigger_value' => $trigger,
-                'urutan' => $urutan,
-            ]);
+        // Monitor references can only be set after the fields have their new IDs.
+        // Labels come from the dump's monitor ids: Ruangan 8/9/10/11, Kendaraan 14/16/97/17/18.
+        $monitors = [
+            ['GA', 'Penggunaan Ruangan', [
+                'monitor_asset_field_id' => 'Pilih Ruangan',
+                'monitor_date_field_id' => 'Tanggal Pakai',
+                'monitor_end_date_field_id' => null,
+                'monitor_start_field_id' => 'Jam Mulai',
+                'monitor_end_field_id' => 'Jam Selesai',
+            ]],
+            ['GA', 'Penggunaan Kendaraan', [
+                'monitor_asset_field_id' => 'Pilih Kendaraan',
+                'monitor_date_field_id' => 'Tanggal Peminjaman',
+                'monitor_end_date_field_id' => 'Tanggal Selesai (Jika berhari-hari)',
+                'monitor_start_field_id' => 'Waktu Pengajuan',
+                'monitor_end_field_id' => 'Waktu Pengembalian',
+            ]],
+        ];
 
-            $idMap["{$subUnitId}::{$label}"] = $field->id;
+        foreach ($monitors as [$unit, $service, $labels]) {
+            $subUnitId = $subUnitIds[$unit][$service];
+            $references = [];
+            foreach ($labels as $column => $label) {
+                $references[$column] = $label === null ? null : ($fieldIds[$subUnitId][$label]
+                    ?? throw new \RuntimeException("Cannot resolve monitor field '{$label}' for {$unit} / {$service}."));
+            }
+            DB::table('sub_units')->where('id', $subUnitId)->update($references);
         }
     }
 }

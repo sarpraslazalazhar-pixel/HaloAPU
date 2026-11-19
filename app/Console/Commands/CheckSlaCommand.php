@@ -20,11 +20,11 @@ class CheckSlaCommand extends Command
     {
         $this->info('Memulai pengecekan SLA...');
 
-        $activeTickets = Ticket::whereIn('status', ['open', 'diajukan', 'baru', 'on_proses', 'in_progress', 'diproses'])
+        $activeStatuses = ['open', 'diajukan', 'baru', 'on_proses', 'in_progress', 'diproses'];
+        $activeTickets = Ticket::whereIn('status', $activeStatuses)
             ->whereHas('slaTracking', function ($q) {
                 $q->whereNull('paused_at');
             })
-            ->with(['slaTracking', 'subUnit.unit', 'unit.admins', 'assignedAdmin'])
             ->get();
 
         $escalated = 0;
@@ -35,13 +35,17 @@ class CheckSlaCommand extends Command
                 $breachNotifications = [];
                 $halfWarningNotifications = [];
 
-                DB::transaction(function () use ($ticket, $slaCalculator, &$breachNotifications, &$halfWarningNotifications) {
-                    $sla = $ticket->slaTracking()->lockForUpdate()->first();
-                    if (!$sla) {
+                DB::transaction(function () use (&$ticket, $activeStatuses, $slaCalculator, &$breachNotifications, &$halfWarningNotifications) {
+                    $lockedTicket = Ticket::lockForUpdate()->find($ticket->id);
+                    if (! $lockedTicket || ! in_array($lockedTicket->status, $activeStatuses, true)) {
                         return;
                     }
-                    
-                    // Prevent N+1 query inside SlaCalculator by setting the already loaded ticket relation
+
+                    $ticket = $lockedTicket;
+                    $sla = $ticket->slaTracking()->lockForUpdate()->first();
+                    if (! $sla || $sla->isPaused()) {
+                        return;
+                    }
                     $sla->setRelation('ticket', $ticket);
 
                     $wasResponseBreached = (bool) $sla->is_response_breached;
@@ -52,12 +56,15 @@ class CheckSlaCommand extends Command
                     // Calculates SLA status and updates tracking model flags
                     $slaCalculator->checkAndUpdateTier($sla);
 
-                    $sla->refresh();
-
                     $isResponseNewlyBreached = !$wasResponseBreached && $sla->is_response_breached;
                     $isResolutionNewlyBreached = !$wasResolutionBreached && $sla->is_resolution_breached;
                     $isResponseNewlyHalfWarned = !$wasResponseHalfWarned && $sla->is_response_half_warned && !$sla->is_response_breached;
                     $isResolutionNewlyHalfWarned = !$wasResolutionHalfWarned && $sla->is_resolution_half_warned && !$sla->is_resolution_breached;
+
+                    if (! ($isResponseNewlyBreached || $isResolutionNewlyBreached || $isResponseNewlyHalfWarned || $isResolutionNewlyHalfWarned)) {
+                        return;
+                    }
+                    $ticket->load(['subUnit.unit', 'unit.admins', 'assignedAdmin']);
 
                     // Kumpulkan admin penerima
                     $adminsToNotify = collect();

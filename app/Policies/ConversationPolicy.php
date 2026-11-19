@@ -23,7 +23,7 @@ class ConversationPolicy
             }
 
             if ($user instanceof User) {
-                return (int) $ticket->user_id === (int) $user->id;
+                return $ticket->isOwnedByUser($user);
             }
 
             if ($user instanceof Admin) {

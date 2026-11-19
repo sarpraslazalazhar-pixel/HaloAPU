@@ -75,14 +75,15 @@ export function useChatUnread({
         : currentPath.startsWith('/chat');
 
       const params = new URLSearchParams(window.location.search);
+      const activeParam = params.get('active');
+      const ticketParam = params.get('ticket') || params.get('ticket_id');
 
-      // Users read chat per ticket, admins per conversation.
-      const currentActiveId = isAdminRef.current ? params.get('active') : params.get('ticket');
+      const matchesActiveConv = activeParam !== null && activeParam === String(msg.conversation_id);
+      const matchesTicketParam =
+        ticketParam !== null && msg.ticket?.id !== undefined && ticketParam === String(msg.ticket.id);
 
       const isViewingThisChat =
-        isChatPage &&
-        currentActiveId === String(isAdminRef.current ? msg.conversation_id : msg.ticket?.id) &&
-        !document.hidden;
+        isChatPage && (matchesActiveConv || matchesTicketParam) && !document.hidden;
 
       if (!isViewingThisChat) {
         setUnreadCount((prev) => prev + 1);
@@ -151,11 +152,9 @@ export function useChatUnread({
       : `App.Models.User.${user.id}`;
 
     const leavePrivate = subscribe<ChatEvents>(channelName, handlers);
-    const leavePublic = subscribe<ChatEvents>('chat.public_global', handlers);
 
     return () => {
       leavePrivate();
-      leavePublic();
     };
   }, [user?.id, isAdmin, playSound, faviconUrl]);
 

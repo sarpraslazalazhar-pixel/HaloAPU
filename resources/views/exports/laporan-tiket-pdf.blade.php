@@ -370,8 +370,11 @@
                         @if($ticket->slaTracking)
                             @php
                                 $isResponseBreached = $ticket->slaTracking->is_response_breached ?? false;
-                                $responseLabel = $isResponseBreached ? 'Terlambat' : 'Tepat Waktu';
-                                $responseClass = $isResponseBreached ? 'badge-terlambat' : 'badge-tepat';
+                                $isSlaPaused = $ticket->slaTracking->paused_at !== null || $ticket->status === 'pending';
+                                $isResponsePaused = $isSlaPaused && ! $ticket->slaTracking->responded_at && ! $isResponseBreached;
+                                $pausedLabel = $ticket->status === 'pending' ? 'Menunggu' : 'Dijeda';
+                                $responseLabel = $isResponseBreached ? 'Terlambat' : ($isResponsePaused ? $pausedLabel : 'Tepat Waktu');
+                                $responseClass = $isResponseBreached ? 'badge-terlambat' : ($isResponsePaused ? 'badge-pending' : 'badge-tepat');
                             @endphp
                             <span class="badge {{ $responseClass }}">{{ $responseLabel }}</span>
                         @else
@@ -382,8 +385,9 @@
                         @if($ticket->slaTracking)
                             @php
                                 $isResolutionBreached = $ticket->slaTracking->is_resolution_breached ?? false;
-                                $resolutionLabel = $isResolutionBreached ? 'Terlambat' : 'Tepat Waktu';
-                                $resolutionClass = $isResolutionBreached ? 'badge-terlambat' : 'badge-tepat';
+                                $isResolutionPaused = $isSlaPaused && ! $ticket->slaTracking->resolved_at && ! $isResolutionBreached;
+                                $resolutionLabel = $isResolutionBreached ? 'Terlambat' : ($isResolutionPaused ? $pausedLabel : 'Tepat Waktu');
+                                $resolutionClass = $isResolutionBreached ? 'badge-terlambat' : ($isResolutionPaused ? 'badge-pending' : 'badge-tepat');
                             @endphp
                             <span class="badge {{ $resolutionClass }}">{{ $resolutionLabel }}</span>
                         @else

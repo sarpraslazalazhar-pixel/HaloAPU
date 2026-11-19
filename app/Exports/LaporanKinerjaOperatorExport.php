@@ -49,7 +49,10 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
                   ->orWhereExists(function ($sub) {
                       $sub->select(DB::raw(1))
                           ->from('tickets')
-                          ->whereColumn('tickets.assigned_admin_id', 'admins.id');
+                          ->where(function ($t) {
+                              $t->whereColumn('tickets.assigned_admin_id', 'admins.id')
+                                ->orWhereColumn('tickets.created_by_admin_id', 'admins.id');
+                          });
                   });
             });
 
@@ -67,7 +70,10 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
 
         $operators = $adminQuery->orderBy('name')->get();
 
-        $ticketSubQuery = Ticket::query()->whereNotNull('tickets.assigned_admin_id');
+        $ticketSubQuery = Ticket::query()->where(function ($q) {
+            $q->whereNotNull('tickets.assigned_admin_id')
+              ->orWhereNotNull('tickets.created_by_admin_id');
+        });
 
         if ($dateFrom && $dateTo) {
             $ticketSubQuery->whereBetween('tickets.created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59']);
@@ -87,7 +93,7 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
             ->leftJoin('ticket_sla_tracking', 'tickets.id', '=', 'ticket_sla_tracking.ticket_id')
             ->leftJoin('csats', 'tickets.id', '=', 'csats.ticket_id')
             ->selectRaw('
-                tickets.assigned_admin_id,
+                COALESCE(tickets.assigned_admin_id, tickets.created_by_admin_id) as responsible_admin_id,
                 COUNT(tickets.id) as total_tickets,
                 SUM(CASE WHEN tickets.status IN ("on_proses", "pending", "need_revision", "waiting_approval") THEN 1 ELSE 0 END) as active_tickets,
                 SUM(CASE WHEN tickets.status IN ("solve", "selesai") THEN 1 ELSE 0 END) as solved_tickets,
@@ -97,9 +103,9 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
                 ROUND(AVG(csats.rating), 2) as avg_rating,
                 COUNT(csats.id) as total_reviews
             ')
-            ->groupBy('tickets.assigned_admin_id')
+            ->groupBy('responsible_admin_id')
             ->get()
-            ->keyBy('assigned_admin_id');
+            ->keyBy('responsible_admin_id');
 
         return $operators->map(function ($operator) use ($statsByAdmin) {
             $stat = $statsByAdmin->get($operator->id);

@@ -1,20 +1,32 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useForm } from '@inertiajs/react';
+import { useForm, usePage } from '@inertiajs/react';
 import { 
   Send, Paperclip, MessageSquare, Clock, 
   ExternalLink, X, Loader2, Image as ImageIcon, FileText 
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { formatDateId } from '@/lib/utils';
+import { LocalAttachmentImage, MAX_ATTACHMENT_BYTES, fitEditedAttachment } from '@/lib/localAttachment';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
+import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { subscribe, type TicketEvents, type TicketLogEntry } from '@/lib/realtime';
 
 type TicketLogItem = TicketLogEntry;
 
-interface TicketChatData {
+interface TicketChatSummary {
   id: number;
   formatted_id?: string;
   status?: string;
+  sub_unit?: {
+    nama_layanan?: string | null;
+  } | null;
+  created_by_admin_id?: number | null;
+  created_by_admin?: {
+    id?: number;
+    name?: string;
+    username?: string;
+    email?: string;
+  } | null;
   user?: {
     id?: number;
     name?: string;
@@ -24,8 +36,15 @@ interface TicketChatData {
   logs?: TicketLogItem[];
 }
 
+interface TicketChatPageProps {
+  auth?: {
+    admin?: { id?: number } | null;
+  };
+  [key: string]: unknown;
+}
+
 interface TicketChatBoxProps {
-  ticket: TicketChatData;
+  ticket: TicketChatSummary;
   isAdmin?: boolean;
   currentAdminName?: string;
   replyRoute: string;
@@ -34,6 +53,7 @@ interface TicketChatBoxProps {
   canReply?: boolean;
   chatUrl?: string;
 }
+
 export function TicketChatBox({
   ticket,
   isAdmin = false,
@@ -46,6 +66,14 @@ export function TicketChatBox({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
+  const attachmentDialogRef = useRef<HTMLDialogElement>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [attachmentWarning, setAttachmentWarning] = useState('');
+  const [editSession, setEditSession] = useState<AbortController | null>(null);
+
+  useEffect(() => {
+    if (previewFile) attachmentDialogRef.current?.showModal();
+  }, [previewFile]);
 
   const { data, setData, post, processing, reset, errors } = useForm({
     catatan: '',
@@ -115,6 +143,49 @@ export function TicketChatBox({
     });
   };
 
+  const openAttachment = (file: File, isImage: boolean) => {
+    if (isImage) {
+      setPreviewFile(file);
+
+      return;
+    }
+
+    const mime = /\.pdf$/i.test(file.name) ? 'application/pdf' : 'application/octet-stream';
+    const url = URL.createObjectURL(file.slice(0, file.size, mime));
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+
+  const clearAttachmentPreview = () => {
+    editSession?.abort();
+    setEditSession(null);
+    setPreviewFile(null);
+  };
+
+  const saveEditedAttachment = async (editedFile: File) => {
+    if (!previewFile || !editSession) return;
+
+    let file: File | null = null;
+
+    try {
+      file = await fitEditedAttachment(editedFile);
+    } catch {
+      // Keep the original if decoding or encoding the edit fails.
+    }
+
+    if (editSession.signal.aborted || !attachmentDialogRef.current?.open) return;
+
+    if (file) {
+      const index = data.general_attachments.indexOf(previewFile);
+      setAttachmentWarning('');
+      setData('general_attachments', data.general_attachments.map((attachment, i) => i === index ? file : attachment));
+    } else {
+      setAttachmentWarning(`Edit ${editedFile.name} melebihi 3MB atau tidak dapat diperkecil. File asli tetap digunakan.`);
+    }
+
+    attachmentDialogRef.current.close();
+  };
+
   const quickReplies = isAdmin ? [
     'Baik, sedang ditindaklanjuti oleh tim terkait.',
     'Mohon lampirkan foto/dokumen pendukung ya.',
@@ -143,6 +214,15 @@ export function TicketChatBox({
     return log.catatan || act;
   };
 
+  const { auth } = usePage<TicketChatPageProps>().props;
+  const currentAdminId = auth?.admin?.id ?? null;
+  const requesterLabel =
+    ticket.user?.name ||
+    ticket.user?.username ||
+    ticket.created_by_admin?.name ||
+    ticket.created_by_admin?.username ||
+    'Pemohon Tiket';
+
   const isClosed = ['solve', 'reject', 'dibatalkan'].includes(String(ticket.status || '').toLowerCase());
 
   return (
@@ -151,8 +231,8 @@ export function TicketChatBox({
       <div className="px-4 py-3 bg-slate-50/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3 shrink-0">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-full bg-sky-100 text-sky-700 flex items-center justify-center font-bold text-sm shrink-0 border border-sky-200">
-            {isAdmin 
-              ? (ticket.user?.name || ticket.user?.username || 'U').charAt(0).toUpperCase()
+            {isAdmin
+              ? requesterLabel.charAt(0).toUpperCase()
               : 'CS'
             }
           </div>
@@ -160,16 +240,13 @@ export function TicketChatBox({
             <div className="flex items-center gap-2">
               <h3 className="text-xs sm:text-sm font-semibold text-slate-800">
                 {isAdmin
-                  ? (ticket.user?.name || ticket.user?.username || 'Pengguna Tiket')
+                  ? requesterLabel
                   : 'Tim Support / Admin APU'
                 }
               </h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200">
-                Online Sinkron
-              </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Diskusi Langsung Tiket #{ticket.formatted_id || ticket.id}
+              {ticket.sub_unit?.nama_layanan?.trim() || 'Diskusi Tiket'}
             </p>
           </div>
         </div>
@@ -217,10 +294,15 @@ export function TicketChatBox({
 
             // Balasan pesan
             const fromAdmin = log.admin_id !== null;
-            const isMe = isAdmin ? fromAdmin : !fromAdmin;
+            const isAdminSubmittedTicket = Boolean(ticket.created_by_admin_id || ticket.created_by_admin?.id);
+            const isMe = isAdmin
+              ? isAdminSubmittedTicket && currentAdminId !== null
+                ? Number(log.admin_id) === Number(currentAdminId)
+                : fromAdmin
+              : !fromAdmin;
             const senderDisplayName = fromAdmin
               ? (log.admin?.name || log.admin?.username || 'Admin')
-              : (ticket.user?.name || ticket.user?.username || 'Pengguna');
+              : requesterLabel;
 
             return (
               <div
@@ -371,23 +453,50 @@ export function TicketChatBox({
             {/* Attachment Preview Chips */}
             {data.general_attachments.length > 0 && (
               <div className="flex flex-wrap gap-2 pb-1">
-                {data.general_attachments.map((file, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 text-[11px] border border-sky-200 font-medium"
-                  >
-                    <Paperclip className="w-3 h-3 text-sky-600" />
-                    <span className="truncate max-w-[150px]">{file.name}</span>
-                    <button
-                      type="button"
-                      onClick={() => setData('general_attachments', data.general_attachments.filter((_, i) => i !== idx))}
-                      className="text-sky-600 hover:text-red-500 transition-colors"
+                {data.general_attachments.map((file, idx) => {
+                  const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
+                  const previewLabel = isImage ? `Pratinjau ${file.name}` : `Buka ${file.name} di tab baru`;
+
+                  return (
+                    <span
+                      key={idx}
+                      className="inline-flex max-w-full items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 text-[11px] border border-sky-200 font-medium"
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                ))}
+                      <button
+                        type="button"
+                        title={previewLabel}
+                        aria-label={previewLabel}
+                        aria-haspopup={isImage ? 'dialog' : undefined}
+                        disabled={processing}
+                        onClick={() => openAttachment(file, isImage)}
+                        className="inline-flex min-w-0 items-center gap-1.5 rounded-sm text-left hover:underline focus-visible:outline-2 focus-visible:outline-sky-700"
+                      >
+                        {isImage ? (
+                          <LocalAttachmentImage file={file} alt="" className="size-7 shrink-0 rounded object-cover" />
+                        ) : (
+                          <Paperclip className="size-3 shrink-0 text-sky-700" />
+                        )}
+                        <span className="truncate max-w-[150px]">{file.name}</span>
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Hapus ${file.name}`}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setData('general_attachments', data.general_attachments.filter((_, i) => i !== idx));
+                          setAttachmentWarning('');
+                        }}
+                        className="grid size-6 shrink-0 place-items-center rounded-sm text-sky-700 hover:text-red-600 focus-visible:outline-2 focus-visible:outline-sky-700 transition-colors"
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </span>
+                  );
+                })}
               </div>
+            )}
+            {data.general_attachments.length > 0 && attachmentWarning && (
+              <p role="status" className="text-red-500 text-[11px]">{attachmentWarning}</p>
             )}
 
             <div className="flex items-end gap-2">
@@ -408,13 +517,14 @@ export function TicketChatBox({
                       return;
                     }
                     const validFiles = files.filter((f) => {
-                      if (f.size > 3 * 1024 * 1024) {
+                      if (f.size > MAX_ATTACHMENT_BYTES) {
                         alert(`${f.name} melebihi 3MB.`);
                         return false;
                       }
                       return true;
                     });
                     setData('general_attachments', [...data.general_attachments, ...validFiles]);
+                    setAttachmentWarning('');
                     e.target.value = '';
                   }}
                 />
@@ -455,6 +565,38 @@ export function TicketChatBox({
           </form>
         )}
       </div>
+      <dialog
+        ref={attachmentDialogRef}
+        aria-label={previewFile ? `${editSession ? 'Edit' : 'Pratinjau'} ${previewFile.name}` : 'Pratinjau lampiran'}
+        onClose={clearAttachmentPreview}
+        onCancel={clearAttachmentPreview}
+        className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-4xl rounded-xl text-slate-800 backdrop:bg-slate-900/60 ${editSession ? 'bg-transparent' : 'bg-white'}`}
+      >
+        {previewFile && (editSession ? (
+          <ImageEditorModal
+            isOpen
+            imageFile={previewFile}
+            onClose={() => attachmentDialogRef.current?.close()}
+            onSave={saveEditedAttachment}
+          />
+        ) : (
+          <div className="space-y-4 p-4">
+            <h3 className="wrap-anywhere text-sm font-semibold">{previewFile.name}</h3>
+            <LocalAttachmentImage file={previewFile} alt={previewFile.name} className="mx-auto max-h-[70dvh] max-w-full object-contain" />
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => attachmentDialogRef.current?.close()}>
+                Tutup
+              </Button>
+              <Button type="button" className="bg-sky-700 text-white hover:bg-sky-800" onClick={() => {
+                setAttachmentWarning('');
+                setEditSession(new AbortController());
+              }}>
+                Edit / Coret
+              </Button>
+            </div>
+          </div>
+        ))}
+      </dialog>
     </div>
   );
 }

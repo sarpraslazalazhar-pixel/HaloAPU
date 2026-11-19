@@ -49,6 +49,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { accordionVariants, navItemHover } from '@/lib/animationConfig';
 import { subscribe as subscribeChannel, type NotificationEvents } from '@/lib/realtime';
 import PageTransition from '@/Components/PageTransition';
+import ActiveAssignedTicket from '@/Components/ActiveAssignedTicket';
 import NotificationBell from '@/Components/NotificationBell';
 const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 import { BottomNav } from '@/Components/BottomNav';
@@ -376,7 +377,7 @@ function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { it
 }
 
 export default function AdminLayout({ children, title, hideBottomNav }: AdminLayoutProps) {
- const { auth, flash, appConfig, errors: pageErrors } = usePage<any>().props;
+ const { auth, flash, appConfig, activeAssignedTicket, errors: pageErrors } = usePage<any>().props;
  const admin = auth.admin || auth.user;
  const [profileOpen, setProfileOpen] = useState(false);
  const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -767,7 +768,14 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
      <ProfileModal open={profileOpen} onOpenChange={setProfileOpen} user={admin} isAdmin={true} />
    </React.Suspense>
  )}
- </header>
+        </header>
+        {auth.admin && (
+          <ActiveAssignedTicket
+            key={auth.admin.id}
+            adminId={auth.admin.id}
+            initialPayload={activeAssignedTicket ?? null}
+          />
+        )}
         <main className="flex-1 overflow-y-auto flex flex-col">
           <PageTransition className="mx-auto w-full max-w-7xl p-4 lg:p-6 xl:p-8 pb-[calc(64px+env(safe-area-inset-bottom,16px))] md:pb-0">
             {children}

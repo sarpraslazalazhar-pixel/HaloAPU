@@ -22,7 +22,18 @@ interface RiwayatProps {
 const columns = [
   { key: 'id', header: 'No. Tiket', render: (t: any) => `#TKT-${formatTicketId(t.id)}` },
   { key: 'unit', header: 'Unit', render: (t: any) => t.unit?.nama_unit || '-' },
-  { key: 'sub_unit', header: 'Layanan', render: (t: any) => t.sub_unit?.nama_layanan || '-' },
+  {
+    key: 'sub_unit',
+    header: 'Layanan',
+    render: (t: any) => (
+      <div className="space-y-0.5">
+        <span>{t.sub_unit?.nama_layanan || '-'}</span>
+        {t.assignment_queued_at && (
+          <span className="block text-[11px] font-medium text-amber-700">Menunggu giliran petugas</span>
+        )}
+      </div>
+    ),
+  },
   { key: 'status', header: 'Status', render: (t: any) => <StatusBadge status={t.status} /> },
   { key: 'created_at', header: 'Tanggal', render: (t: any) => new Date(t.created_at).toLocaleDateString() },
   {

@@ -1,19 +1,45 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo, type ComponentProps } from 'react';
+import axios from 'axios';
 import { Head, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import ConversationList, { ConversationItem } from '@/Components/Chat/ConversationList';
-import ChatWindow, { ChatMessage } from '@/Components/Chat/ChatWindow';
+import ConversationList, {
+  type ConversationItem,
+  type TicketRoomSummary,
+} from '@/Components/Chat/ConversationList';
+import ChatWindow, { type ChatMessage } from '@/Components/Chat/ChatWindow';
 import { useChatSound } from '@/hooks/useChatSound';
 import { subscribe, type ChannelHandlers, type ChatEvents, type OnlineUser } from '@/lib/realtime';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
+type ConversationDetail = NonNullable<ComponentProps<typeof ChatWindow>['conversation']>;
+
+interface AdminIdentity {
+  id: number;
+  name?: string;
+  username?: string;
+}
+
+interface SharedAuthProps {
+  auth: {
+    admin?: AdminIdentity | null;
+    user?: AdminIdentity | null;
+  };
+  [key: string]: unknown;
+}
+
 interface AdminChatPageProps {
   conversations: ConversationItem[];
   activeConversationId: number | null;
-  activeConversation: any;
+  activeConversation: ConversationDetail | null;
   activeMessages: ChatMessage[];
   linkedTicket?: ChatMessage['ticket'] | null;
+}
+
+function normalizeActiveConversation(conv: ConversationDetail | null): ConversationDetail | null {
+  if (!conv || !conv.id) return null;
+
+  return conv;
 }
 
 export default function AdminChatIndex({
@@ -23,63 +49,64 @@ export default function AdminChatIndex({
   activeMessages,
   linkedTicket = null,
 }: AdminChatPageProps) {
-  const { auth } = usePage<any>().props;
-  const admin = auth.admin || auth.user;
+  const { auth } = usePage<SharedAuthProps>().props;
+  const admin = auth.admin || auth.user || { id: 0, name: 'Admin' };
 
-  const [convList, setConvList] = useState<ConversationItem[]>(conversations);
+  const [items, setItems] = useState<ConversationItem[]>(conversations);
 
   const [activeId, setActiveId] = useState<number | null>(() => {
-    if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const activeParam = params.get('active');
+    const params = new URLSearchParams(window.location.search);
+    const activeParam = params.get('active');
 
-      if (activeParam) return parseInt(activeParam, 10);
+    if (activeParam) return parseInt(activeParam, 10);
 
-      if (window.innerWidth < 768) return null;
+    if (window.innerWidth < 768 && !params.has('ticket_id') && !params.has('user_id')) {
+      return null;
     }
 
     return activeConversationId;
   });
 
-  const [currentConv, setCurrentConv] = useState<any>(() => {
-    if (typeof window !== 'undefined' && window.innerWidth < 768 && !new URLSearchParams(window.location.search).has('active')) {
+  const [currentConv, setCurrentConv] = useState<ConversationDetail | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+
+    if (window.innerWidth < 768 && !params.has('active') && !params.has('ticket_id') && !params.has('user_id')) {
       return null;
     }
 
-    return activeConversation;
+    return normalizeActiveConversation(activeConversation);
   });
 
   const [messages, setMessages] = useState<ChatMessage[]>(activeMessages);
 
-  // Echo listeners read the active conversation without resubscribing on switch.
   const activeIdRef = useRef(activeId);
   activeIdRef.current = activeId;
 
   const { playSound } = useChatSound();
 
-  // Sync props to state when Inertia partial reload or page props change
   useEffect(() => {
-    setConvList(conversations);
+    setItems(conversations);
   }, [conversations]);
 
   useEffect(() => {
-    const isMobileInitial = typeof window !== 'undefined' && window.innerWidth < 768;
-    const hasActiveParam = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('active');
-    
-    if (isMobileInitial && !hasActiveParam) {
+    const params = new URLSearchParams(window.location.search);
+    const isMobileInitial = window.innerWidth < 768;
+    const hasDeepLink = params.has('active') || params.has('ticket_id') || params.has('user_id');
+
+    if (isMobileInitial && !hasDeepLink) {
       setActiveId(null);
       setCurrentConv(null);
     } else {
       setActiveId(activeConversationId);
-      setCurrentConv(activeConversation);
+      setCurrentConv(normalizeActiveConversation(activeConversation));
       setMessages(activeMessages);
     }
   }, [activeConversationId, activeConversation, activeMessages]);
 
   const [onlineUsers, setOnlineUsers] = useState<Array<{ id: number; name: string; type: string }>>([]);
-  const [typingMap, setTypingMap] = useState<Record<number, string>>({});
+  const [typingByConversation, setTypingByConversation] = useState<Record<number, string>>({});
 
-  // Presence channel to track real-time online / offline users
+  // Presence channel for online users & admins
   useEffect(() => {
     const echo = window.Echo;
 
@@ -91,14 +118,17 @@ export default function AdminChatIndex({
       .here((members: OnlineUser[]) => {
         setOnlineUsers(members ?? []);
       })
-      .joining((user: OnlineUser) => {
-        if (user) {
-          setOnlineUsers((prev) => [...prev.filter((u) => !(u.id === user.id && u.type === user.type)), user]);
+      .joining((member: OnlineUser) => {
+        if (member) {
+          setOnlineUsers((prev) => [
+            ...prev.filter((u) => !(u.id === member.id && u.type === member.type)),
+            member,
+          ]);
         }
       })
-      .leaving((user: OnlineUser) => {
-        if (user) {
-          setOnlineUsers((prev) => prev.filter((u) => !(u.id === user.id && u.type === user.type)));
+      .leaving((member: OnlineUser) => {
+        if (member) {
+          setOnlineUsers((prev) => prev.filter((u) => !(u.id === member.id && u.type === member.type)));
         }
       });
 
@@ -107,34 +137,181 @@ export default function AdminChatIndex({
     };
   }, []);
 
-  const updateConversationOnMessage = useCallback((msg: ChatMessage, isFromActiveChat: boolean) => {
-    setConvList((prevList) => {
-      const snippet = msg.body || (msg.attachments && msg.attachments.length > 0 ? '[Lampiran]' : (msg.ticket ? '[Tiket]' : 'Pesan baru'));
+  const updateConversationOnMessage = useCallback(
+    (msg: ChatMessage, isFromActiveChat: boolean) => {
+      const snippet =
+        msg.body ||
+        (msg.attachments && msg.attachments.length > 0
+          ? '[Lampiran]'
+          : msg.ticket
+            ? '[Tiket]'
+            : 'Pesan baru');
       const timestamp = msg.created_at || new Date().toISOString();
-      const isSelf = msg.sender_id === admin.id && msg.sender_type.includes('Admin');
+      const isSelf = msg.sender_id === admin.id && Boolean(msg.sender_type?.includes('Admin'));
 
-      const index = prevList.findIndex((c) => c.id === msg.conversation_id);
+      // Determine group key: if this admin submitted the ticket, group under `self_admin:{id}`
+      const isSelfSubmittedTicket =
+        msg.ticket?.created_by_admin_id !== undefined &&
+        msg.ticket?.created_by_admin_id !== null &&
+        Number(msg.ticket.created_by_admin_id) === Number(admin.id);
 
-      if (index !== -1) {
-        const updated = { ...prevList[index] };
-        updated.last_message = snippet;
-        updated.last_message_at = timestamp;
-        updated.last_message_sender_id = msg.sender_id;
-        updated.last_message_sender_type = msg.sender_type;
-        updated.is_last_message_read = isFromActiveChat;
+      const resolvedGroupKey = isSelfSubmittedTicket
+        ? `self_admin:${admin.id}`
+        : msg.requester_key || null;
 
-        if (!isFromActiveChat && !isSelf) {
-          updated.unread_count = (updated.unread_count || 0) + 1;
+      setItems((prev) => {
+        const index = prev.findIndex((c) => {
+          if (c.conversation_ids && c.conversation_ids.includes(msg.conversation_id)) {
+            return true;
+          }
+
+          if (c.id === msg.conversation_id) {
+            return true;
+          }
+
+          if (resolvedGroupKey && c.group_key === resolvedGroupKey) {
+            return true;
+          }
+
+          return false;
+        });
+
+        if (index !== -1) {
+          const existing = prev[index];
+          const existingRooms = existing.ticket_rooms ? [...existing.ticket_rooms] : [];
+          const roomIndex = existingRooms.findIndex((r) => r.conversation_id === msg.conversation_id);
+
+          if (roomIndex !== -1) {
+            const oldRoom = existingRooms[roomIndex];
+            existingRooms[roomIndex] = {
+              ...oldRoom,
+              has_message: true,
+              last_message: snippet,
+              last_message_at: timestamp,
+              last_message_sender_id: msg.sender_id,
+              last_message_sender_type: msg.sender_type,
+              is_last_message_read: isFromActiveChat,
+              unread_count: isFromActiveChat || isSelf ? 0 : (oldRoom.unread_count || 0) + 1,
+            };
+          } else if (msg.ticket) {
+            const newRoom: TicketRoomSummary = {
+              conversation_id: msg.conversation_id,
+              ticket_id: msg.ticket.id,
+              formatted_id: msg.ticket.formatted_id,
+              judul: msg.ticket.judul ?? 'Diskusi Tiket',
+              nama_layanan: msg.ticket.nama_layanan ?? null,
+              status: msg.ticket.status ?? 'open',
+              priority: msg.ticket.priority ?? null,
+              unread_count: isFromActiveChat || isSelf ? 0 : 1,
+              has_message: true,
+              last_message: snippet,
+              last_message_at: timestamp,
+              last_message_sender_id: msg.sender_id,
+              last_message_sender_type: msg.sender_type,
+              is_last_message_read: isFromActiveChat,
+            };
+            existingRooms.unshift(newRoom);
+          }
+
+          existingRooms.sort((a, b) =>
+            String(b.last_message_at || '').localeCompare(String(a.last_message_at || ''))
+          );
+
+          const convIds = existingRooms.length > 0
+            ? existingRooms.map((r) => r.conversation_id)
+            : Array.from(new Set([...(existing.conversation_ids || [existing.id]), msg.conversation_id]));
+
+          const totalUnread = existingRooms.length > 0
+            ? existingRooms.reduce((sum, r) => sum + (r.unread_count || 0), 0)
+            : isFromActiveChat || isSelf
+              ? existing.unread_count
+              : (existing.unread_count || 0) + 1;
+
+          const count = existingRooms.length || existing.tickets_count || 1;
+          const previewLabel =
+            msg.ticket?.chat_label ||
+            msg.ticket?.nama_layanan ||
+            existing.ticket?.chat_label ||
+            existing.ticket?.nama_layanan ||
+            'Diskusi Tiket';
+          const preview = count > 1 ? `[${previewLabel}] ${snippet}` : snippet;
+
+          const firstUnreadRoom = existingRooms.find((r) => r.unread_count > 0);
+          const nextPrimaryId = firstUnreadRoom ? firstUnreadRoom.conversation_id : msg.conversation_id;
+
+          const updated: ConversationItem = {
+            ...existing,
+            id: nextPrimaryId,
+            tickets_count: count,
+            conversation_ids: convIds,
+            ticket_rooms: existingRooms.length > 0 ? existingRooms : existing.ticket_rooms,
+            last_message: preview,
+            last_message_at: timestamp,
+            last_message_sender_id: msg.sender_id,
+            last_message_sender_type: msg.sender_type,
+            is_last_message_read: isFromActiveChat,
+            unread_count: totalUnread,
+          };
+
+          return [updated, ...prev.filter((_, i) => i !== index)];
         }
 
-        const remaining = prevList.filter((_, i) => i !== index);
+        const peerName = isSelfSubmittedTicket
+          ? `${admin.name || admin.username || 'Admin'} (Tiket Saya)`
+          : msg.requester_name || msg.sender_name || 'Pemohon';
 
-        return [updated, ...remaining];
-      } else {
-        const newConvItem: ConversationItem = {
+        const reqType = isSelfSubmittedTicket
+          ? 'admin'
+          : msg.requester_type || (msg.sender_type?.includes('Admin') ? 'admin' : 'user');
+
+        const formattedId = msg.ticket?.formatted_id || '';
+        const roomLabel = msg.ticket?.chat_label || msg.ticket?.nama_layanan || 'Diskusi Tiket';
+        const subtitle = isSelfSubmittedTicket
+          ? `Tiket Saya · ${roomLabel}`
+          : reqType === 'admin'
+            ? `Admin Pemohon · ${roomLabel}`
+            : `Pemohon · ${roomLabel}`;
+
+        const newRoom: TicketRoomSummary | null = msg.ticket
+          ? {
+              conversation_id: msg.conversation_id,
+              ticket_id: msg.ticket.id,
+              formatted_id: msg.ticket.formatted_id,
+              judul: msg.ticket.judul ?? 'Diskusi Tiket',
+              chat_label: msg.ticket.chat_label ?? msg.ticket.nama_layanan ?? null,
+              created_at: msg.ticket.created_at ?? null,
+              nama_layanan: msg.ticket.nama_layanan ?? null,
+              status: msg.ticket.status ?? 'open',
+              priority: msg.ticket.priority ?? null,
+              unread_count: isFromActiveChat || isSelf ? 0 : 1,
+              has_message: true,
+              last_message: snippet,
+              last_message_at: timestamp,
+              last_message_sender_id: msg.sender_id,
+              last_message_sender_type: msg.sender_type,
+              is_last_message_read: isFromActiveChat,
+            }
+          : null;
+
+        const newItem: ConversationItem = {
           id: msg.conversation_id,
-          title: msg.sender_name || 'Pengguna',
-          subtitle: msg.sender_type.includes('Admin') ? 'Admin' : 'User (Privat)',
+          group_key: resolvedGroupKey,
+          type: 'ticket',
+          requester_type: reqType,
+          is_self_requester: isSelfSubmittedTicket,
+          user: {
+            id: msg.requester_id ?? msg.sender_id,
+            name: msg.requester_name || msg.sender_name || 'Pemohon',
+            avatar: msg.requester_avatar ?? msg.sender_avatar ?? null,
+            entity_type: reqType,
+          },
+          title: peerName,
+          subtitle,
+          ticket_id: msg.ticket?.id ?? null,
+          ticket: msg.ticket ?? null,
+          tickets_count: 1,
+          conversation_ids: [msg.conversation_id],
+          ticket_rooms: newRoom ? [newRoom] : undefined,
           last_message: snippet,
           last_message_at: timestamp,
           last_message_sender_id: msg.sender_id,
@@ -143,14 +320,15 @@ export default function AdminChatIndex({
           unread_count: isFromActiveChat || isSelf ? 0 : 1,
         };
 
-        return [newConvItem, ...prevList];
-      }
-    });
-  }, [admin?.id]);
+        return [newItem, ...prev];
+      });
+    },
+    [admin.id, admin.name, admin.username]
+  );
 
-  // Global Echo listener for admin's personal channel and public global chat
+  // Global Echo listener for admin's private channel
   useEffect(() => {
-    if (!admin?.id) return;
+    if (!admin.id) return;
 
     const adminId = admin.id;
 
@@ -160,7 +338,7 @@ export default function AdminChatIndex({
       const isCurrentActive = activeIdRef.current === newMsg.conversation_id;
       updateConversationOnMessage(newMsg, isCurrentActive);
 
-      const isSelf = newMsg.sender_id === adminId && newMsg.sender_type.includes('Admin');
+      const isSelf = newMsg.sender_id === adminId && Boolean(newMsg.sender_type?.includes('Admin'));
 
       if (!isCurrentActive && !isSelf) {
         playSound();
@@ -173,8 +351,14 @@ export default function AdminChatIndex({
 
     const handleMessageRead = ({ conversationId }: ChatEvents['.ChatMessageRead']) => {
       if (conversationId) {
-        setConvList((prev) =>
-          prev.map((c) => (c.id === conversationId ? { ...c, is_last_message_read: true } : c))
+        setItems((prev) =>
+          prev.map((c) => {
+            if (c.id === conversationId || c.conversation_ids?.includes(conversationId)) {
+              return { ...c, is_last_message_read: true };
+            }
+
+            return c;
+          })
         );
       }
     };
@@ -186,7 +370,7 @@ export default function AdminChatIndex({
       userName,
     }: ChatEvents['.UserTypingStatus']) => {
       if (typistId !== adminId && conversationId) {
-        setTypingMap((prev) => {
+        setTypingByConversation((prev) => {
           const updated = { ...prev };
 
           if (isTyping) {
@@ -206,49 +390,78 @@ export default function AdminChatIndex({
       '.UserTypingStatus': handleTypingStatus,
     } satisfies ChannelHandlers<ChatEvents>;
 
-    const leaveAdmin = subscribe<ChatEvents>(`App.Models.Admin.${adminId}`, handlers);
-    const leavePublic = subscribe<ChatEvents>('chat.public_global', handlers);
-
-    return () => {
-      leaveAdmin();
-      leavePublic();
-    };
-  }, [admin?.id, playSound, updateConversationOnMessage]);
+    return subscribe<ChatEvents>(`App.Models.Admin.${adminId}`, handlers);
+  }, [admin.id, playSound, updateConversationOnMessage]);
 
   const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-  const handleSelectConversation = async (id: number) => {
-    if (id === activeId && currentConv) return;
+  const handleSelectConversation = useCallback(
+    async (id: number) => {
+      if (id === activeIdRef.current && currentConv) return;
 
-    const targetConv = convList.find((c) => c.id === id);
-    const unreadToClear = targetConv?.unread_count || 0;
+      let unreadToClear = 0;
 
-    setActiveId(id);
-    setConvList((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, unread_count: 0 } : c))
-    );
+      for (const group of items) {
+        if (group.ticket_rooms && group.ticket_rooms.length > 0) {
+          const targetRoom = group.ticket_rooms.find((r) => r.conversation_id === id);
 
-    if (unreadToClear > 0) {
-      window.dispatchEvent(new CustomEvent('chat:unread-cleared', { detail: { count: unreadToClear } }));
-    }
+          if (targetRoom) {
+            unreadToClear = targetRoom.unread_count || 0;
+            break;
+          }
+        } else if (group.id === id) {
+          unreadToClear = group.unread_count || 0;
+          break;
+        }
+      }
 
-    window.history.pushState({ activeId: id }, '', `/admin/chat?active=${id}`);
+      setActiveId(id);
+      setItems((prev) =>
+        prev.map((group) => {
+          const belongs =
+            group.id === id || Boolean(group.conversation_ids && group.conversation_ids.includes(id));
 
-    setIsLoadingMessages(true);
+          if (!belongs) return group;
 
-    try {
-      // SAFETY: window.axios is injected by Laravel's bootstrap.js; it is available on all pages after bootstrap.
-      const res = await (window as any).axios.get(`/admin/chat/conversations/${id}`);
-      setCurrentConv(res.data.conversation);
-      setMessages(res.data.messages || []);
-    } catch {
-      toast.error('Gagal memuat pesan percakapan');
-    } finally {
-      setIsLoadingMessages(false);
-    }
-  };
+          if (group.ticket_rooms && group.ticket_rooms.length > 0) {
+            const nextRooms = group.ticket_rooms.map((r) =>
+              r.conversation_id === id ? { ...r, unread_count: 0 } : r
+            );
+            const nextTotal = nextRooms.reduce((sum, r) => sum + (r.unread_count || 0), 0);
 
-  // Support browser Back/Forward buttons without reload
+            return {
+              ...group,
+              ticket_rooms: nextRooms,
+              unread_count: nextTotal,
+            };
+          }
+
+          return { ...group, unread_count: 0 };
+        })
+      );
+
+      if (unreadToClear > 0) {
+        window.dispatchEvent(new CustomEvent('chat:unread-cleared', { detail: { count: unreadToClear } }));
+      }
+
+      window.history.pushState({ activeId: id }, '', `/admin/chat?active=${id}`);
+
+      setIsLoadingMessages(true);
+
+      try {
+        const res = await axios.get(`/admin/chat/conversations/${id}`);
+        setCurrentConv(normalizeActiveConversation(res.data.conversation));
+        setMessages(res.data.messages || []);
+      } catch {
+        toast.error('Gagal memuat pesan percakapan');
+      } finally {
+        setIsLoadingMessages(false);
+      }
+    },
+    [items, currentConv]
+  );
+
+  // Browser Back/Forward support
   useEffect(() => {
     const handlePopState = () => {
       const params = new URLSearchParams(window.location.search);
@@ -257,7 +470,7 @@ export default function AdminChatIndex({
       if (active) {
         const parsedId = parseInt(active, 10);
 
-        if (parsedId && parsedId !== activeId) {
+        if (parsedId && parsedId !== activeIdRef.current) {
           handleSelectConversation(parsedId);
         }
       } else {
@@ -269,15 +482,27 @@ export default function AdminChatIndex({
     window.addEventListener('popstate', handlePopState);
 
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [activeId]);
+  }, [handleSelectConversation]);
+
+  // Active requester's ticket rooms for the multi-ticket switcher inside ChatWindow
+  const activeTicketRooms = useMemo(() => {
+    if (!activeId) return undefined;
+
+    const group = items.find(
+      (c) => c.id === activeId || Boolean(c.conversation_ids && c.conversation_ids.includes(activeId))
+    );
+
+    return group?.ticket_rooms;
+  }, [items, activeId]);
 
   const currentUser = {
     id: admin.id,
-    name: admin.name || admin.username,
+    name: admin.name || admin.username || 'Admin',
     type: 'admin' as const,
   };
 
   const [isMobile, setIsMobile] = useState(false);
+
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -286,7 +511,7 @@ export default function AdminChatIndex({
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const handleBackToList = () => {
+  const handleBack = () => {
     setActiveId(null);
     setCurrentConv(null);
     window.history.pushState({}, '', '/admin/chat');
@@ -299,12 +524,12 @@ export default function AdminChatIndex({
       <div className="h-[calc(100vh-130px)] md:min-h-[450px] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0 relative">
         <div className={`md:flex flex-col min-h-0 h-full w-full ${isMobile && activeId ? 'hidden' : 'flex'}`}>
           <ConversationList
-            conversations={convList}
+            conversations={items}
             activeId={activeId}
             onSelect={handleSelectConversation}
             isAdmin={true}
             onlineUsers={onlineUsers}
-            typingMap={typingMap}
+            typingByConversation={typingByConversation}
             currentUserId={admin.id}
             currentUserType="admin"
           />
@@ -323,11 +548,13 @@ export default function AdminChatIndex({
                 conversation={currentConv}
                 initialMessages={messages}
                 initialTicket={linkedTicket}
+                ticketRooms={activeTicketRooms}
+                onSelectTicketRoom={handleSelectConversation}
                 currentUser={currentUser}
                 isAdmin={true}
                 isLoading={isLoadingMessages}
                 onlineUsers={onlineUsers}
-                onBack={isMobile ? handleBackToList : undefined}
+                onBack={isMobile ? handleBack : undefined}
                 onMessageSent={(msg) => updateConversationOnMessage(msg, true)}
                 onMessageReceived={(msg) => updateConversationOnMessage(msg, true)}
               />

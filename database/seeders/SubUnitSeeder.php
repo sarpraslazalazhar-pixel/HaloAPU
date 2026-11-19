@@ -9,46 +9,51 @@ use Illuminate\Support\Facades\DB;
 
 class SubUnitSeeder extends Seeder
 {
+    // Mirrors the 19 sub_units rows in apudevid_haloapu.sql.
+    // Monitor field ids are wired by FormFieldSeeder, once field ids exist.
     public function run(): void
     {
         DB::table('sub_units')->truncate();
 
-        $mapping = [
-            'GA (General Affair)' => [
-                ['nama_layanan' => 'Peminjaman Alat',         'deskripsi' => 'Pinjam berbagai peralatan pendukung kegiatan kamu dengan cepat, mudah, dan praktis.', 'wajib_kembali' => true],
-                ['nama_layanan' => 'Penggunaan Ruangan',      'deskripsi' => 'Pesan dan gunakan ruangan untuk berbagai kegiatan kamu dengan proses yang cepat dan mudah.'],
-                ['nama_layanan' => 'Penggunaan Kendaraan',    'deskripsi' => 'Pesan dan gunakan kendaraan operasional dengan mudah dan aman untuk mendukung mobilitas kegiatan kamu.'],
-                ['nama_layanan' => 'Pengadaan Jasa & Barang', 'deskripsi' => 'Layanan pengajuan dan pengelolaan pengadaan barang serta jasa dengan prosedur yang akuntabel, terstruktur, dan efisien.'],
-                ['nama_layanan' => 'Perbaikan & Perawatan',   'deskripsi' => null],
-                ['nama_layanan' => 'Perpanjang Pajak',        'deskripsi' => null],
-                ['nama_layanan' => 'Support SDM',             'deskripsi' => null],
-            ],
-            'IT (Information Technology)' => [
-                ['nama_layanan' => 'Request Akun Donasi',            'deskripsi' => null],
-                ['nama_layanan' => 'Data Sistem Penerimaan',         'deskripsi' => null],
-                ['nama_layanan' => 'Void Bukti Setor',               'deskripsi' => null],
-                ['nama_layanan' => 'Akun & Reset Sandi',             'deskripsi' => null],
-                ['nama_layanan' => 'Penggunaan Link Zoom',           'deskripsi' => null],
-                ['nama_layanan' => 'Maintenance Hardware & Software', 'deskripsi' => null],
-                ['nama_layanan' => 'Support SDM',                    'deskripsi' => null],
-            ],
-            'Humas' => [
-                ['nama_layanan' => 'Editing & Produksi Video',   'deskripsi' => null],
-                ['nama_layanan' => 'Pengajuan Desain Grafis',    'deskripsi' => null],
-                ['nama_layanan' => 'Dokumentasi Event/Kegiatan', 'deskripsi' => null],
-            ],
+        $rows = [
+            // [unit, nama_layanan, deskripsi, is_revision_enabled, is_monitored, monitor_kategori]
+            ['GA', 'Peminjaman Alat', 'Pinjam berbagai peralatan pendukung kegiatan Anda dengan cepat, mudah, dan praktis.', false, false, null],
+            ['GA', 'Penggunaan Ruangan', 'Pesan dan gunakan ruangan untuk berbagai kegiatan Anda dengan proses yang cepat dan mudah.', false, true, 'Ruang Rapat'],
+            ['GA', 'Penggunaan Kendaraan', 'Pesan dan gunakan kendaraan operasional dengan mudah dan aman untuk mendukung mobilitas kegiatan Anda.', false, true, 'Kendaraan'],
+            ['GA', 'Pengadaan Jasa & Barang', 'Layanan pengajuan dan pengelolaan pengadaan barang serta jasa dengan prosedur yang akuntabel, terstruktur, dan efisien.', false, false, null],
+            ['GA', 'Perbaikan & Perawatan', null, false, false, null],
+            ['GA', 'Perpanjang Pajak', null, false, false, null],
+            ['GA', 'Support SDM', null, false, false, null],
+            ['IT', 'Request Akun Donasi', null, false, false, null],
+            ['IT', 'Data Sistem Penerimaan', null, false, false, null],
+            ['IT', 'Void Bukti Setor', null, false, false, null],
+            ['IT', 'Akun & Reset Sandi', null, false, false, null],
+            ['IT', 'Penggunaan Link Zoom', null, false, false, null],
+            ['IT', 'Maintenance Hardware & Software', null, false, false, null],
+            ['IT', 'Support SDM', null, false, false, null],
+            ['Humas', 'Editing & Produksi Video', null, true, false, null],
+            ['Humas', 'Pengajuan Desain Grafis', null, true, false, null],
+            ['Humas', 'Dokumentasi Event/Kegiatan', null, false, false, null],
+            ['IT', 'Short Link', null, false, false, null],
+            ['IT', 'Data Rekaman CCTV', 'Data Rekaman CCTV', false, false, null],
         ];
 
-        foreach ($mapping as $unitNama => $subUnits) {
-            $unit = Unit::where('nama_unit', $unitNama)->first();
-            if ($unit) {
-                foreach ($subUnits as $subUnit) {
-                    SubUnit::create(array_merge($subUnit, [
-                        'unit_id' => $unit->id,
-                        'aktif' => true,
-                    ]));
-                }
-            }
+        $unitIds = Unit::pluck('id', 'nama_unit');
+
+        foreach ($rows as [$unitNama, $namaLayanan, $deskripsi, $revisi, $monitored, $kategori]) {
+            $unitId = $unitIds[$unitNama]
+                ?? throw new \RuntimeException("Unit {$unitNama} was not seeded.");
+
+            SubUnit::create([
+                'unit_id' => $unitId,
+                'nama_layanan' => $namaLayanan,
+                'deskripsi' => $deskripsi,
+                'aktif' => true,
+                'is_revision_enabled' => $revisi,
+                'wajib_kembali' => false,
+                'is_monitored' => $monitored,
+                'monitor_kategori' => $kategori,
+            ]);
         }
     }
 }

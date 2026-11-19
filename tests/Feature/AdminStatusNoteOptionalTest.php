@@ -66,4 +66,20 @@ class AdminStatusNoteOptionalTest extends TestCase
 
         $this->assertSame('Sedang dicek teknisi', TicketLog::where('ticket_id', $ticket->id)->latest('id')->firstOrFail()->catatan);
     }
+
+    public function test_status_change_rejects_attachments_and_points_to_chat(): void
+    {
+        $admin = Admin::factory()->create(['username' => 'operator1']);
+        $ticket = $this->makeTicket($admin);
+
+        $this->actingAs($admin, 'admin')
+            ->patch(route('admin.tiket.status', $ticket->id), [
+                'status' => 'on_proses',
+                'general_attachments' => [\Illuminate\Http\UploadedFile::fake()->image('bukti.png')],
+            ])
+            ->assertSessionHasErrors(['general_attachments']);
+
+        $this->assertSame('open', $ticket->fresh()->status);
+        $this->assertSame(0, \App\Models\TicketAttachment::where('ticket_id', $ticket->id)->count());
+    }
 }

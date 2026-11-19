@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -8,8 +8,9 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketEditHistory } from '@/Components/TicketEditHistory';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
+import { LocalAttachmentImage, MAX_ATTACHMENT_BYTES, fitEditedAttachment } from '@/lib/localAttachment';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { XCircle, Eye, CheckCircle2, Edit2, Clock, Paperclip, Info, MessageSquare } from 'lucide-react';
+import { XCircle, Eye, CheckCircle2, Clock, Paperclip, Info, MessageSquare } from 'lucide-react';
 import { TicketChatBox } from '@/Components/TicketChatBox';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
@@ -25,6 +26,8 @@ interface DetailProps {
  maxRevisions: number;
 }
 
+type AttachmentSelection = { file: File; index: number; form: 'reply' | 'rev' };
+
 export default function Detail({ ticket, formFields, maxRevisions }: DetailProps) {
 
  // SAFETY: general_attachments holds uploaded File instances for replies.
@@ -34,13 +37,19 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const [showRevForm, setShowRevForm] = useState(false);
  const [showConfirm, setShowConfirm] = useState(false);
  const [editorOpen, setEditorOpen] = useState(false);
- const [fileToEdit, setFileToEdit] = useState<{file: File, index: number, form: 'reply' | 'rev'} | null>(null);
+ const [fileToEdit, setFileToEdit] = useState<AttachmentSelection | null>(null);
+ const [previewFile, setPreviewFile] = useState<AttachmentSelection | null>(null);
+ const [replyAttachmentWarning, setReplyAttachmentWarning] = useState<string>('');
+ const [revAttachmentWarning, setRevAttachmentWarning] = useState<string>('');
+ const attachmentDialogRef = useRef<HTMLDialogElement>(null);
+ const editSessionRef = useRef<AbortController | null>(null);
  const [isReturned, setIsReturned] = useState(Boolean(ticket.dikembalikan_at));
  const [showKembaliModal, setShowKembaliModal] = useState(false);
  const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
  const [catatanKembali, setCatatanKembali] = useState('');
  const [isSubmittingKembali, setIsSubmittingKembali] = useState(false);
  const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
+ const isQueued = Boolean(ticket.assignment_queued_at);
  const isBooking = Boolean(ticket.booking);
  const bookingServiceTitle = (() => {
    const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
@@ -60,6 +69,106 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const bookingNotStarted = isBooking && ticket.booking?.tanggal_mulai && new Date(ticket.booking.tanggal_mulai) > new Date();
  const bookingActive = isBooking && !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking?.status) && !isBookingPast;
  const canCancel = !isBookingPast && (ticket.status === 'open' || (bookingNotStarted && bookingActive)) && ticket.status !== 'dibatalkan' && ticket.status !== 'reject';
+
+ useEffect(() => {
+   if (previewFile) attachmentDialogRef.current?.showModal();
+ }, [previewFile]);
+
+ const clearAttachmentPreview = () => {
+   editSessionRef.current?.abort();
+   editSessionRef.current = null;
+   setEditorOpen(false);
+   setFileToEdit(null);
+   setPreviewFile(null);
+ };
+
+ const openAttachment = (attachment: AttachmentSelection, isImage: boolean) => {
+   if (isImage) {
+     setPreviewFile(attachment);
+     return;
+   }
+
+   const { file } = attachment;
+   const mime = /\.pdf$/i.test(file.name) ? 'application/pdf' : 'application/octet-stream';
+   const url = URL.createObjectURL(file.slice(0, file.size, mime));
+   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+   window.open(url, '_blank', 'noopener,noreferrer');
+ };
+
+ const saveEditedAttachment = async (editedFile: File) => {
+   const session = editSessionRef.current;
+   if (!fileToEdit || !session) return;
+
+   let file: File | null = null;
+   try {
+     file = await fitEditedAttachment(editedFile);
+   } catch {
+     // Keep the original if decoding or encoding the edit fails.
+   }
+
+   if (session.signal.aborted || !attachmentDialogRef.current?.open) return;
+
+   const isReply = fileToEdit.form === 'reply';
+   const setWarning = isReply ? setReplyAttachmentWarning : setRevAttachmentWarning;
+   if (file) {
+     const attachments = isReply ? replyData.general_attachments : revData.general_attachments;
+     const setData = isReply ? setReplyData : setRevData;
+     setData('general_attachments', attachments.map((attachment, index) => index === fileToEdit.index ? file : attachment));
+     setWarning('');
+   } else {
+     setWarning(`Edit ${editedFile.name} melebihi 3MB atau tidak dapat diperkecil. File asli tetap digunakan.`);
+   }
+
+   attachmentDialogRef.current.close();
+ };
+
+ const renderAttachments = (form: AttachmentSelection['form']) => {
+   const isReply = form === 'reply';
+   const attachments = isReply ? replyData.general_attachments : revData.general_attachments;
+   const setData = isReply ? setReplyData : setRevData;
+   const warning = isReply ? replyAttachmentWarning : revAttachmentWarning;
+   const setWarning = isReply ? setReplyAttachmentWarning : setRevAttachmentWarning;
+
+   return attachments.length > 0 && (
+     <div className="mt-2 space-y-2">
+       {attachments.map((file, index) => {
+         const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(file.name);
+         const label = isImage ? `Pratinjau ${file.name}` : `Buka ${file.name} di tab baru`;
+
+         return (
+           <div key={index} className="flex items-center justify-between gap-3 rounded border bg-slate-50 p-2 text-sm">
+             <button
+               type="button"
+               title={label}
+               aria-label={label}
+               aria-haspopup={isImage ? 'dialog' : undefined}
+               disabled={isReply ? processingReply : processingRev}
+               onClick={() => openAttachment({ file, index, form }, isImage)}
+               className="flex min-h-11 min-w-0 items-center gap-2 rounded-sm text-left text-slate-800 hover:underline focus-visible:outline-2 focus-visible:outline-blue-700"
+             >
+               {isImage
+                 ? <LocalAttachmentImage file={file} alt="" className="size-8 shrink-0 rounded object-cover" />
+                 : <Paperclip className="size-4 shrink-0 text-blue-700" />}
+               <span className="truncate">{file.name}</span>
+             </button>
+             <button
+               type="button"
+               aria-label={`Hapus ${file.name}`}
+               onClick={() => {
+                 setData('general_attachments', attachments.filter((_, i) => i !== index));
+                 setWarning('');
+               }}
+               className="min-h-11 shrink-0 rounded-sm px-1 text-red-700 hover:underline focus-visible:outline-2 focus-visible:outline-blue-700"
+             >
+               Hapus
+             </button>
+           </div>
+         );
+       })}
+       {warning && <p role="status" className="text-red-500 text-sm">{warning}</p>}
+     </div>
+   );
+ };
 
  const handleCancel = () => {
    router.patch(route('tiket.batal', ticket.id));
@@ -171,6 +280,18 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
      <div className="max-w-4xl mx-auto py-8 px-4">
        <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
+       {isQueued && (
+         <div role="status" className="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+           <Clock className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
+           <div className="space-y-1">
+             <p className="text-sm font-semibold text-amber-900">Tiket sudah diterima petugas</p>
+             <p className="text-sm text-amber-800">
+               Saat ini petugas masih menangani tiket lain, jadi tiket Anda menunggu giliran.
+               Hitungan waktu SLA berhenti selama menunggu dan baru berjalan lagi ketika petugas mulai mengerjakan.
+             </p>
+           </div>
+         </div>
+       )}
        <div className="flex justify-between items-center mb-6">
          <div>
            <h1 className="text-2xl font-bold flex items-center gap-3">
@@ -264,13 +385,14 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
 
  return; }
 
-                           const validFiles = files.filter(f => { if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`);
+                           const validFiles = files.filter(f => { if (f.size > MAX_ATTACHMENT_BYTES) { alert(`${f.name} melebihi 3MB.`);
 
  return false; }
 
  return true; });
 
                            setRevData('general_attachments', [...revData.general_attachments, ...validFiles]);
+                           if (validFiles.length > 0) setRevAttachmentWarning('');
                            e.target.value = '';
                          }}
                        />
@@ -282,21 +404,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                      </span>
                    </div>
                    {errorsRev.general_attachments && <p className="text-red-500 text-sm">{errorsRev.general_attachments}</p>}
-                   {revData.general_attachments.length > 0 && (
-                     <div className="mt-2 space-y-2">
-                       {revData.general_attachments.map((file, idx) => (
-                         <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
-                           <span className="truncate max-w-[200px]">{file.name}</span>
-                           <div className="flex items-center gap-3">
-                             {file.type.startsWith('image/') && (
-                               <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'rev'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
-                             )}
-                             <button type="button" onClick={() => setRevData('general_attachments', revData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
-                           </div>
-                         </div>
-                       ))}
-                     </div>
-                   )}
+                   {renderAttachments('rev')}
                  </div>
                  <div className="flex justify-end gap-2">
                    <Button type="button" variant="ghost" onClick={() => setShowRevForm(false)}>Batal</Button>
@@ -539,7 +647,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                    formFields.map((field) => (
                      <div key={field.id}>
                        <span className="text-sm text-slate-500">{field.label}:</span>
-                       <p className="font-medium mt-1">
+                       <p className="font-medium mt-1 whitespace-pre-wrap wrap-anywhere">
                          {renderFormValue(field)}
                        </p>
                      </div>
@@ -587,7 +695,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                                }
 
                                const validFiles = files.filter(f => {
-                                 if (f.size > 3 * 1024 * 1024) { alert(`${f.name} melebihi 3MB.`);
+                                 if (f.size > MAX_ATTACHMENT_BYTES) { alert(`${f.name} melebihi 3MB.`);
 
  return false; }
 
@@ -595,6 +703,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                                });
 
                                setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
+                               if (validFiles.length > 0) setReplyAttachmentWarning('');
                                e.target.value = '';
                              }}
                            />
@@ -606,21 +715,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
                          </span>
                        </div>
                        {errorsReply.general_attachments && <p className="text-red-500 text-sm">{errorsReply.general_attachments}</p>}
-                       {replyData.general_attachments.length > 0 && (
-                         <div className="mt-2 space-y-2">
-                           {replyData.general_attachments.map((file, idx) => (
-                             <div key={idx} className="flex justify-between items-center text-sm p-2 bg-slate-50 border rounded">
-                               <span className="truncate max-w-[200px]">{file.name}</span>
-                               <div className="flex items-center gap-3">
-                                 {file.type.startsWith('image/') && (
-                                   <button type="button" onClick={() => { setFileToEdit({file, index: idx, form: 'reply'}); setEditorOpen(true); }} className="text-blue-600 hover:underline flex items-center gap-1"><Edit2 className="w-4 h-4"/> Edit</button>
-                                 )}
-                                 <button type="button" onClick={() => setReplyData('general_attachments', replyData.general_attachments.filter((_, i) => i !== idx))} className="text-red-500 hover:underline">Hapus</button>
-                               </div>
-                             </div>
-                           ))}
-                         </div>
-                       )}
+                       {renderAttachments('reply')}
                      </div>
                      <Button type="submit" disabled={processingReply}>Kirim Balasan</Button>
                    </form>
@@ -672,26 +767,39 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
        </Tabs>
      </div>
      
-     {fileToEdit && (
-       <ImageEditorModal
-         isOpen={editorOpen}
-         onClose={() => setEditorOpen(false)}
-         imageFile={fileToEdit.file}
-         onSave={(editedFile) => {
-           if (fileToEdit.form === 'reply') {
-             const newFiles = [...replyData.general_attachments];
-             newFiles[fileToEdit.index] = editedFile;
-             setReplyData('general_attachments', newFiles);
-           } else if (fileToEdit.form === 'rev') {
-             const newFiles = [...revData.general_attachments];
-             newFiles[fileToEdit.index] = editedFile;
-             setRevData('general_attachments', newFiles);
-           }
-
-           setEditorOpen(false);
-         }}
-       />
-     )}
+     <dialog
+       ref={attachmentDialogRef}
+       aria-label={previewFile ? `${editorOpen ? 'Edit' : 'Pratinjau'} ${previewFile.file.name}` : 'Pratinjau lampiran'}
+       onClose={clearAttachmentPreview}
+       onCancel={clearAttachmentPreview}
+       className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] max-w-4xl rounded-xl text-slate-800 backdrop:bg-slate-900/60 ${editorOpen ? 'bg-transparent' : 'bg-white'}`}
+     >
+       {fileToEdit ? (
+         <ImageEditorModal
+           isOpen={editorOpen}
+           onClose={() => attachmentDialogRef.current?.close()}
+           imageFile={fileToEdit.file}
+           onSave={saveEditedAttachment}
+         />
+       ) : previewFile && (
+         <div className="space-y-4 p-4">
+           <h3 className="wrap-anywhere text-sm font-semibold">{previewFile.file.name}</h3>
+           <LocalAttachmentImage file={previewFile.file} alt={previewFile.file.name} className="mx-auto max-h-[70dvh] max-w-full object-contain" />
+           <div className="flex flex-wrap justify-end gap-2">
+             <Button type="button" variant="outline" onClick={() => attachmentDialogRef.current?.close()}>
+               Tutup
+             </Button>
+             <Button type="button" className="bg-blue-700 text-white hover:bg-blue-800" onClick={() => {
+               editSessionRef.current = new AbortController();
+               setFileToEdit(previewFile);
+               setEditorOpen(true);
+             }}>
+               Edit / Coret
+             </Button>
+           </div>
+         </div>
+       )}
+     </dialog>
    </UserLayout>
  );
 }

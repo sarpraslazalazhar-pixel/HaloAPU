@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Api;
 
-use App\Events\ChatMessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Models\ChatAttachment;
@@ -13,6 +12,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -66,7 +66,7 @@ class ChatController extends Controller
         $this->markRead($conversation, $actor, $isAdmin);
 
         $messages = $conversation->messages()
-            ->with(['sender', 'ticket:id,sub_unit_id,user_id,status,priority', 'attachments', 'replyTo.sender', 'reads'])
+            ->with(['sender', 'ticket:id,sub_unit_id,user_id,status,priority', 'ticket.subUnit:id,nama_layanan', 'attachments', 'replyTo.sender', 'reads'])
             ->orderBy('created_at')
             ->get()
             ->map(fn (Message $msg) => $this->presentMessage($msg));
@@ -78,11 +78,14 @@ class ChatController extends Controller
                 'id' => $conversation->id,
                 'type' => $conversation->type,
                 'ticket_id' => $conversation->ticket_id,
-                'title' => $ticket ? 'Tiket #' . $ticket->formatted_id : null,
+                'title' => $ticket ? $ticket->chatLabel() : null,
                 'ticket' => $ticket ? [
                     'id' => $ticket->id,
                     'formatted_id' => $ticket->formatted_id,
                     'judul' => $ticket->judul,
+                    'chat_label' => $ticket->chatLabel(),
+                    'created_at' => $ticket->created_at?->toIso8601String(),
+                    'nama_layanan' => $ticket->subUnit?->nama_layanan,
                     'status' => $ticket->status,
                 ] : null,
             ],
@@ -98,17 +101,10 @@ class ChatController extends Controller
         if ($actor instanceof Admin) {
             abort_unless($ticket->isAccessibleBy($actor), 403, 'Akses ditolak.');
         } else {
-            abort_unless((int) $ticket->user_id === (int) $actor->id, 403, 'Akses ditolak.');
+            abort_unless($ticket->isOwnedByUser($actor), 403, 'Akses ditolak.');
         }
 
-        $conversation = Conversation::firstOrCreate(
-            ['type' => 'ticket', 'ticket_id' => $ticket->id],
-            [
-                'user_id' => $ticket->user_id,
-                'admin_one_id' => $ticket->assigned_admin_id,
-                'last_message_at' => now(),
-            ]
-        );
+        $conversation = \App\Services\ChatInboxService::ensureTicketConversation($ticket);
 
         return $this->show($request, $conversation);
     }
@@ -117,6 +113,13 @@ class ChatController extends Controller
     public function store(Request $request, Conversation $conversation)
     {
         Gate::authorize('view', $conversation);
+
+        if ($conversation->type === 'ticket' && $conversation->ticket) {
+            $status = strtolower((string) $conversation->ticket->status);
+            if (in_array($status, ['solve', 'selesai', 'reject', 'dibatalkan'], true)) {
+                return response()->json(['message' => 'Tiket ini sudah ditutup. Tidak dapat mengirim pesan baru.'], 422);
+            }
+        }
 
         $actor = $request->user();
         $isAdmin = $actor instanceof Admin;
@@ -148,43 +151,49 @@ class ChatController extends Controller
             }
         }
 
-        $message = Message::create([
-            'conversation_id' => $conversation->id,
-            'sender_type' => $isAdmin ? Admin::class : User::class,
-            'sender_id' => $actor->id,
-            'ticket_id' => $ticketId,
-            'reply_to_message_id' => $validated['reply_to_message_id'] ?? null,
-            'body' => $validated['body'] ?? null,
-        ]);
-
-        if ($request->hasFile('attachment')) {
-            $file = $request->file('attachment');
-            $path = $file->store('chat_attachments', 'public');
-
-            ChatAttachment::create([
-                'message_id' => $message->id,
-                'file_name' => $file->getClientOriginalName(),
-                'file_path' => $path,
-                'file_type' => $file->getMimeType(),
-                'file_size' => $file->getSize(),
+        $message = DB::transaction(function () use ($conversation, $actor, $isAdmin, $ticketId, $validated, $request) {
+            $message = Message::create([
+                'conversation_id' => $conversation->id,
+                'sender_type' => $isAdmin ? Admin::class : User::class,
+                'sender_id' => $actor->id,
+                'ticket_id' => $ticketId,
+                'reply_to_message_id' => $validated['reply_to_message_id'] ?? null,
+                'body' => $validated['body'] ?? null,
             ]);
-        }
 
-        MessageRead::firstOrCreate([
-            'message_id' => $message->id,
-            'user_type' => $isAdmin ? Admin::class : User::class,
-            'user_id' => $actor->id,
-        ], ['read_at' => now()]);
+            if ($request->hasFile('attachment')) {
+                $file = $request->file('attachment');
+                $path = $file->store('chat_attachments', 'public');
 
-        $conversation->update(['last_message_at' => now()]);
+                ChatAttachment::create([
+                    'message_id' => $message->id,
+                    'file_name' => $file->getClientOriginalName(),
+                    'file_path' => $path,
+                    'file_type' => $file->getMimeType(),
+                    'file_size' => $file->getSize(),
+                ]);
+            }
+
+            MessageRead::firstOrCreate([
+                'message_id' => $message->id,
+                'user_type' => $isAdmin ? Admin::class : User::class,
+                'user_id' => $actor->id,
+            ], ['read_at' => now()]);
+
+            $conversation->update(['last_message_at' => now()]);
+
+            // Mirror into the ticket timeline when this message is about a ticket.
+            if ($ticketId) {
+                \App\Services\TicketChatBridgeService::syncChatMessageToTicket($message->load('attachments'));
+            }
+
+            return $message;
+        });
 
         // Same event the web chat listens to, so both sides update instantly.
-        broadcast(new ChatMessageSent($message))->toOthers();
-
-        // Mirror into the ticket timeline when this message is about a ticket.
-        if ($ticketId) {
-            \App\Services\TicketChatBridgeService::syncChatMessageToTicket($message->load('attachments'));
-        }
+        \App\Services\TicketChatBridgeService::afterCommit(
+            fn () => \App\Services\TicketChatBridgeService::emitChatMessage($message)
+        );
 
         return response()->json([
             'message' => $this->presentMessage($message->load(['sender', 'attachments', 'ticket', 'replyTo'])),
@@ -256,6 +265,9 @@ class ChatController extends Controller
                 'id' => $msg->ticket->id,
                 'formatted_id' => $msg->ticket->formatted_id,
                 'judul' => $msg->ticket->judul,
+                'chat_label' => $msg->ticket->chatLabel(),
+                'created_at' => $msg->ticket->created_at?->toIso8601String(),
+                'nama_layanan' => $msg->ticket->subUnit?->nama_layanan,
                 'status' => $msg->ticket->status,
             ] : null,
             'reply_to_message_id' => $msg->reply_to_message_id,

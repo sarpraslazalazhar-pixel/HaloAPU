@@ -55,10 +55,10 @@ class CsatApiController extends Controller
             ]
         );
         // Update ticket status to 'Selesai' after rating
-        if (in_array(strtolower($ticket->status), ['solve', 'selesai'])) {
-            if (strtolower($ticket->status) === 'solve' || $ticket->status !== 'Selesai') {
-                $ticket->update(['status' => 'Selesai']);
-            }
+        if ($ticket->status !== 'Selesai' && Ticket::whereKey($ticket->id)
+            ->whereIn('status', ['solve', 'selesai', 'Selesai'])
+            ->update(['status' => 'Selesai'])) {
+            $ticket->status = 'Selesai';
         }
 
         // Notify admins

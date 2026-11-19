@@ -37,10 +37,23 @@ const JENIS_OPTIONS = [
  { value: 'penyelesaian', label: 'Penyelesaian' }
 ];
 
+/** Menit tersimpan di DB; form memakai jam + menit. */
+const splitDuration = (minutes: number) => ({
+ jam: Math.floor((minutes || 0) / 60),
+ menit: (minutes || 0) % 60,
+});
+
+const formatDuration = (minutes: number) => {
+ const { jam, menit } = splitDuration(minutes);
+ if (jam === 0) return `${menit} Menit`;
+ return menit === 0 ? `${jam} Jam` : `${jam} Jam ${menit} Menit`;
+};
+
 export default function SlaConfigIndex({ configs, subUnits, filters: _filters }: { configs: any; subUnits: SubUnit[]; filters?: { search?: string } }) {
  const [isAddOpen, setIsAddOpen] = useState(false);
  const [editConfig, setEditConfig] = useState<SlaConfig | null>(null);
  const [tingkat, setTingkat] = useState<'global' | 'spesifik'>('global');
+ const [durasi, setDurasi] = useState({ jam: 1, menit: 0 });
 
  const groupedSubUnits = useMemo(() => {
  const map: Record<string, SubUnit[]> = {};
@@ -67,7 +80,8 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  
  transform((formData: any) => ({
  ...formData,
- sub_unit_id: tingkat === 'global' ? null : formData.sub_unit_id
+ sub_unit_id: tingkat === 'global' ? null : formData.sub_unit_id,
+ threshold_minutes: durasi.jam * 60 + durasi.menit,
  }));
 
  post(route('admin.sla-config.store'), {
@@ -75,6 +89,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  setIsAddOpen(false);
  reset();
  setTingkat('global');
+ setDurasi({ jam: 1, menit: 0 });
  }
  });
  };
@@ -85,7 +100,8 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  if (editConfig) {
  transform((formData: any) => ({
  ...formData,
- sub_unit_id: tingkat === 'global' ? null : formData.sub_unit_id
+ sub_unit_id: tingkat === 'global' ? null : formData.sub_unit_id,
+ threshold_minutes: durasi.jam * 60 + durasi.menit,
  }));
 
  put(route('admin.sla-config.update', editConfig.id), {
@@ -93,6 +109,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  setEditConfig(null);
  reset();
  setTingkat('global');
+ setDurasi({ jam: 1, menit: 0 });
  }
  });
  }
@@ -123,6 +140,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  priority: config.priority,
  threshold_minutes: config.threshold_minutes,
  });
+ setDurasi(splitDuration(config.threshold_minutes));
  };
 
  return (
@@ -235,13 +253,30 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  </div>
 
  <div className="space-y-2">
- <Label>Target Waktu (Menit)</Label>
- <Input 
- type="number" 
- min={1} 
- value={data.threshold_minutes} 
- onChange={e => setData('threshold_minutes', parseInt(e.target.value) || 0)} 
+ <Label>Target Waktu</Label>
+ <div className="flex items-center gap-2">
+ <Input
+ type="number"
+ min={0}
+ max={999}
+ value={durasi.jam}
+ onChange={e => setDurasi(d => ({ ...d, jam: Math.max(0, parseInt(e.target.value) || 0) }))}
+ className="w-20"
  />
+ <span className="text-sm text-muted-foreground">Jam</span>
+ <Input
+ type="number"
+ min={0}
+ max={59}
+ value={durasi.menit}
+ onChange={e => setDurasi(d => ({ ...d, menit: Math.min(59, Math.max(0, parseInt(e.target.value) || 0)) }))}
+ className="w-20"
+ />
+ <span className="text-sm text-muted-foreground">Menit</span>
+ </div>
+ {durasi.jam === 0 && durasi.menit === 0 && (
+ <p className="text-red-500 text-sm">Target waktu minimal 1 menit.</p>
+ )}
  {errors.threshold_minutes && <p className="text-red-500 text-sm">{errors.threshold_minutes}</p>}
  </div>
 
@@ -259,7 +294,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  <TableHead>Sub Unit</TableHead>
  <TableHead>Jenis SLA</TableHead>
  <TableHead>Prioritas</TableHead>
- <TableHead>Target Waktu (Menit)</TableHead>
+ <TableHead>Target Waktu</TableHead>
  <TableHead className="w-[100px] text-right">Aksi</TableHead>
  </TableRow>
  </TableHeader>
@@ -278,7 +313,7 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  </TableCell>
  <TableCell className="capitalize">{config.jenis}</TableCell>
  <TableCell>{config.priority}</TableCell>
- <TableCell>{config.threshold_minutes} Menit</TableCell>
+ <TableCell>{formatDuration(config.threshold_minutes)}</TableCell>
  <TableCell className="text-right">
  <div className="flex items-center justify-end gap-2">
  <Button variant="outline" size="icon" onClick={() => openEdit(config)}>
@@ -403,13 +438,30 @@ export default function SlaConfigIndex({ configs, subUnits, filters: _filters }:
  </div>
 
  <div className="space-y-2">
- <Label>Target Waktu (Menit)</Label>
- <Input 
- type="number" 
- min={1} 
- value={data.threshold_minutes} 
- onChange={e => setData('threshold_minutes', parseInt(e.target.value) || 0)} 
+ <Label>Target Waktu</Label>
+ <div className="flex items-center gap-2">
+ <Input
+ type="number"
+ min={0}
+ max={999}
+ value={durasi.jam}
+ onChange={e => setDurasi(d => ({ ...d, jam: Math.max(0, parseInt(e.target.value) || 0) }))}
+ className="w-20"
  />
+ <span className="text-sm text-muted-foreground">Jam</span>
+ <Input
+ type="number"
+ min={0}
+ max={59}
+ value={durasi.menit}
+ onChange={e => setDurasi(d => ({ ...d, menit: Math.min(59, Math.max(0, parseInt(e.target.value) || 0)) }))}
+ className="w-20"
+ />
+ <span className="text-sm text-muted-foreground">Menit</span>
+ </div>
+ {durasi.jam === 0 && durasi.menit === 0 && (
+ <p className="text-red-500 text-sm">Target waktu minimal 1 menit.</p>
+ )}
  {errors.threshold_minutes && <p className="text-red-500 text-sm">{errors.threshold_minutes}</p>}
  </div>
 

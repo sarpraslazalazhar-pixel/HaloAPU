@@ -75,6 +75,7 @@ class Ticket extends Model
     protected $fillable = [
         'user_id', 'created_by_admin_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
         'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id',
+        'assignment_queued_at', 'assignment_resume_status',
         'source',
         'revision_count', 'waiting_approval_at', 'is_result_accepted', 'dikembalikan_at',
         'kondisi_kembali', 'catatan_kembali'
@@ -101,6 +102,16 @@ class Ticket extends Model
         return $this->subUnit ? $this->subUnit->nama_layanan : 'Tiket #' . $this->formatted_id;
     }
 
+    /**
+     * Chat room label: the service the requester picked, never the ticket id.
+     */
+    public function chatLabel(): string
+    {
+        $label = trim((string) ($this->subUnit?->nama_layanan ?? ''));
+
+        return $label !== '' ? $label : 'Diskusi Tiket';
+    }
+
     protected $casts = [
         'form_data' => 'array',
         'user_id' => 'integer',
@@ -111,6 +122,7 @@ class Ticket extends Model
         'sub_unit_id' => 'integer',
         'is_result_accepted' => 'boolean',
         'dikembalikan_at' => 'datetime',
+        'assignment_queued_at' => 'datetime',
     ];
 
     public function createdByAdmin()
@@ -184,6 +196,99 @@ class Ticket extends Model
     }
 
     /**
+     * ID User yang berkorespondensi dengan akun Admin (berdasarkan username/email non-kosong).
+     *
+     * @return array<int, int>
+     */
+    public static function matchedUserIdsForAdmin(Admin $admin): array
+    {
+        if (empty($admin->username) && empty($admin->email)) {
+            return [];
+        }
+
+        return \App\Models\User::where(function ($q) use ($admin) {
+            $hasCondition = false;
+            if (! empty($admin->username)) {
+                $q->where('username', $admin->username);
+                $hasCondition = true;
+            }
+            if (! empty($admin->email)) {
+                $hasCondition
+                    ? $q->orWhere('email', $admin->email)
+                    : $q->where('email', $admin->email);
+            }
+        })
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * ID Admin yang berkorespondensi dengan akun User (berdasarkan username/email non-kosong).
+     *
+     * @return array<int, int>
+     */
+    public static function matchedAdminIdsForUser(User $user): array
+    {
+        if (empty($user->username) && empty($user->email)) {
+            return [];
+        }
+
+        return \App\Models\Admin::where(function ($q) use ($user) {
+            $hasCondition = false;
+            if (! empty($user->username)) {
+                $q->where('username', $user->username);
+                $hasCondition = true;
+            }
+            if (! empty($user->email)) {
+                $hasCondition
+                    ? $q->orWhere('email', $user->email)
+                    : $q->where('email', $user->email);
+            }
+        })
+            ->pluck('id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
+     * Tiket yang diajukan oleh user ini.
+     */
+    public function scopeOwnedByUser($query, ?User $user = null): void
+    {
+        $user ??= auth('web')->user();
+
+        if (! $user) {
+            $query->whereRaw('1 = 0');
+            return;
+        }
+
+        $matchedAdminIds = self::matchedAdminIdsForUser($user);
+
+        $query->where(function ($q) use ($user, $matchedAdminIds) {
+            $q->where('tickets.user_id', $user->id);
+            if (! empty($matchedAdminIds)) {
+                $q->orWhereIn('tickets.created_by_admin_id', $matchedAdminIds);
+            }
+        });
+    }
+
+    public function isOwnedByUser(User $user): bool
+    {
+        if ((int) $this->user_id === (int) $user->id) {
+            return true;
+        }
+
+        if (! $this->created_by_admin_id) {
+            return false;
+        }
+
+        return in_array((int) $this->created_by_admin_id, self::matchedAdminIdsForUser($user), true);
+    }
+
+    /**
      * Tiket masuk: ditugaskan ke admin, atau masuk ke unit/sub unit admin. Tidak termasuk tiket yang diajukan sendiri.
      */
     public function scopeIncomingFor($query, ?Admin $admin = null): void
@@ -195,11 +300,7 @@ class Ticket extends Model
             return;
         }
 
-        $matchedUserIds = \App\Models\User::where('username', $admin->username)
-            ->orWhere('email', $admin->email)
-            ->pluck('id')
-            ->filter()
-            ->all();
+        $matchedUserIds = self::matchedUserIdsForAdmin($admin);
 
         // Exclude tiket yang diajukan sendiri
         $query->where(function ($notOwn) use ($admin) {
@@ -249,14 +350,10 @@ class Ticket extends Model
             return;
         }
 
-        $query->where(function ($q) use ($admin) {
-            $q->where('tickets.created_by_admin_id', $admin->id);
+        $matchedUserIds = self::matchedUserIdsForAdmin($admin);
 
-            $matchedUserIds = \App\Models\User::where('username', $admin->username)
-                ->orWhere('email', $admin->email)
-                ->pluck('id')
-                ->filter()
-                ->all();
+        $query->where(function ($q) use ($admin, $matchedUserIds) {
+            $q->where('tickets.created_by_admin_id', $admin->id);
 
             if (!empty($matchedUserIds)) {
                 $q->orWhereIn('tickets.user_id', $matchedUserIds);
@@ -277,24 +374,7 @@ class Ticket extends Model
             return false;
         }
 
-        return \App\Models\User::where('id', $this->user_id)
-            ->where(function ($q) use ($admin) {
-                $hasCondition = false;
-                if (! empty($admin->username)) {
-                    $q->where('username', $admin->username);
-                    $hasCondition = true;
-                }
-                if (! empty($admin->email)) {
-                    $hasCondition
-                        ? $q->orWhere('email', $admin->email)
-                        : $q->where('email', $admin->email);
-                    $hasCondition = true;
-                }
-                if (! $hasCondition) {
-                    $q->whereRaw('1 = 0');
-                }
-            })
-            ->exists();
+        return in_array((int) $this->user_id, self::matchedUserIdsForAdmin($admin), true);
     }
 
     /**
@@ -316,9 +396,15 @@ class Ticket extends Model
             return;
         }
 
-        $query->where(function ($q) use ($admin) {
+        $matchedUserIds = self::matchedUserIdsForAdmin($admin);
+
+        $query->where(function ($q) use ($admin, $matchedUserIds) {
             $q->where('tickets.created_by_admin_id', $admin->id);
             $q->orWhere('tickets.assigned_admin_id', $admin->id);
+
+            if (!empty($matchedUserIds)) {
+                $q->orWhereIn('tickets.user_id', $matchedUserIds);
+            }
 
             $unitIds = $admin->units()->pluck('units.id')->filter()->all();
             if (!empty($unitIds)) {
@@ -343,7 +429,7 @@ class Ticket extends Model
         }
 
         if ((int) $this->assigned_admin_id === (int) $admin->id
-            || (int) $this->created_by_admin_id === (int) $admin->id) {
+            || $this->isSubmittedBy($admin)) {
             return true;
         }
 

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import { AlertTriangle, ArrowDown, ArrowUp, ListOrdered, Loader2, RefreshCw, UsersRound } from 'lucide-react';
 import { StatusBadge } from '@/Components/StatusBadge';
@@ -13,9 +13,12 @@ export interface ActiveTicket {
   status: string;
   urgent: boolean;
   position: number | null;
+  is_work_hours_paused?: boolean;
 }
 
 export interface ActiveTicketPayload {
+  work_hours_open: boolean;
+  next_open_at: string | null;
   active: ActiveTicket | null;
   queue: ActiveTicket[];
 }
@@ -30,7 +33,7 @@ interface ActiveTicketEvents {
   '.pusher:subscription_succeeded': Record<string, never>;
 }
 
-const EMPTY: ActiveTicketPayload = { active: null, queue: [] };
+const EMPTY: ActiveTicketPayload = { work_hours_open: false, next_open_at: null, active: null, queue: [] };
 
 export default function ActiveAssignedTicket({ adminId, initialPayload }: Props) {
   const { auth } = usePage<any>().props;
@@ -68,7 +71,12 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
       const body = await response.json();
       if (!mounted.current) return;
 
-      setPayload({ active: body.data?.active ?? null, queue: body.data?.queue ?? [] });
+      setPayload({
+        active: body.data?.active ?? null,
+        queue: body.data?.queue ?? [],
+        work_hours_open: body.data?.work_hours_open ?? false,
+        next_open_at: body.data?.next_open_at ?? null,
+      });
       setStale(false);
     } catch (error) {
       if (!mounted.current || (error as Error)?.name === 'AbortError') return;
@@ -96,15 +104,23 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
     const poll = window.Echo ? null : window.setInterval(() => {
       if (!document.hidden) void refresh();
     }, 20000);
+    const nextOpenAt = payload.next_open_at ? Date.parse(payload.next_open_at) : NaN;
+    const openingRefresh = window.Echo
+      && payload.active?.is_work_hours_paused
+      && !payload.work_hours_open
+      && Number.isFinite(nextOpenAt)
+      ? window.setTimeout(() => void refresh(), Math.max(0, nextOpenAt - Date.now() + 1000))
+      : null;
 
     return () => {
       mounted.current = false;
       inFlight.current?.abort();
       if (poll !== null) window.clearInterval(poll);
+      if (openingRefresh !== null) window.clearTimeout(openingRefresh);
       document.removeEventListener('visibilitychange', onVisible);
       unsubscribe();
     };
-  }, [adminId, refresh]);
+  }, [adminId, refresh, payload.active?.is_work_hours_paused, payload.next_open_at, payload.work_hours_open]);
 
   const move = (ticket: ActiveTicket, direction: 'up' | 'down') => {
     setBusyId(ticket.id);
@@ -139,6 +155,12 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
   if (total === 0 && !stale) return null;
 
   const rows = payload.active ? [payload.active, ...payload.queue] : payload.queue;
+  const resumeCount = payload.work_hours_open
+    ? rows.filter((ticket) => ticket.is_work_hours_paused).length
+    : 0;
+  const activeState = payload.active?.is_work_hours_paused
+    ? payload.work_hours_open ? 'perlu dilanjutkan' : 'tertunda menunggu jam kerja'
+    : 'aktif';
 
   return (
     <div className="fixed right-4 bottom-[calc(80px+env(safe-area-inset-bottom,0px))] z-40 flex flex-col items-end gap-2 md:bottom-6">
@@ -156,8 +178,12 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
                 </div>
                 <p className="truncate text-xs text-muted-foreground">{ticket.service}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-sky-700">
-                    {ticket.position === null ? 'Sedang dikerjakan' : `Antrean ke-${ticket.position}`}
+                  <span className={`text-xs font-medium ${ticket.is_work_hours_paused && payload.work_hours_open ? 'text-amber-700' : 'text-sky-700'}`}>
+                    {ticket.position !== null
+                      ? `Antrean ke-${ticket.position}`
+                      : ticket.is_work_hours_paused
+                        ? payload.work_hours_open ? 'Perlu dilanjutkan' : 'Tertunda • menunggu jam kerja'
+                        : 'Sedang dikerjakan'}
                   </span>
                   {ticket.urgent && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">
@@ -224,7 +250,7 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
           type="button"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
-          aria-label={`Antrean pekerjaan, ${total} tiket`}
+          aria-label={`Antrean pekerjaan, ${total} tiket${resumeCount > 0 ? `, ${resumeCount} perlu dilanjutkan` : ''}`}
           className={cn(
             'relative flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg',
             'transition-transform hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
@@ -232,14 +258,14 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
         >
           <UsersRound className="size-6" aria-hidden="true" />
           <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[11px] font-bold leading-none text-destructive-foreground ring-2 ring-background">
-            {total > 99 ? '99+' : total}
+            {(resumeCount > 0 ? resumeCount : total) > 99 ? '99+' : resumeCount > 0 ? resumeCount : total}
           </span>
         </button>
       </div>
 
       <span className="sr-only" role="status" aria-live="polite">
         {payload.active
-          ? `Tiket aktif #TKT-${payload.active.formatted_id}. ${payload.queue.length} tiket menunggu giliran.`
+          ? `Tiket ${activeState} #TKT-${payload.active.formatted_id}. ${payload.queue.length} tiket menunggu giliran.`
           : `${payload.queue.length} tiket menunggu giliran.`}
       </span>
     </div>

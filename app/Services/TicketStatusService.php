@@ -9,10 +9,12 @@ use App\Models\TicketLog;
 use App\Notifications\TicketCommentPushNotification;
 use App\Notifications\TicketStatusUpdatedNotification;
 use App\Notifications\TicketStatusUpdatedOperatorNotification;
+use App\Notifications\TicketWorkloadReviewRequestedNotification;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
@@ -47,6 +49,14 @@ class TicketStatusService
             $oldStatus = $lockedTicket->status;
             if ($oldStatus === $newStatus) {
                 return;
+            }
+
+            if ($lockedTicket->work_hours_resume_status !== null) {
+                throw new InvalidArgumentException('Gunakan Lanjutkan Tiket setelah jam kerja buka.');
+            }
+
+            if ($newStatus === 'on_proses' && ! (new SlaCalculator)->isWithinWorkingHours($at)) {
+                throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
             }
 
             if ($newStatus === 'on_proses' && ($lockedTicket->assignment_queued_at !== null
@@ -198,9 +208,49 @@ class TicketStatusService
             Log::error("Gagal mengirim notifikasi operator tiket #{$ticket->id}: ".$e->getMessage());
         }
 
+        if ($ticket->status === 'solve') {
+            try {
+                self::notifyWorkloadReviewRequested($ticket);
+            } catch (\Throwable $e) {
+                Log::error("Gagal mengirim notifikasi penilaian beban tiket #{$ticket->id}: {$e->getMessage()}");
+            }
+        }
+
         // Webhook hook to SPARC if eligible
         if (! $skipSparcLoop && class_exists(SparcIntegrationService::class)) {
             app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.status_updated');
+        }
+    }
+
+    private static function notifyWorkloadReviewRequested(Ticket $ticket): void
+    {
+        $fresh = Ticket::query()
+            ->whereKey($ticket->id)
+            ->awaitingWorkloadAssessment()
+            ->first();
+
+        if (! $fresh) {
+            return;
+        }
+
+        $recipients = Admin::query()
+            ->where(function ($q) use ($fresh) {
+                $q->whereHas('units', fn ($u) => $u->where('units.id', $fresh->unit_id))
+                    ->orWhereHas('units', fn ($u) => $u->whereHas('subUnits', fn ($su) => $su->whereKey($fresh->sub_unit_id)))
+                    ->orWhereHas('subUnits', fn ($su) => $su->whereKey($fresh->sub_unit_id));
+            })
+            ->with(['roles:id,name', 'permissions:id,name'])
+            ->get()
+            ->filter(fn (Admin $a) => $a->isCoordinator() && ! $a->hasRole(['superadmin', 'Super Admin']))
+            ->unique('id')
+            ->values();
+
+        if ($recipients->isEmpty()) {
+            $recipients = Admin::query()->whereHas('roles', fn ($q) => $q->whereIn('name', ['superadmin', 'Super Admin']))->get()->unique('id')->values();
+        }
+
+        if ($recipients->isNotEmpty()) {
+            Notification::send($recipients, new TicketWorkloadReviewRequestedNotification($fresh));
         }
     }
 }

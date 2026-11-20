@@ -12,6 +12,7 @@ use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\User;
+use App\Notifications\TicketCommentPushNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -188,6 +189,65 @@ class TicketChatBridgeService
         }
 
         return $log;
+    }
+
+    /**
+     * Send reply notifications to the admins who can actually act on the ticket.
+     * Never notifies the sender; recipients are deduplicated across sources.
+     */
+    public static function notifyReplyRecipients(Ticket $ticket, ?Admin $sender, string $message): void
+    {
+        $ticket->loadMissing(['assignedAdmin', 'createdByAdmin', 'subUnit.unit']);
+
+        $recipients = collect();
+
+        if ($sender === null) {
+            $recipients = $recipients->merge(self::serviceTeamAdmins($ticket));
+        } elseif ($sender->id !== $ticket->assigned_admin_id) {
+            $recipients = $recipients->merge(self::serviceTeamAdmins($ticket));
+        }
+
+        if ($ticket->assignedAdmin) {
+            $recipients->push($ticket->assignedAdmin);
+        }
+
+        if ($ticket->work_hours_resume_status !== null && $ticket->createdByAdmin) {
+            $recipients->push($ticket->createdByAdmin);
+        }
+
+        $recipients = $recipients
+            ->filter(fn ($admin) => $admin && ($sender === null || (int) $admin->id !== (int) $sender->id))
+            ->unique('id');
+
+        if ($recipients->isEmpty()) {
+            return;
+        }
+
+        $senderName = $sender ? ($sender->name ?? $sender->username) : ($ticket->user?->name ?? $ticket->user?->username ?? 'Pengguna');
+        $url = route('admin.tiket.show', $ticket->id);
+
+        foreach ($recipients as $recipient) {
+            try {
+                $recipient->notify(new TicketCommentPushNotification($ticket, $senderName, $message, $url));
+            } catch (\Throwable $e) {
+                Log::error("Gagal mengirim notifikasi balasan tiket #{$ticket->id} ke admin #{$recipient->id}: ".$e->getMessage());
+            }
+        }
+    }
+
+    /** Admin unit layanan plus superadmin legacy, tanpa duplikasi. */
+    private static function serviceTeamAdmins(Ticket $ticket): \Illuminate\Support\Collection
+    {
+        $unitId = $ticket->subUnit?->unit_id ?? $ticket->unit_id;
+
+        return Admin::query()
+            ->where(function ($q) use ($unitId) {
+                if ($unitId !== null) {
+                    $q->whereHas('units', fn ($u) => $u->where('units.id', $unitId));
+                }
+            })
+            ->orWhereHas('roles', fn ($r) => $r->whereIn('name', ['superadmin', 'Super Admin', 'super_admin', 'Superadmin']))
+            ->get();
     }
 
     /**

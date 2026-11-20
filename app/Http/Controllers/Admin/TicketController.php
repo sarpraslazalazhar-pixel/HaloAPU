@@ -8,15 +8,14 @@ use App\Models\Admin;
 use App\Models\FormField;
 use App\Models\OrgDivisi;
 use App\Models\OrgUnit;
-use App\Models\RoomVehicleBooking;
 use App\Models\SubUnit;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\Unit;
 use App\Notifications\BrowserNotification;
-use App\Notifications\TicketCreatedAdminNotification;
 use App\Notifications\TicketStatusUpdatedNotification;
+use App\Services\AdminTicketCreator;
 use App\Services\SlaCalculator;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
@@ -29,10 +28,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class TicketController extends Controller
@@ -99,42 +96,52 @@ class TicketController extends Controller
             || $admin->isCoordinator()
             || $admin->hasPermissionTo('akses-assign-operator');
 
+        $workHoursOpen = (new SlaCalculator)->workingHoursState(Carbon::now())['is_open'];
+
         $operatorLoads = Ticket::query()
             ->where(fn ($q) => $q->whereIn('status', TicketWorkQueue::ACTIVE_STATUSES)
-                ->orWhere(fn ($queued) => $queued->where('status', 'pending')
-                    ->whereNotNull('assignment_queued_at')
-                    ->whereNotNull('assignment_resume_status')))
+                ->orWhere(fn ($extra) => $extra->where('status', 'pending')
+                    ->where(fn ($pending) => $pending
+                        ->where(fn ($queued) => $queued->whereNotNull('assignment_queued_at')
+                            ->whereNotNull('assignment_resume_status'))
+                        ->orWhereNotNull('work_hours_resume_status'))))
             ->whereNotNull('assigned_admin_id')
             ->with(['assignedAdmin:id,name,username', 'subUnit:id,nama_layanan'])
-            ->get(['id', 'assigned_admin_id', 'status', 'priority', 'sub_unit_id', 'assignment_queued_at'])
+            ->get(['id', 'assigned_admin_id', 'status', 'priority', 'sub_unit_id', 'assignment_queued_at', 'work_hours_resume_status'])
             ->groupBy('assigned_admin_id')
-            ->map(function ($rows) use ($canSeeQueues) {
+            ->map(function ($rows) use ($canSeeQueues, $workHoursOpen) {
                 $working = $rows->whereNotIn('status', ['pending']);
+                $paused = $rows->where('status', 'pending')
+                    ->filter(fn ($t) => $t->work_hours_resume_status !== null && $t->assignment_queued_at === null)
+                    ->values();
                 $queued = $rows->where('status', 'pending')
+                    ->filter(fn ($t) => $t->assignment_queued_at !== null)
                     ->sortBy(fn ($t) => [$t->priority === 'Urgen' ? 0 : 1, (string) $t->assignment_queued_at, (int) $t->id])
                     ->values();
+
+                $mapRow = fn ($t, ?int $position) => [
+                    'id' => (int) $t->id,
+                    'formatted_id' => $t->formatted_id,
+                    'service' => $t->subUnit?->nama_layanan ?? 'Layanan tidak tersedia',
+                    'status' => $t->status,
+                    'urgent' => $t->priority === 'Urgen',
+                    'position' => $position,
+                    'is_work_hours_paused' => $position === null && $t->work_hours_resume_status !== null,
+                    'waiting_for_work_hours' => $position !== null && ! $workHoursOpen,
+                ];
 
                 return [
                     'admin_id' => (int) $rows->first()->assigned_admin_id,
                     'name' => $rows->first()->assignedAdmin?->name ?? $rows->first()->assignedAdmin?->username ?? 'Petugas',
                     'working' => $working->count(),
+                    'paused' => $paused->count(),
                     'queued' => $queued->count(),
+                    'work_hours_open' => $workHoursOpen,
                     'tickets' => $canSeeQueues
-                        ? $working->map(fn ($t) => [
-                            'id' => (int) $t->id,
-                            'formatted_id' => $t->formatted_id,
-                            'service' => $t->subUnit?->nama_layanan ?? 'Layanan tidak tersedia',
-                            'status' => $t->status,
-                            'urgent' => $t->priority === 'Urgen',
-                            'position' => null,
-                        ])->concat($queued->map(fn ($t, $i) => [
-                            'id' => (int) $t->id,
-                            'formatted_id' => $t->formatted_id,
-                            'service' => $t->subUnit?->nama_layanan ?? 'Layanan tidak tersedia',
-                            'status' => $t->status,
-                            'urgent' => $t->priority === 'Urgen',
-                            'position' => $i + 1,
-                        ]))->values()->all()
+                        ? $working->map(fn ($t) => $mapRow($t, null))
+                            ->concat($paused->map(fn ($t) => $mapRow($t, null)))
+                            ->concat($queued->map(fn ($t, $i) => $mapRow($t, $i + 1)))
+                            ->values()->all()
                         : [],
                 ];
             })
@@ -148,6 +155,7 @@ class TicketController extends Controller
             'divisiList' => $divisiList,
             'orgUnitList' => $orgUnitList,
             'currentTab' => $tab,
+            'canBulkCreate' => $admin->hasRole(['Admin', 'superadmin', 'Super Admin']),
             'operatorLoads' => $operatorLoads,
             'tabCounts' => [
                 'masuk' => $activeCount('accessibleBy'),
@@ -163,7 +171,7 @@ class TicketController extends Controller
         ]);
     }
 
-    public function store(Request $request, SlaCalculator $slaCalculator)
+    public function store(Request $request, AdminTicketCreator $creator)
     {
         if (is_string($request->form_data)) {
             $request->merge(['form_data' => json_decode($request->form_data, true) ?? []]);
@@ -205,149 +213,24 @@ class TicketController extends Controller
         }
 
         $subUnit = SubUnit::findOrFail($request->sub_unit_id);
+        $subUnit->load('formFields');
         $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $formFields, $request->form_data));
 
         $admin = auth('admin')->user();
 
-        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $admin, $subUnit, $window) {
-            $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
-
-            $ticket = Ticket::create([
-                'user_id' => null,
-                'created_by_admin_id' => $admin->id,
-                'unit_id' => $request->unit_id,
-                'sub_unit_id' => $request->sub_unit_id,
+        $ticket = $creator->create($admin, [[
+            'data' => [
+                'unit_id' => (int) $request->unit_id,
+                'sub_unit_id' => (int) $request->sub_unit_id,
                 'form_data' => $request->form_data,
-                'status' => $initialStatus,
-                'source' => 'web',
-            ]);
+                'attachments' => (array) $request->file('attachments'),
+                'general_attachments' => (array) $request->file('general_attachments'),
+            ],
+            'subUnit' => $subUnit,
+            'window' => $window,
+        ]])[0];
 
-            $saveFile = function ($file, $fieldId, $wajib) use ($ticket) {
-                if (! $file instanceof UploadedFile || ! $file->isValid()) {
-                    return;
-                }
-                // Bypass getRealPath() bug di Windows: kirim path string
-                $path = Storage::disk('public')->putFileAs(
-                    "ticket-attachments/{$ticket->id}",
-                    $file->getPathname(),
-                    $file->hashName()
-                );
-                TicketAttachment::create([
-                    'ticket_id' => $ticket->id,
-                    'field_id' => $fieldId,
-                    'ticket_log_id' => null,
-                    'file_path' => $path,
-                    'original_name' => $file->getClientOriginalName(),
-                    'mime_type' => $file->getMimeType(),
-                    'file_size' => $file->getSize(),
-                    'wajib' => $wajib,
-                ]);
-            };
-
-            foreach ((array) $request->file('attachments') as $fieldId => $files) {
-                if (! is_array($files)) {
-                    continue;
-                }
-                $field = $formFields->firstWhere('id', $fieldId);
-                foreach ($files as $file) {
-                    $saveFile($file, $fieldId, $field ? (bool) $field->wajib : false);
-                }
-            }
-            foreach ((array) $request->file('general_attachments') as $file) {
-                $saveFile($file, null, false);
-            }
-
-            $slaCalculator->createTracking($ticket, $window);
-
-            TicketLog::create([
-                'ticket_id' => $ticket->id,
-                'admin_id' => $admin->id,
-                'aksi' => 'dibuat',
-                'catatan' => 'Tiket diajukan oleh admin '.($admin->name ?? $admin->username),
-            ]);
-
-            if ($subUnit->is_monitored) {
-                $assetName = $request->form_data[(string) $subUnit->monitor_asset_field_id] ?? 'Aset Tidak Diketahui';
-
-                $dateStr = $subUnit->monitor_date_field_id
-                    ? ($request->form_data[(string) $subUnit->monitor_date_field_id] ?? now()->format('Y-m-d'))
-                    : null;
-                $endDateStr = $subUnit->monitor_end_date_field_id
-                    ? ($request->form_data[(string) $subUnit->monitor_end_date_field_id] ?? $dateStr ?? now()->format('Y-m-d'))
-                    : $dateStr;
-
-                $startFieldVal = $request->form_data[(string) $subUnit->monitor_start_field_id] ?? now();
-                $endFieldVal = $request->form_data[(string) $subUnit->monitor_end_field_id] ?? now()->addHour();
-
-                if ($dateStr) {
-                    $startDT = Carbon::parse($dateStr.' '.Carbon::parse($startFieldVal)->format('H:i:s'));
-                    $endDT = Carbon::parse(($endDateStr ?? $dateStr).' '.Carbon::parse($endFieldVal)->format('H:i:s'));
-                } else {
-                    $startDT = Carbon::parse($startFieldVal);
-                    $endDT = Carbon::parse($endFieldVal);
-                }
-
-                if ($dateStr && $endDateStr && Carbon::parse($endDateStr)->lt(Carbon::parse($dateStr))) {
-                    $errField = $subUnit->monitor_end_date_field_id ?: $subUnit->monitor_date_field_id;
-                    throw ValidationException::withMessages([
-                        'form_data.'.$errField => 'Tanggal selesai tidak boleh sebelum tanggal mulai.',
-                    ]);
-                }
-
-                if ($endDT->lte($startDT)) {
-                    $errField = $subUnit->monitor_end_field_id ?: $subUnit->monitor_start_field_id;
-                    throw ValidationException::withMessages([
-                        'form_data.'.$errField => 'Waktu selesai harus lebih besar dari waktu mulai.',
-                    ]);
-                }
-
-                if ($startDT->lt(now()->subMinutes(5))) {
-                    $errField = $subUnit->monitor_date_field_id ?: $subUnit->monitor_start_field_id;
-                    throw ValidationException::withMessages([
-                        'form_data.'.$errField => 'Tanggal atau waktu mulai tidak boleh di masa lalu.',
-                    ]);
-                }
-
-                $bentrok = RoomVehicleBooking::where('nama_aset', $assetName)
-                    ->whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
-                    ->where('tanggal_mulai', '<', $endDT)
-                    ->where('tanggal_selesai', '>', $startDT)
-                    ->exists();
-                if ($bentrok) {
-                    throw ValidationException::withMessages([
-                        'form_data.'.$subUnit->monitor_asset_field_id => 'Aset ini sudah dipesan pada jam tersebut.',
-                    ]);
-                }
-
-                RoomVehicleBooking::create([
-                    'ticket_id' => $ticket->id,
-                    'tipe' => $subUnit->monitor_kategori ?? 'Lainnya',
-                    'nama_aset' => $assetName,
-                    'tanggal_mulai' => $startDT,
-                    'tanggal_selesai' => $endDT,
-                    'status' => 'open',
-                ]);
-            }
-
-            return $ticket;
-        });
-
-        try {
-            $ticket->load('subUnit');
-            $recipients = Admin::where('id', '!=', $admin->id)
-                ->where(function ($q) use ($ticket) {
-                    $q->whereHas('units', fn ($u) => $u->where('units.id', $ticket->unit_id))
-                        ->orWhereHas('roles', fn ($r) => $r->whereIn('name', ['Super Admin', 'superadmin']));
-                })
-                ->whereDoesntHave('roles', fn ($r) => $r->where('name', 'Operator'))
-                ->get();
-
-            if ($recipients->isNotEmpty()) {
-                Notification::send($recipients, new TicketCreatedAdminNotification($ticket));
-            }
-        } catch (\Exception $e) {
-            \Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: ".$e->getMessage());
-        }
+        $creator->notifyAdmins($ticket, $admin->id);
 
         app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.created');
 
@@ -364,8 +247,9 @@ class TicketController extends Controller
     public function show(Ticket $ticket)
     {
         $admin = auth('admin')->user();
-        if (! $ticket->isAccessibleBy($admin)) {
-            abort(403, 'Kamu tidak berhak mengakses tiket ini.');
+        $canManage = $ticket->isAccessibleBy($admin);
+        if (! $canManage && ! $admin->hasRole(['Admin', 'admin'])) {
+            abort(403);
         }
 
         $ticket->load([
@@ -392,7 +276,9 @@ class TicketController extends Controller
             'formFields' => $formFields,
             'operators' => $operators,
             'isSubmittedByMe' => $ticket->isSubmittedBy($admin),
-            'canEditForm' => in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true),
+            'canManage' => $canManage,
+            'canEditForm' => $canManage && in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true),
+            'work_hours' => TicketWorkQueue::workHoursFor($ticket, $admin),
         ]);
     }
 
@@ -427,6 +313,25 @@ class TicketController extends Controller
         return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
     }
 
+    public function resumeWork(Ticket $ticket, SlaCalculator $slaCalculator)
+    {
+        $admin = auth('admin')->user();
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak melanjutkan tiket ini.');
+        }
+        if ($ticket->assigned_admin_id === null || (int) $ticket->assigned_admin_id !== (int) $admin->id) {
+            abort(403, 'Hanya petugas yang ditugaskan yang dapat melanjutkan tiket ini.');
+        }
+
+        try {
+            TicketWorkQueue::resumeAfterHours($ticket, $admin, $slaCalculator);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->back()->with('success', 'Tiket dilanjutkan setelah jam kerja buka.');
+    }
+
     public function updateForm(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
@@ -457,6 +362,10 @@ class TicketController extends Controller
 
     public function updatePriority(Request $request, Ticket $ticket, SlaCalculator $slaCalculator)
     {
+        if (! $ticket->isAccessibleBy(auth('admin')->user())) {
+            abort(403, 'Kamu tidak berhak mengubah prioritas tiket ini.');
+        }
+
         $request->validate([
             'priority' => 'required|string|in:Rendah,Sedang,Tinggi,Urgen',
         ]);
@@ -504,7 +413,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         $ticket = $attachment->ticket;
-        if (! $ticket || ! $ticket->isAccessibleBy($admin)) {
+        if (! $ticket || (! $admin->hasRole(['Admin', 'admin']) && ! $ticket->isAccessibleBy($admin))) {
             abort(403, 'Kamu tidak berhak mengakses lampiran ini.');
         }
 
@@ -519,7 +428,7 @@ class TicketController extends Controller
     {
         $admin = auth('admin')->user();
         $ticket = $attachment->ticket;
-        if (! $ticket || ! $ticket->isAccessibleBy($admin)) {
+        if (! $ticket || (! $admin->hasRole(['Admin', 'admin']) && ! $ticket->isAccessibleBy($admin))) {
             abort(403, 'Kamu tidak berhak mengakses lampiran ini.');
         }
 
@@ -538,6 +447,10 @@ class TicketController extends Controller
     public function assignOperator(Request $request, Ticket $ticket)
     {
         $admin = auth('admin')->user();
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak menugaskan tiket ini.');
+        }
+
         if (! $admin->hasRole(['superadmin', 'Super Admin']) && ! $admin->isCoordinator()) {
             abort(403, 'Kamu tidak memiliki hak akses untuk menugaskan operator.');
         }
@@ -605,7 +518,7 @@ class TicketController extends Controller
 
         try {
             $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($admin, $targetStatus, $catatan) {
-                if ($locked->status !== 'open') {
+                if (! $locked->isOpenForCancellation()) {
                     throw new \InvalidArgumentException('Tiket hanya dapat dibatalkan saat berstatus open.');
                 }
 
@@ -841,6 +754,8 @@ class TicketController extends Controller
         }
 
         TicketChatBridgeService::afterCommit(fn () => $log->broadcastTimeline());
+
+        TicketChatBridgeService::notifyReplyRecipients($ticket->loadMissing('user'), $admin, $log->catatan);
 
         try {
             if ($ticket->user) {

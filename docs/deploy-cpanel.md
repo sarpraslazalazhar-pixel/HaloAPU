@@ -33,6 +33,11 @@ tapi seluruh kode (termasuk `.env`) berada di dalam docroot — pastikan
 Kalau memakai opsi A, jalankan `php artisan storage:link` supaya `public/storage`
 mengarah ke `storage/app/public`.
 
+Jalankan `npm run build` dari root proyek sebelum mengunggah rilis. Unggah
+`public/build/` (termasuk `manifest.json`) bersama kode Laravel dari rilis yang
+sama. Jika rilis menambah migrasi, jalankan `php artisan migrate --force` di
+hosting sebelum membuka rilis untuk pengguna.
+
 ## 1. `.env` produksi
 
 ```dotenv
@@ -117,6 +122,7 @@ tabel referensi (`admins`, `users`, `form_fields`, `sub_units`, ...).
 |---|---|---|
 | FAB tiket aktif | dorong langsung | polling 20 detik + saat tab kembali aktif |
 | Lonceng notifikasi | dorong langsung | polling 15 detik |
+| Penanda tiket perlu dinilai di menu Laporan | cek setelah navigasi/simpan dan tiap 30 detik saat tab aktif | sama, tanpa Reverb |
 | Chat tiket | dorong langsung | polling 10 detik |
 | Timeline tiket | dorong langsung | muat ulang halaman |
 | Pengingat & pelanggaran SLA | `sla:check` tiap menit | sama, lewat cron |

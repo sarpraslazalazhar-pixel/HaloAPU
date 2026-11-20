@@ -7,6 +7,7 @@ use App\Models\Admin;
 use App\Models\Ticket;
 use App\Models\TicketLog;
 use App\Models\TicketSlaTracking;
+use App\Models\User;
 use App\Notifications\TicketAssignedOperatorNotification;
 use Carbon\Carbon;
 use Closure;
@@ -25,25 +26,28 @@ class TicketWorkQueue
      * Slot holder plus the operator's pending queue, ordered exactly like promotion
      * (urgent first, then FIFO by `assignment_queued_at`).
      *
-     * @return array{active: array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: null}|null, queue: list<array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: int}>}
+     * @return array{work_hours_open: bool, next_open_at: ?string, active: array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: null}|null, queue: list<array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: int}>}
      */
     public static function payload(int $adminId): array
     {
         $tickets = Ticket::where('assigned_admin_id', $adminId)
             ->where(fn ($q) => $q->whereIn('status', self::ACTIVE_STATUSES)
-                ->orWhere(fn ($queued) => $queued->where('status', 'pending')
-                    ->whereNotNull('assignment_queued_at')
-                    ->whereNotNull('assignment_resume_status')))
+                ->orWhere(fn ($extra) => $extra->where('status', 'pending')
+                    ->where(fn ($pending) => $pending
+                        ->where(fn ($queued) => $queued->whereNotNull('assignment_queued_at')
+                            ->whereNotNull('assignment_resume_status'))
+                        ->orWhereNotNull('work_hours_resume_status'))))
             ->with('subUnit:id,nama_layanan')
             ->orderByRaw("CASE WHEN status = 'pending' THEN 1 ELSE 0 END")
             ->orderByRaw(self::QUEUE_ORDER_SQL)
             ->orderBy('assignment_queued_at')
             ->orderBy('created_at')
             ->orderBy('id')
-            ->get(['id', 'status', 'priority', 'sub_unit_id']);
+            ->get(['id', 'assigned_admin_id', 'status', 'priority', 'sub_unit_id', 'assignment_queued_at', 'assignment_resume_status', 'work_hours_resume_status']);
 
-        $active = $tickets->first(fn (Ticket $ticket) => $ticket->status !== 'pending');
-        $queued = $tickets->filter(fn (Ticket $ticket) => $ticket->status === 'pending')->values();
+        $active = $tickets->first(fn (Ticket $ticket) => self::holdsSlot($ticket));
+        $queued = $tickets->filter(fn (Ticket $ticket) => self::isQueued($ticket))->values();
+        $workHoursState = (new SlaCalculator)->workingHoursState(Carbon::now());
 
         $format = fn (Ticket $ticket, ?int $position) => [
             'id' => (int) $ticket->id,
@@ -52,12 +56,38 @@ class TicketWorkQueue
             'status' => $ticket->status,
             'urgent' => $ticket->priority === 'Urgen',
             'position' => $position,
+            'is_work_hours_paused' => ! $position && $ticket->work_hours_resume_status !== null,
         ];
 
         return [
+            'work_hours_open' => $workHoursState['is_open'],
+            'next_open_at' => $workHoursState['next_open_at']?->toIso8601String(),
             'active' => $active ? $format($active, null) : null,
             'queue' => $queued->map(fn (Ticket $ticket, int $i) => $format($ticket, $i + 1))->all(),
         ];
+    }
+
+    /** Tiket pending ber-marker jam kerja yang tidak dalam barisan menahan slot petugas. */
+    public static function holdsSlot(Ticket $ticket): bool
+    {
+        if ($ticket->assigned_admin_id === null) {
+            return false;
+        }
+
+        if (in_array($ticket->status, self::ACTIVE_STATUSES, true)) {
+            return true;
+        }
+
+        return $ticket->status === 'pending'
+            && $ticket->work_hours_resume_status !== null
+            && $ticket->assignment_queued_at === null;
+    }
+
+    private static function isQueued(Ticket $ticket): bool
+    {
+        return $ticket->status === 'pending'
+            && $ticket->assignment_queued_at !== null
+            && $ticket->assignment_resume_status !== null;
     }
 
     /** @param Closure(Ticket, Carbon): void $mutation */
@@ -85,29 +115,27 @@ class TicketWorkQueue
             }
 
             $oldStatus = $locked->status;
-            $heldSlot = $oldAdminId !== null && in_array($oldStatus, self::ACTIVE_STATUSES, true);
+            $heldSlot = self::holdsSlot($locked);
             $at = Carbon::now()->microsecond(0);
             $mutation($locked, $at);
 
-            if ($locked->status !== $oldStatus && $locked->status !== 'pending'
-                && ($locked->assignment_queued_at !== null || $locked->assignment_resume_status !== null)) {
-                $locked->update(['assignment_queued_at' => null, 'assignment_resume_status' => null]);
+            if ($locked->status !== 'pending') {
+                if ($locked->assignment_queued_at !== null || $locked->assignment_resume_status !== null
+                    || $locked->work_hours_resume_status !== null || $locked->work_hours_sla_paused_at !== null) {
+                    $locked->update([
+                        'assignment_queued_at' => null,
+                        'assignment_resume_status' => null,
+                        'work_hours_resume_status' => null,
+                        'work_hours_sla_paused_at' => null,
+                    ]);
+                }
             }
 
             $newAdminId = self::adminId($locked);
-            $holdsSlot = $newAdminId !== null && in_array($locked->status, self::ACTIVE_STATUSES, true);
+            $holdsSlot = self::holdsSlot($locked);
             $releasedSlot = $heldSlot && (! $holdsSlot || $newAdminId !== $oldAdminId);
             if ($releasedSlot) {
-                $next = Ticket::where('assigned_admin_id', $oldAdminId)
-                    ->where('status', 'pending')
-                    ->whereNotNull('assignment_queued_at')
-                    ->whereNotNull('assignment_resume_status')
-                    ->orderByRaw(self::QUEUE_ORDER_SQL)
-                    ->orderBy('assignment_queued_at')->orderBy('created_at')->orderBy('id')
-                    ->lockForUpdate()->first();
-                if ($next) {
-                    self::restore($next, $next->assignment_resume_status, $at);
-                }
+                self::promoteNext($oldAdminId, $at, new SlaCalculator);
             }
 
             $affectedAdmins = [];
@@ -138,14 +166,18 @@ class TicketWorkQueue
     public static function moveInQueue(Ticket $ticket, int $direction): Ticket
     {
         return DB::transaction(function () use ($ticket, $direction) {
+            $snapshot = Ticket::findOrFail($ticket->id);
+            if ($snapshot->assigned_admin_id !== null) {
+                Admin::lockForUpdate()->find($snapshot->assigned_admin_id);
+            }
+
             $locked = Ticket::lockForUpdate()->findOrFail($ticket->id);
 
-            if ($locked->status !== 'pending' || $locked->assignment_queued_at === null || $locked->assigned_admin_id === null) {
+            if (! self::isQueued($locked) || $locked->assigned_admin_id === null) {
                 throw new InvalidArgumentException('Tiket ini tidak sedang dalam antrean.');
             }
 
             $adminId = (int) $locked->assigned_admin_id;
-            Admin::lockForUpdate()->find($adminId);
 
             $siblings = Ticket::where('assigned_admin_id', $adminId)
                 ->where('status', 'pending')
@@ -194,10 +226,7 @@ class TicketWorkQueue
 
     public static function hasOtherActive(Ticket $ticket, int $adminId): bool
     {
-        return Ticket::where('assigned_admin_id', $adminId)
-            ->whereIn('status', self::ACTIVE_STATUSES)
-            ->whereKeyNot($ticket->id)
-            ->lockForUpdate()->first(['id']) !== null;
+        return self::adminHasHolder($adminId, (int) $ticket->id);
     }
 
     public static function assign(Ticket $ticket, ?Admin $operator, Admin $actor): Ticket
@@ -209,7 +238,9 @@ class TicketWorkQueue
                 return;
             }
 
-            $readyStatus = $locked->assignment_queued_at !== null ? $locked->assignment_resume_status : $locked->status;
+            $readyStatus = $locked->assignment_queued_at !== null
+                ? $locked->assignment_resume_status
+                : ($locked->work_hours_resume_status ?? $locked->status);
             $locked->assigned_admin_id = $targetAdminId;
             self::writeLog(
                 $locked,
@@ -219,7 +250,10 @@ class TicketWorkQueue
                 $at,
             );
 
-            if (in_array($readyStatus, self::ACTIVE_STATUSES, true)) {
+            if ($targetAdminId === null && $locked->work_hours_resume_status !== null) {
+                // Tetap tertunda tanpa petugas: buang kolom antrean, pertahankan marker jeda.
+                $locked->update(['assignment_queued_at' => null, 'assignment_resume_status' => null]);
+            } elseif (in_array($readyStatus, self::ACTIVE_STATUSES, true)) {
                 self::place($locked, $readyStatus, $at);
             } else {
                 $locked->save();
@@ -240,8 +274,31 @@ class TicketWorkQueue
     public static function place(Ticket $locked, string $readyStatus, Carbon $at): void
     {
         $adminId = self::adminId($locked);
-        if ($adminId === null || ! self::hasOtherActive($locked, $adminId)) {
+        if ($adminId === null) {
             self::restore($locked, $readyStatus, $at);
+
+            return;
+        }
+
+        $calendar = new SlaCalculator;
+        $pausedByHours = $locked->work_hours_resume_status !== null;
+        $hasQueue = Ticket::where('assigned_admin_id', $adminId)
+            ->whereKeyNot($locked->id)
+            ->where('status', 'pending')
+            ->whereNotNull('assignment_queued_at')
+            ->whereNotNull('assignment_resume_status')
+            ->exists();
+        $slotFree = $calendar->isWithinWorkingHours($at) && ! $hasQueue && ! self::hasOtherActive($locked, $adminId);
+
+        if ($slotFree) {
+            if (! $pausedByHours) {
+                self::restore($locked, $readyStatus, $at);
+
+                return;
+            }
+
+            // Tetap tertunda sampai petugas memilih Lanjutkan Tiket; marker dan jeda SLA dipertahankan.
+            $locked->update(['assignment_queued_at' => null, 'assignment_resume_status' => null]);
 
             return;
         }
@@ -255,7 +312,10 @@ class TicketWorkQueue
 
         if ($sla = self::unfinishedTracking($locked)) {
             if (! $sla->isPaused()) {
-                (new SlaCalculator)->pauseSla($sla, $at);
+                $calendar->pauseSla($sla, $at);
+                if ($pausedByHours) {
+                    $locked->update(['work_hours_sla_paused_at' => $at]);
+                }
             }
         }
 
@@ -263,6 +323,223 @@ class TicketWorkQueue
         if ($statusChanged) {
             self::notifyStatusChange($locked);
         }
+    }
+
+    /**
+     * Scheduler entry: isi satu slot kosong per petugas, hanya saat jam kerja.
+     * Kunci petugas lebih dulu agar urutan lock sejalan dengan mutate().
+     */
+    public static function promoteWhenOpen(int $adminId, SlaCalculator $calendar): void
+    {
+        DB::transaction(function () use ($adminId, $calendar) {
+            if (! Admin::lockForUpdate()->find($adminId)) {
+                return;
+            }
+
+            $at = Carbon::now()->microsecond(0);
+            if (self::promoteNext($adminId, $at, $calendar)) {
+                DB::afterCommit(function () use ($adminId) {
+                    try {
+                        broadcast(new ActiveAssignedTicketChanged($adminId));
+                    } catch (\Throwable $e) {
+                        Log::warning("Gagal mengirim pembaruan tiket aktif untuk petugas #{$adminId}: ".$e->getMessage());
+                    }
+                });
+            }
+        });
+    }
+
+    /** @return bool ada tiket antrean yang benar-benar dipromosikan */
+    private static function promoteNext(int $adminId, Carbon $at, SlaCalculator $calendar): bool
+    {
+        if (! $calendar->isWithinWorkingHours($at)) {
+            return false;
+        }
+
+        if (self::adminHasHolder($adminId, null)) {
+            return false;
+        }
+
+        $next = Ticket::where('assigned_admin_id', $adminId)
+            ->where(fn ($q) => $q->where(fn ($queued) => $queued->where('status', 'pending')
+                    ->whereNotNull('assignment_queued_at')
+                    ->whereNotNull('assignment_resume_status'))
+                ->orWhere(fn ($paused) => $paused->where('status', 'pending')
+                    ->whereNotNull('work_hours_resume_status')
+                    ->whereNull('assignment_queued_at')))
+            ->orderByRaw(self::QUEUE_ORDER_SQL)
+            ->orderBy('assignment_queued_at')->orderBy('created_at')->orderBy('id')
+            ->lockForUpdate()->first();
+
+        if (! $next) {
+            // Hanya tiket antrean yang boleh dipromosikan; penahan slot bukan kandidat.
+            return false;
+        }
+
+        if ($next->assignment_queued_at === null) {
+            return false;
+        }
+
+        if ($next->work_hours_resume_status !== null) {
+            $next->update(['assignment_queued_at' => null, 'assignment_resume_status' => null]);
+            self::writeLog($next, null, 'pending', 'Tiket mendapat giliran. Petugas perlu memilih Lanjutkan Tiket.', $at);
+
+            return true;
+        }
+
+        self::restore($next, $next->assignment_resume_status, $at);
+
+        return true;
+    }
+
+    /**
+     * Tiket aktif yang masih berjalan saat jam tutup ditunda. Tiket antrean hanya
+     * dicatat sekali per periode tutup. Mengembalikan jenis catatan yang dibuat.
+     */
+    public static function pauseOrNoteAfterHours(Ticket $ticket, SlaCalculator $calendar): ?string
+    {
+        $snapshotAdminId = self::adminId($ticket);
+        $outcome = null;
+
+        self::mutate($ticket, $snapshotAdminId, function (Ticket $locked, Carbon $at) use ($calendar, &$outcome) {
+            $state = $calendar->workingHoursState($at);
+            if ($state['is_open'] || $calendar->isWithinWorkingHours($at) || $locked->assigned_admin_id === null) {
+                return;
+            }
+
+            if (self::isQueued($locked)) {
+                if (self::hasWorkHoursLog($locked, $state['closed_since'])) {
+                    return;
+                }
+
+                self::writeLog($locked, null, 'work_hours_queued', 'Jam kerja sudah berakhir. Tiket tetap dalam antrean petugas.', $at);
+                $outcome = 'queued';
+
+                return;
+            }
+
+            if (! in_array($locked->status, self::ACTIVE_STATUSES, true)) {
+                return;
+            }
+
+            if (self::hasWorkHoursLog($locked, $state['closed_since'])) {
+                return;
+            }
+
+            $previousStatus = $locked->status;
+            $locked->update([
+                'status' => 'pending',
+                'work_hours_resume_status' => $previousStatus,
+                'assignment_queued_at' => null,
+                'assignment_resume_status' => null,
+            ]);
+
+            if ($sla = self::unfinishedTracking($locked)) {
+                if (! $sla->isPaused()) {
+                    $calendar->pauseSla($sla, $at);
+                    $locked->update(['work_hours_sla_paused_at' => $at]);
+                }
+            }
+
+            self::writeLog($locked, null, 'work_hours_paused', 'Jam kerja sudah berakhir. Tiket ditunda sampai petugas melanjutkannya pada jam kerja.', $at);
+            $outcome = 'paused';
+        });
+
+        return $outcome;
+    }
+
+    /** Lanjut manual oleh petugas setelah jam kerja buka. */
+    public static function resumeAfterHours(Ticket $ticket, Admin $actor, SlaCalculator $calendar): Ticket
+    {
+        return self::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($actor, $calendar) {
+            if (self::adminId($locked) === null || self::adminId($locked) !== (int) $actor->id) {
+                throw new InvalidArgumentException('Hanya petugas yang ditugaskan yang dapat melanjutkan tiket ini.');
+            }
+
+            if ($locked->status !== 'pending' || $locked->work_hours_resume_status === null) {
+                throw new InvalidArgumentException('Tiket ini tidak ditunda karena jam kerja.');
+            }
+
+            if (self::isQueued($locked)) {
+                throw new InvalidArgumentException('Tiket masih menunggu giliran petugas.');
+            }
+
+            if (! $calendar->isWithinWorkingHours($at)) {
+                throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
+            }
+
+            if (self::hasOtherActive($locked, (int) $actor->id)) {
+                throw new InvalidArgumentException('Petugas masih menangani tiket lain.');
+            }
+
+            if ($sla = self::unfinishedTracking($locked)) {
+                $pausedAt = $locked->work_hours_sla_paused_at;
+                if ($pausedAt && $sla->paused_at && $sla->paused_at->equalTo($pausedAt)) {
+                    $calendar->resumeSla($sla, $at, true);
+                }
+            }
+
+            $resumeStatus = $locked->work_hours_resume_status;
+            $locked->update([
+                'status' => $resumeStatus,
+                'work_hours_resume_status' => null,
+                'work_hours_sla_paused_at' => null,
+            ]);
+
+            self::writeLog($locked, $actor->id, 'work_hours_resumed', 'Petugas melanjutkan tiket setelah jam kerja buka.', $at);
+            self::notifyStatusChange($locked);
+        });
+    }
+
+    /**
+     * Ringkasan untuk UI detail: hanya tiket antrean atau yang dijeda jam kerja.
+     *
+     * @return array{reason: string, resume_status: ?string, is_open: bool, next_open_label: ?string, operator_name: ?string, is_assignee: bool, can_resume: bool}|null
+     */
+    public static function workHoursFor(Ticket $ticket, User|Admin $viewer): ?array
+    {
+        $queued = self::isQueued($ticket);
+        $paused = $ticket->status === 'pending' && ! $queued && $ticket->work_hours_resume_status !== null;
+
+        if (! $queued && ! $paused) {
+            return null;
+        }
+
+        $state = (new SlaCalculator)->workingHoursState(Carbon::now());
+        $ticket->loadMissing('assignedAdmin');
+        $operator = $ticket->assignedAdmin;
+        $isAssignee = $viewer instanceof Admin
+            && $ticket->assigned_admin_id !== null
+            && (int) $ticket->assigned_admin_id === (int) $viewer->id;
+
+        return [
+            'reason' => $queued ? 'queued' : 'paused',
+            'resume_status' => $queued ? $ticket->assignment_resume_status : $ticket->work_hours_resume_status,
+            'is_open' => $state['is_open'],
+            'next_open_label' => $state['next_open_at']?->locale('id')->translatedFormat('l, d M Y H:i'),
+            'operator_name' => $operator?->name ?? $operator?->username,
+            'is_assignee' => $isAssignee,
+            'can_resume' => $paused && $isAssignee && $state['is_open'],
+        ];
+    }
+
+    private static function adminHasHolder(int $adminId, ?int $exceptTicketId): bool
+    {
+        return Ticket::where('assigned_admin_id', $adminId)
+            ->when($exceptTicketId !== null, fn ($q) => $q->whereKeyNot($exceptTicketId))
+            ->where(fn ($q) => $q->whereIn('status', self::ACTIVE_STATUSES)
+                ->orWhere(fn ($paused) => $paused->where('status', 'pending')
+                    ->whereNotNull('work_hours_resume_status')
+                    ->whereNull('assignment_queued_at')))
+            ->lockForUpdate()->first(['id']) !== null;
+    }
+
+    private static function hasWorkHoursLog(Ticket $ticket, ?Carbon $closedSince): bool
+    {
+        return TicketLog::where('ticket_id', $ticket->id)
+            ->whereIn('aksi', ['work_hours_paused', 'work_hours_queued'])
+            ->when($closedSince !== null, fn ($q) => $q->where('timestamp', '>=', $closedSince))
+            ->exists();
     }
 
     private static function restore(Ticket $ticket, string $readyStatus, Carbon $at): void

@@ -25,7 +25,7 @@ class NotificationApiController extends Controller
             // Map backend notification type to Flutter supported enum:
             // [ticket, reply, solved, revision, rejected, csat, sla]
             $type = match ($rawType) {
-                'ticket_created', 'ticket_assigned', 'ticket' => 'ticket',
+                'ticket_created', 'ticket_assigned', 'ticket', 'ticket_work_hours' => 'ticket',
                 'ticket_comment', 'reply', 'comment' => 'reply',
                 'solve', 'solved', 'ticket_solved' => 'solved',
                 'revision', 'need_revision', 'revision_requested' => 'revision',

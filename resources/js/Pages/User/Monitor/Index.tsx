@@ -10,8 +10,9 @@ interface AssetData {
  status: 'Tersedia' | 'Dipesan' | 'Sedang Dipakai' | 'Menunggu Persetujuan' | 'Selesai Digunakan';
  user: string | null;
  waktu_mulai: string | null;
- waktu_selesai: string | null;
- booking_id: number | null;
+  waktu_selesai: string | null;
+  booking_id: number | null;
+  ticket_url?: string | null;
 }
 
 interface CalendarDay {
@@ -22,8 +23,9 @@ interface CalendarDay {
  tipe: string;
  jam_mulai: string;
  jam_selesai: string;
- user: string;
- status: string;
+  user: string;
+  status: string;
+  ticket_url?: string | null;
  }[];
 }
 
@@ -41,7 +43,7 @@ export default function UserMonitor({ assets, calendarData, alatPinjam = [], ket
  <Head title="Live Monitor" />
  <div className="container mx-auto py-6">
  <MonitorGrid assets={assets} calendarData={calendarData || []} lastUpdated={lastUpdated} />
- <MonitorAlat items={alatPinjam} ketersediaan={ketersediaanAlat} isAdmin={false} />
+ <MonitorAlat items={alatPinjam} ketersediaan={ketersediaanAlat} />
  </div>
  </UserLayout>
  );

@@ -121,9 +121,8 @@ class AdminTicketCsatTest extends TestCase
 
         Sanctum::actingAs($this->otherAdmin, ['*']);
 
-        $this->getJson("/api/tickets/{$ticket->id}")
-            ->assertOk()
-            ->assertJsonPath('data.isSubmittedByMe', false);
+        // Detail tiket dibatasi untuk admin yang benar-benar berhak; admin luar tidak bisa menebak ID.
+        $this->getJson("/api/tickets/{$ticket->id}")->assertForbidden();
 
         $this->postJson("/api/tickets/{$ticket->id}/rate", [
             'rating' => 4,

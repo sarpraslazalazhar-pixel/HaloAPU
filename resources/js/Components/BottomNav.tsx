@@ -8,6 +8,7 @@ export interface BottomNavItem {
  route?: string;
  onClick?: () => void;
  badge?: React.ReactNode;
+ badgeLabel?: string;
 }
 
 interface BottomNavProps {
@@ -54,7 +55,7 @@ export function BottomNav({ items, className }: BottomNavProps) {
 
  if (item.onClick) {
  return (
- <button key={item.label} type="button" onClick={item.onClick} aria-label={item.label} className="flex-1">
+ <button key={item.label} type="button" onClick={item.onClick} aria-label={item.badgeLabel ? `${item.label}, ${item.badgeLabel}` : item.label} className="flex-1">
  {content}
  </button>
  );

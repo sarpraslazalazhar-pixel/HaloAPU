@@ -241,8 +241,8 @@ export default function KinerjaOperator({
   }));
 
   return (
-    <AdminLayout title="Laporan Kinerja Operator">
-      <Head title="Laporan Kinerja Operator" />
+    <AdminLayout title="Laporan Kinerja Individu">
+      <Head title="Laporan Kinerja Individu" />
 
       <div className="space-y-6">
         {/* Header & Actions */}
@@ -252,7 +252,7 @@ export default function KinerjaOperator({
               <span className="p-2 bg-sky-500/10 text-sky-600 rounded-lg">
                 <UserCheck className="w-5 h-5" />
               </span>
-              <h1 className="text-2xl font-bold tracking-tight">Laporan Beban & Kinerja Operator</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Laporan Beban & Kinerja Individu</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               Pemantauan beban tiket berjalan, tingkat penyelesaian, kepatuhan SLA, serta kepuasan pengguna (CSAT) per operator.

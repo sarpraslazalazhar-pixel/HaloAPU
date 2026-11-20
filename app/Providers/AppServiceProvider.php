@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Admin;
 use App\Models\SystemConfig;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
@@ -121,6 +123,8 @@ class AppServiceProvider extends ServiceProvider
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
             return $user->hasRole(['superadmin', 'Super Admin']) ? true : null;
         });
+
+        Gate::define('assess-ticket-workload', fn (Admin $admin): bool => $admin->isCoordinator());
 
         // Authorization Gate for Laravel Pulse
         \Illuminate\Support\Facades\Gate::define('viewPulse', function ($user = null) {

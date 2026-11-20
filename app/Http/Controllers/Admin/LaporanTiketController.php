@@ -4,14 +4,19 @@ namespace App\Http\Controllers\Admin;
 
 use App\Exports\LaporanTiketExport;
 use App\Http\Controllers\Controller;
+use App\Models\Admin;
 use App\Models\Ticket;
 use App\Models\TicketSlaTracking;
 use App\Models\Unit;
 use App\Models\SubUnit;
 use App\Models\OrgDivisi;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -30,10 +35,42 @@ class LaporanTiketController extends Controller
         ]);
     }
 
+    /**
+     * Cakupan laporan: izin laporan penuh memakai semua tiket, penilai hanya unit/subunit yang dikoordinasikan.
+     */
+    private function reportTickets(Admin $admin, bool $hasReportPermission): Builder
+    {
+        return $hasReportPermission ? Ticket::query() : Ticket::forCoordinatedServices($admin);
+    }
+
+    private function workloadQueue(Admin $admin): Builder
+    {
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin']);
+
+        return $this->reportTickets($admin, $isSuperAdmin)->awaitingWorkloadAssessment();
+    }
+
+    public function workloadCount(Request $request): JsonResponse
+    {
+        return response()->json(['count' => $this->workloadQueue($request->user('admin'))->count()])
+            ->header('Cache-Control', 'private, no-store');
+    }
+
     public function index(Request $request)
     {
         $filters = $this->filterParams($request);
-        $filters['year'] = $filters['year'] ?? date('Y');
+
+        $admin = $request->user('admin');
+        $hasReport = $admin->can('akses-laporan');
+
+        $showWorkloadQueue = $request->input('workload') === 'unassessed';
+        $summaryYear = date('Y');
+        if ($showWorkloadQueue) {
+            abort_unless($admin->can('assess-ticket-workload'), 403);
+            $filters['workload'] = 'unassessed';
+        } else {
+            $filters['year'] ??= $summaryYear;
+        }
 
         // References for Dropdowns
         $units = Unit::aktif()->orderBy('nama_unit')->get();
@@ -41,7 +78,8 @@ class LaporanTiketController extends Controller
         $divisiList = OrgDivisi::orderBy('nama_divisi')->get();
 
         // Base Query with shared scope
-        $baseQuery = Ticket::query()->laporanFilter($filters);
+        $baseQuery = $this->reportTickets($admin, $hasReport)
+            ->laporanFilter(array_replace($filters, ['year' => $filters['year'] ?? $summaryYear]));
 
         // 1. Status Counts
         $statusAggregates = (clone $baseQuery)->selectRaw('
@@ -49,7 +87,7 @@ class LaporanTiketController extends Controller
             SUM(CASE WHEN status = "open" THEN 1 ELSE 0 END) as open_count,
             SUM(CASE WHEN status = "on_proses" THEN 1 ELSE 0 END) as on_proses_count,
             SUM(CASE WHEN status = "pending" THEN 1 ELSE 0 END) as pending_count,
-            SUM(CASE WHEN status IN ("solve", "selesai") THEN 1 ELSE 0 END) as solve_count,
+            SUM(CASE WHEN LOWER(tickets.status) IN ("solve", "selesai") THEN 1 ELSE 0 END) as solve_count,
             SUM(CASE WHEN status = "reject" THEN 1 ELSE 0 END) as reject_count,
             SUM(CASE WHEN status = "dibatalkan" THEN 1 ELSE 0 END) as dibatalkan_count
         ')->first();
@@ -103,13 +141,13 @@ class LaporanTiketController extends Controller
         ];
 
         // 3. ECharts Data: Trend Bulanan
-        $monthlyRaw = (clone $baseQuery)->selectRaw('MONTH(tickets.created_at) as bulan, COUNT(*) as total')
+        $monthlyRaw = (clone $baseQuery)->selectRaw('SUBSTR(tickets.created_at, 6, 2) as bulan, COUNT(*) as total')
             ->groupBy('bulan')
             ->get();
         $monthlyTrend = collect(range(1, 12))->map(function ($b) use ($monthlyRaw) {
             return [
                 'bulan' => date('M', mktime(0, 0, 0, $b, 1)),
-                'total' => $monthlyRaw->firstWhere('bulan', $b)?->total ?? 0
+                'total' => $monthlyRaw->first(fn ($row) => (int) $row->bulan === $b)?->total ?? 0
             ];
         });
 
@@ -132,13 +170,32 @@ class LaporanTiketController extends Controller
             ->get();
 
         // 5. Paginated Tickets
-        $tickets = (clone $baseQuery)->with(['user.divisi', 'createdByAdmin', 'subUnit.unit', 'slaTracking'])
+        $canAssess = $admin->can('assess-ticket-workload');
+        $listQuery = $showWorkloadQueue
+            ? $this->workloadQueue($admin)->laporanFilter($filters)
+            : clone $baseQuery;
+
+        $relations = ['user.divisi', 'createdByAdmin', 'subUnit.unit', 'slaTracking'];
+        if ($canAssess) {
+            $relations[] = 'workloadAssessment.assessor:id,name,username';
+            $relations[] = 'assignedAdmin:id,name,username';
+        }
+
+        $tickets = $listQuery->with($relations)
             ->latest('tickets.created_at')
             ->paginate(15)
             ->withQueryString();
 
+        if ($showWorkloadQueue && $tickets->currentPage() > $tickets->lastPage()) {
+            return redirect()->route('admin.laporan.tiket', array_filter(
+                [...$filters, 'page' => max(1, $tickets->lastPage())],
+                fn ($v) => $v !== null && $v !== ''
+            ));
+        }
+
         return Inertia::render('Admin/Laporan/Tiket', [
             'filters' => $filters,
+            'canExport' => $hasReport,
             'units' => $units,
             'subUnits' => $subUnits,
             'divisiList' => $divisiList,
@@ -152,6 +209,40 @@ class LaporanTiketController extends Controller
             'ticketsByLayanan' => $ticketsByLayanan,
             'tickets' => $tickets,
         ]);
+    }
+
+    public function saveWorkloadAssessment(Request $request, Ticket $ticket): RedirectResponse
+    {
+        $admin = $request->user('admin');
+        abort_unless($admin->can('assess-ticket-workload'), 403);
+
+        $scoped = $this->reportTickets($admin, $admin->can('akses-laporan'))->whereKey($ticket->getKey());
+
+        DB::transaction(function () use ($scoped, $request, $admin) {
+            $locked = $scoped->lockForUpdate()->firstOrFail();
+
+            if (! in_array(strtolower((string) $locked->status), Ticket::WORKLOAD_FINISHED_STATUSES, true)) {
+                throw ValidationException::withMessages([
+                    'score' => 'Penilaian beban hanya bisa diisi setelah tiket selesai.',
+                ]);
+            }
+
+            $data = $request->validate([
+                'score' => 'required|integer|min:1|max:5',
+                'effort_hours' => 'nullable|numeric|decimal:0,2|min:0.01|max:9999.99',
+                'note' => 'nullable|string|max:1000',
+            ]);
+
+            $locked->workloadAssessment()->updateOrCreate([], [
+                'score' => (int) $data['score'],
+                'effort_hours' => ($data['effort_hours'] ?? '') === '' ? null : $data['effort_hours'],
+                'note' => ($data['note'] ?? null) ?: null,
+                'assessed_by_admin_id' => $admin->id,
+            ]);
+        });
+
+        return redirect()->back(303, [], route('admin.laporan.tiket'))
+            ->with('success', 'Penilaian beban tersimpan.');
     }
 
     public function export(Request $request)

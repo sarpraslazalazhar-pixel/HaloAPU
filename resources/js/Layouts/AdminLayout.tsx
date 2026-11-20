@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Head, Link, usePage } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import toast, { Toaster } from 'react-hot-toast';
 import {
  LayoutDashboard,
@@ -83,6 +83,7 @@ interface NavItem {
   superAdminOnly?: boolean;
   isExternal?: boolean;
   children?: NavSubItem[];
+  allowWorkloadAssessors?: boolean;
 }
 
 function isRouteActive(url: string, routePath?: string): boolean {
@@ -94,6 +95,8 @@ function isRouteActive(url: string, routePath?: string): boolean {
 
   return pathOnly === routePath || pathOnly.startsWith(routePath + '/');
 }
+
+const TICKET_REPORT_PATH = '/admin/laporan/tiket';
 
 const adminNavItems: NavItem[] = [
   { type: 'link', label: 'Dasbor', icon: LayoutDashboard, route: '/admin/dashboard' },
@@ -141,10 +144,10 @@ const adminNavItems: NavItem[] = [
     ]
   },
 
-  { type: 'header', label: 'LAPORAN', permissionGroup: 'akses-laporan' },
+  { type: 'header', label: 'LAPORAN', permissionGroup: 'akses-laporan', allowWorkloadAssessors: true },
   { type: 'link', label: 'CSAT', icon: Star, route: '/admin/csat', permissionGroup: 'akses-laporan' },
-  { type: 'link', label: 'Tiket', icon: Ticket, route: '/admin/laporan/tiket', permissionGroup: 'akses-laporan' },
-  { type: 'link', label: 'Kinerja Operator', icon: UserCheck, route: '/admin/laporan/kinerja-operator', permissionGroup: 'akses-laporan' },
+  { type: 'link', label: 'Tiket', icon: Ticket, route: TICKET_REPORT_PATH, permissionGroup: 'akses-laporan', allowWorkloadAssessors: true },
+  { type: 'link', label: 'Kinerja Individu', icon: UserCheck, route: '/admin/laporan/kinerja-operator', permissionGroup: 'akses-laporan' },
 
   { type: 'header', label: 'MANAJEMEN AKUN', permissionGroup: 'akses-manajemen-akun' },
   { type: 'link', label: 'Manajemen Peran', icon: Shield, route: '/admin/manajemen-peran', permissionGroup: 'akses-manajemen-akun' },
@@ -152,12 +155,20 @@ const adminNavItems: NavItem[] = [
   { type: 'link', label: 'Manajemen Pengguna', icon: Users, route: '/admin/manajemen-user', permissionGroup: 'akses-manajemen-akun' },
 ];
 
-function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: boolean; isCollapsed: boolean; badge?: number }) {
+function NavLink({ item, active, isCollapsed, badge, badgeLabel, href = item.route!, onClick }: {
+  item: NavItem;
+  active: boolean;
+  isCollapsed: boolean;
+  badge?: number;
+  badgeLabel?: string;
+  href?: string;
+  onClick?: () => void;
+}) {
   const Icon = item.icon;
 
   const content = (
     <div
-      title={isCollapsed ? item.label : undefined}
+      title={badgeLabel ?? (isCollapsed ? item.label : undefined)}
       className={`group relative flex items-center transition-all duration-200 ${isCollapsed
         ? 'h-10 w-10 justify-center rounded-xl mx-auto'
         : 'gap-3 rounded-xl px-3.5 py-2.5 text-sm font-medium w-full'
@@ -173,7 +184,7 @@ function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: 
         isCollapsed ? (
           <span className="absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full bg-rose-500 ring-2 ring-white" />
         ) : (
-          <span className="ml-auto px-1.5 py-0.5 text-[10px] font-bold bg-rose-500 text-white rounded-full leading-none shadow-xs">
+          <span className={`ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow-xs ${badgeLabel ? 'bg-rose-700' : 'bg-rose-500'}`}>
             {badge > 99 ? '99+' : badge}
           </span>
         )
@@ -188,7 +199,7 @@ function NavLink({ item, active, isCollapsed, badge }: { item: NavItem; active: 
           {content}
         </a>
       ) : (
-        <Link href={item.route!} className="block w-full">
+        <Link href={href} aria-label={badgeLabel ? `${item.label}, ${badgeLabel}` : isCollapsed ? item.label : undefined} onClick={onClick} className="block w-full">
           {content}
         </Link>
       )}
@@ -526,6 +537,49 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     faviconUrl,
   });
 
+  const [workloadCount, setWorkloadCount] = useState(0);
+  const canAssessWorkload = !!auth?.can_assess_ticket_workload;
+  const workloadBadge = canAssessWorkload ? workloadCount : 0;
+  const workloadLabel = workloadBadge > 0 ? `${workloadBadge} tiket perlu dinilai` : undefined;
+
+  useEffect(() => {
+    if (!canAssessWorkload) return;
+
+    let request: AbortController | undefined;
+    const refresh = async () => {
+      if (document.hidden) return;
+      request?.abort();
+      const controller = new AbortController();
+      request = controller;
+
+      try {
+        const response = await fetch(route('admin.laporan.tiket.workload-count'), {
+          headers: { Accept: 'application/json' },
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          const { count } = await response.json();
+          if (!controller.signal.aborted) setWorkloadCount(count);
+        } else if (!controller.signal.aborted && (response.status === 401 || response.status === 403)) {
+          setWorkloadCount(0);
+        }
+      } catch {
+        // Keep the last count until the next refresh.
+      }
+    };
+
+    void refresh();
+    const interval = window.setInterval(refresh, 30000);
+    const stopListening = router.on('success', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      request?.abort();
+      window.clearInterval(interval);
+      stopListening();
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [canAssessWorkload, auth?.admin?.id]);
+
   const renderSidebar = (collapsed: boolean) => (
     <div className="flex h-full min-h-0 flex-col justify-between">
       {/* Header / Brand Logo */}
@@ -567,7 +621,8 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
             }
 
             // Check permissions
-            if (!auth?.is_super_admin && item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
+            const allowedAsAssessor = item.allowWorkloadAssessors && !!auth?.can_assess_ticket_workload;
+            if (!allowedAsAssessor && !auth?.is_super_admin && item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
               return null;
             }
 
@@ -601,9 +656,21 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
             }
 
             const active = item.route ? isActive(item.route) : false;
-            const badge = item.label === 'Pesan' ? unreadCount : undefined;
+            const isTicketReport = item.route === TICKET_REPORT_PATH;
+            const badge = item.label === 'Pesan' ? unreadCount : isTicketReport ? workloadBadge : undefined;
 
-            return <NavLink key={index} item={item} active={active} isCollapsed={collapsed} badge={badge} />;
+            return (
+              <NavLink
+                key={index}
+                item={item}
+                active={active}
+                isCollapsed={collapsed}
+                badge={badge}
+                badgeLabel={isTicketReport ? workloadLabel : undefined}
+                href={isTicketReport && workloadLabel ? `${TICKET_REPORT_PATH}?workload=unassessed#rincian-tiket` : item.route}
+                onClick={isTicketReport ? () => setSidebarOpen(false) : undefined}
+              />
+            );
           })}
         </nav>
       </div>
@@ -662,7 +729,13 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
         </span>
       ) : undefined,
     },
-    { label: 'Lainnya', icon: MoreHorizontal, onClick: () => setSidebarOpen(true) },
+    {
+      label: 'Lainnya',
+      icon: MoreHorizontal,
+      onClick: () => setSidebarOpen(true),
+      badgeLabel: workloadLabel,
+      badge: workloadLabel ? <span aria-hidden="true" className="block h-2.5 w-2.5 rounded-full bg-rose-700" /> : undefined,
+    },
   ];
 
  return (

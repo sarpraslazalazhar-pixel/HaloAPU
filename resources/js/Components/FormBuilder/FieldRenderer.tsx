@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useId, useState } from 'react';
 import { FormField } from '@/types';
 import { CheckCircle2, Edit2 } from 'lucide-react';
 import ImageEditorModal from './ImageEditorModal';
@@ -13,6 +13,16 @@ interface FieldRendererProps {
 export default function FieldRenderer({ field, value, onChange, errors }: FieldRendererProps) {
  const error = errors?.[`form_data.${field.id}`];
  const errorClass = error ? 'border-red-500' : 'border-gray-300';
+ const fieldId = useId();
+ const labelId = `${fieldId}-label`;
+ const errorId = `${fieldId}-error`;
+ const isButtonGroup = field.tipe_field === 'radio' || field.tipe_field === 'multi_pilih';
+ const describedBy = error ? errorId : undefined;
+ const inputA11y = {
+  id: fieldId,
+  'aria-invalid': !!error,
+  'aria-describedby': describedBy,
+ };
 
  const [editorOpen, setEditorOpen] = useState(false);
  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
@@ -23,6 +33,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="text"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  onChange={e => onChange(field.id, e.target.value)}
@@ -32,6 +43,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  case 'teks_panjang':
  return (
  <textarea
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  rows={4}
  value={value || ''}
@@ -43,6 +55,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="number"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  onChange={e => onChange(field.id, e.target.value)}
@@ -57,6 +70,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="date"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  min={minDate}
@@ -77,6 +91,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="time"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  onChange={e => onChange(field.id, e.target.value)}
@@ -91,6 +106,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="datetime-local"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  min={minDateTime}
@@ -110,6 +126,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  case 'dropdown':
  return (
  <select
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  onChange={e => onChange(field.id, e.target.value)}
@@ -123,7 +140,13 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  );
  case 'radio':
  return (
- <div className="flex flex-wrap justify-center gap-3">
+ <div
+ role="group"
+ aria-labelledby={labelId}
+ aria-invalid={!!error}
+ aria-describedby={describedBy}
+ className="flex flex-wrap justify-center gap-3"
+ >
  {(field.opsi || []).map((opt, i) => {
  const isSelected = value === opt;
 
@@ -131,6 +154,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  <button
  key={i}
  type="button"
+ aria-pressed={isSelected}
  onClick={() => onChange(field.id, opt)}
  className={`flex-1 basis-[150px] max-w-[220px] p-3 border rounded-lg text-center flex flex-col items-center justify-center gap-1 transition-all font-medium text-sm
  ${isSelected ? 'bg-blue-600 border-blue-600 text-white shadow-md' : 
@@ -148,6 +172,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="checkbox"
+ {...inputA11y}
  className="rounded"
  checked={!!value}
  onChange={e => onChange(field.id, e.target.checked)}
@@ -155,7 +180,13 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  );
  case 'multi_pilih':
  return (
- <div className="flex flex-wrap justify-center gap-3">
+ <div
+ role="group"
+ aria-labelledby={labelId}
+ aria-invalid={!!error}
+ aria-describedby={describedBy}
+ className="flex flex-wrap justify-center gap-3"
+ >
  {(field.opsi || []).map((opt, i) => {
  const current = value || [];
  const isSelected = current.includes(opt);
@@ -164,6 +195,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  <button
  key={i}
  type="button"
+ aria-pressed={isSelected}
  onClick={() => {
  const newValue = isSelected
  ? current.filter((v: string) => v !== opt)
@@ -192,6 +224,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">Rp</span>
  <input
  type="text"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 pl-10 ${errorClass}`}
  value={displayValue}
  onChange={e => {
@@ -210,6 +243,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  <div className="space-y-2">
  <input
  type="file"
+ {...inputA11y}
  className={`w-full ${errorClass}`}
  accept={field.tipe_field === 'upload_gambar' ? 'image/*' : undefined}
  onChange={e => {
@@ -252,6 +286,7 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
  return (
  <input
  type="text"
+ {...inputA11y}
  className={`w-full border rounded-md p-2 ${errorClass}`}
  value={value || ''}
  onChange={e => onChange(field.id, e.target.value)}
@@ -293,12 +328,16 @@ export default function FieldRenderer({ field, value, onChange, errors }: FieldR
 
  return (
  <div className={`space-y-1 ${field.parent_field_id ? 'ml-3 sm:ml-6 pl-4 border-l-2 border-orange-400 bg-orange-50/30 p-3 rounded-r-lg -mt-1' : ''}`}>
- <label className="block text-sm font-medium text-gray-700">
+ <label
+ id={labelId}
+ htmlFor={isButtonGroup ? undefined : fieldId}
+ className="block text-sm font-medium text-gray-700"
+ >
  {field.label}
  {field.wajib && <span className="text-red-500 ml-1">*</span>}
  </label>
  {renderInput()}
- {error && <p className="text-red-500 text-xs">{error}</p>}
+ {error && <p id={errorId} className="text-red-700 text-xs">{error}</p>}
  
  {selectedImageFile && (
  <ImageEditorModal

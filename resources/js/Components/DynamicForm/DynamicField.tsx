@@ -15,18 +15,23 @@ interface DynamicFieldProps {
 export const normalizeOption = (v: unknown): string =>
   String(v ?? '').trim().toLowerCase().replace(/[:\s]+$/, '');
 
+export function isDynamicFieldVisible(
+  field: FormField,
+  values: Record<string, DynamicFieldValue>,
+): boolean {
+  if (!field.parent_field_id) return true;
+  // parent_field_id from backend may arrive as number; form_data keys are stored as string(number).
+  const parentValue = values[String(field.parent_field_id)];
+  if (parentValue === undefined || parentValue === null) return false;
+  const trigger = normalizeOption(field.trigger_value);
+  if (Array.isArray(parentValue)) {
+    return parentValue.some(v => normalizeOption(v) === trigger);
+  }
+  return normalizeOption(parentValue) === trigger;
+}
+
 export default function DynamicField({ fields, values, onChange, errors }: DynamicFieldProps) {
-  const isFieldVisible = (field: FormField) => {
-    if (!field.parent_field_id) return true;
-    // parent_field_id from backend may arrive as number; form_data keys are stored as string(number).
-    const parentValue = values[String(field.parent_field_id)];
-    if (parentValue === undefined || parentValue === null) return false;
-    const trigger = normalizeOption(field.trigger_value);
-    if (Array.isArray(parentValue)) {
-      return parentValue.some(v => normalizeOption(v) === trigger);
-    }
-    return normalizeOption(parentValue) === trigger;
-  };
+  const isFieldVisible = (field: FormField) => isDynamicFieldVisible(field, values);
 
   // Urutkan field agar cabang/child langsung berada tepat di bawah parent-nya
   const orderedFields: FormField[] = [];

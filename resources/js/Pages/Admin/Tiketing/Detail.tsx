@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { Button } from '@/Components/ui/button';
 import { TicketTimeline } from '@/Components/TicketTimeline';
+import { TicketWorkHoursNotice, type WorkHoursInfo } from '@/Components/TicketWorkHoursNotice';
 import { TicketAttachmentList, type Attachment } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
+import { subscribe } from '@/lib/realtime';
 import type { FormField } from '@/types';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
@@ -80,10 +82,12 @@ interface TicketDetailProps {
   formFields?: Array<{ id: number; label: string; tipe_field: string; [key: string]: unknown }>;
   operators?: Array<{ id: number; name?: string; username?: string }>;
   isSubmittedByMe?: boolean;
+  canManage?: boolean;
   canEditForm?: boolean;
+  work_hours?: WorkHoursInfo | null;
 }
 
-export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canEditForm }: TicketDetailProps) {
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canEditForm, work_hours }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as unknown as {
     auth?: { is_super_admin?: boolean; permissions?: string[]; admin?: { id?: number } };
@@ -102,13 +106,41 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const isCreator = typeof isSubmittedByMe === 'boolean'
     ? isSubmittedByMe
     : (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id);
-  const canCancelTicket = ticket.status === 'open'
+  const canCancelTicket = canManage && (ticket.status === 'open'
+    || (ticket.status === 'pending' && work_hours?.reason === 'paused' && work_hours.resume_status === 'open'))
     && (auth?.is_super_admin || isCreator);
   const [showKembaliModal, setShowKembaliModal] = useState(false);
   const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
   const [catatanKembali, setCatatanKembali] = useState('');
   const [isSubmittingKembali, setIsSubmittingKembali] = useState(false);
   const [isReturned, setIsReturned] = useState(Boolean(ticket.dikembalikan_at));
+  const [tab, setTab] = useState(canManage ? 'chat' : 'informasi');
+  const [resuming, setResuming] = useState(false);
+  const chatPanelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!canManage || !work_hours) return;
+
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        router.reload({ only: ['ticket', 'work_hours'] });
+      }
+    }, 30000);
+
+    return () => window.clearInterval(timer);
+  }, [canManage, work_hours]);
+
+  useEffect(() => {
+    if (!canManage || !ticket?.id) return;
+
+    return subscribe(`ticket.${ticket.id}`, {
+      '.TicketMessagePosted': ({ log }) => {
+        if (log?.aksi?.startsWith('work_hours')) {
+          router.reload({ only: ['ticket', 'work_hours'] });
+        }
+      },
+    });
+  }, [canManage, ticket?.id]);
 
   const bookingServiceTitle = (() => {
     const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
@@ -125,7 +157,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     ticket.booking?.tanggal_selesai && new Date(ticket.booking.tanggal_selesai) <= new Date()
   );
   const canCancelBooking = Boolean(
-    ticket.booking &&
+    canManage && ticket.booking &&
     !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking.status) &&
     !isBookingPast
   );
@@ -136,6 +168,25 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   // SAFETY: Look up ticket transitions by status using keyof; fallback to empty array if unknown.
   const transitions = (ticket?.status ? validTransitions[ticket.status as keyof typeof validTransitions] : undefined) || [];
   const isQueued = Boolean(ticket.assignment_queued_at);
+  const isWorkHoursPaused = Boolean(work_hours?.resume_status) && !isQueued;
+  const hideStatusPicker = isQueued || isWorkHoursPaused;
+
+  const focusChat = () => {
+    setTab('chat');
+    window.setTimeout(() => {
+      chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      chatPanelRef.current?.focus({ preventScroll: true });
+    }, 0);
+  };
+
+  const resumeWork = () => {
+    setResuming(true);
+    router.post(route('admin.tiket.resume-work', ticket.id), {}, {
+      preserveScroll: true,
+      preserveState: true,
+      onFinish: () => setResuming(false),
+    });
+  };
 
   useEffect(() => {
     if (isQueued) setStatusData('status', '');
@@ -181,7 +232,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     const selectedPriority = priorityData.priority || '';
     const isPriorityChanged = selectedPriority !== '' && selectedPriority !== currentPriority;
 
-    const selectedStatus = isQueued ? '' : statusData.status;
+    const selectedStatus = isQueued || isWorkHoursPaused ? '' : statusData.status;
     if (!selectedStatus && !isOperatorChanged && !isPriorityChanged) {
       alert('Silakan pilih status, operator, atau prioritas yang ingin diubah terlebih dahulu.');
       return;
@@ -324,25 +375,45 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
        )}
      </div>
 
+     {!canManage && (
+       <p className="mb-6 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+         Anda dapat melihat tiket ini. Pengelolaan tetap dilakukan oleh tim penangan.
+       </p>
+     )}
+
+     {canManage && work_hours && (
+       <div className="mb-6">
+         <TicketWorkHoursNotice
+           workHours={work_hours}
+           isAdmin
+           onContact={focusChat}
+           onResume={resumeWork}
+           resumeProcessing={resuming}
+         />
+       </div>
+     )}
+
      <div className="mb-6">
        <TicketEditHistory histories={ticket.edit_histories} />
      </div>
 
      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
        <div className="lg:col-span-2 space-y-6">
-        <Tabs defaultValue="chat" className="w-full space-y-6">
-          <TabsList className="grid grid-cols-4 w-full max-w-xl bg-zinc-100 p-1 rounded-xl mb-6">
-            <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
-              <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
-              <span>Chat Tiket</span>
-            </TabsTrigger>
+        <Tabs value={tab} onValueChange={setTab} className="w-full space-y-6">
+          <TabsList className={`grid ${canManage ? 'grid-cols-4' : 'grid-cols-3'} w-full max-w-xl bg-zinc-100 p-1 rounded-xl mb-6`}>
+            {canManage && (
+              <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
+                <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
+                <span>Pesan Tiket</span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
               <Info className="h-3.5 w-3.5" />
               <span>Informasi</span>
             </TabsTrigger>
             <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
               <Clock className="h-3.5 w-3.5" />
-              <span>Jejak Status</span>
+              <span>Riwayat</span>
             </TabsTrigger>
             <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
               <Paperclip className="h-3.5 w-3.5" />
@@ -351,7 +422,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
           </TabsList>
 
           {/* TAB 0: CHAT & DISKUSI INTERAKTIF */}
-          <TabsContent value="chat" className="space-y-6 mt-0">
+          {canManage && <TabsContent value="chat" id="chat-tiket" className="space-y-6 mt-0" ref={chatPanelRef} tabIndex={-1}>
             <TicketChatBox
               ticket={ticket}
               isAdmin={true}
@@ -361,7 +432,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
               canReply={['solve', 'reject', 'dibatalkan'].indexOf(ticket.status) === -1}
               chatUrl={`/admin/chat?ticket_id=${ticket.id}`}
             />
-          </TabsContent>
+          </TabsContent>}
 
            {/* TAB 1: INFORMASI */}
            <TabsContent value="informasi" className="mt-0">
@@ -616,7 +687,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                         </div>
                       )}
 
-                      {ticket.status === 'solve' && !isReturned && (
+                      {canManage && ticket.status === 'solve' && !isReturned && (
                         <Button
                           type="button"
                           className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
@@ -779,6 +850,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                 </>
               )}
 
+              {canManage && (
               <Card>
                 <CardHeader>
                   <CardTitle>Aksi Tiket</CardTitle>
@@ -788,31 +860,32 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                     <div className="space-y-2">
                       <span className="text-sm text-slate-500">Status Saat Ini:</span>
                       <div><StatusBadge status={ticket.status} /></div>
-                      {isQueued && <p className="text-sm text-amber-700">Menunggu giliran petugas</p>}
                     </div>
 
                     {transitions.length > 0 ? (
                       <>
-                        <div className="space-y-2">
-                          <label className="text-sm font-medium">Ubah Status</label>
-                          <select
-                            className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                            value={statusData.status}
-                            disabled={isQueued}
-                            onChange={e => setStatusData('status', e.target.value)}
-                          >
-                            <option value="">Pilih status baru (opsional jika hanya tugaskan operator)</option>
-                            {transitions.map((s: string) => (
-                              <option key={s} value={s}>
-                                {
-                                  // SAFETY: Look up human status label by status code using keyof; fallback to raw status code.
-                                  statusLabels[s as keyof typeof statusLabels] || s
-                                }
-                              </option>
-                            ))}
-                          </select>
-                          {errorsStatus.status && <p className="text-red-500 text-sm">{errorsStatus.status}</p>}
-                        </div>
+                        {!hideStatusPicker && (
+                          <div className="space-y-2">
+                            <label className="text-sm font-medium">Ubah Status</label>
+                            <select
+                              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+                              value={statusData.status}
+                              disabled={isQueued}
+                              onChange={e => setStatusData('status', e.target.value)}
+                            >
+                              <option value="">Pilih status baru (opsional jika hanya tugaskan operator)</option>
+                              {transitions.map((s: string) => (
+                                <option key={s} value={s}>
+                                  {
+                                    // SAFETY: Look up human status label by status code using keyof; fallback to raw status code.
+                                    statusLabels[s as keyof typeof statusLabels] || s
+                                  }
+                                </option>
+                              ))}
+                            </select>
+                            {errorsStatus.status && <p className="text-red-500 text-sm">{errorsStatus.status}</p>}
+                          </div>
+                        )}
 
                         {canAssignOperator && (
                           <div className="space-y-2">
@@ -925,6 +998,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                   </div>
                 </CardContent>
               </Card>
+              )}
 
              {/* SLA Tracking Card */}
              {ticket.sla_tracking && (

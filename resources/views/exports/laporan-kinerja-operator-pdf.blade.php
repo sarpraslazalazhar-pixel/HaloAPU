@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Kinerja Operator</title>
+    <title>Laporan Kinerja individu</title>
     <style>
         * {
             margin: 0;
@@ -236,7 +236,7 @@
             @endif
         </div>
         <div class="header-center">
-            <div class="title">LAPORAN BEBAN &amp; KINERJA OPERATOR</div>
+            <div class="title">LAPORAN BEBAN &amp; KINERJA INDIVIDU</div>
             <div class="subtitle">HaloAPU — Sistem Helpdesk</div>
             <div class="subtitle">
                 Periode:
@@ -401,7 +401,7 @@
 
     <!-- Footer -->
     <div class="footer">
-        <div class="footer-left">HaloAPU - Laporan Beban &amp; Kinerja Operator</div>
+        <div class="footer-left">HaloAPU - Laporan Beban &amp; Kinerja Individu</div>
         <div class="footer-right">Dicetak: {{ now()->format('d-m-Y H:i') }}</div>
     </div>
 </body>

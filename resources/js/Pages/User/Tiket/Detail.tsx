@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { StatusBadge } from '@/Components/StatusBadge';
 import { TicketTimeline } from '@/Components/TicketTimeline';
+import { TicketWorkHoursNotice, type WorkHoursInfo } from '@/Components/TicketWorkHoursNotice';
 import { TicketEditHistory } from '@/Components/TicketEditHistory';
 import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
@@ -17,6 +18,7 @@ import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
+import { subscribe } from '@/lib/realtime';
 import Swal from 'sweetalert2';
 
 
@@ -24,11 +26,12 @@ interface DetailProps {
  ticket: any;
  formFields: any[];
  maxRevisions: number;
+ work_hours?: WorkHoursInfo | null;
 }
 
 type AttachmentSelection = { file: File; index: number; form: 'reply' | 'rev' };
 
-export default function Detail({ ticket, formFields, maxRevisions }: DetailProps) {
+export default function Detail({ ticket, formFields, maxRevisions, work_hours }: DetailProps) {
 
  // SAFETY: general_attachments holds uploaded File instances for replies.
  const { data: replyData, setData: setReplyData, post: postReply, processing: processingReply, errors: errorsReply, reset: resetReply } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
@@ -48,8 +51,43 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
  const [catatanKembali, setCatatanKembali] = useState('');
  const [isSubmittingKembali, setIsSubmittingKembali] = useState(false);
+ const [tab, setTab] = useState('chat');
+ const chatPanelRef = useRef<HTMLDivElement>(null);
  const showCsat = ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
  const isQueued = Boolean(ticket.assignment_queued_at);
+ const isWorkHoursPaused = Boolean(work_hours?.resume_status) && !isQueued;
+
+ useEffect(() => {
+   if (!work_hours) return;
+
+   const timer = window.setInterval(() => {
+     if (document.visibilityState === 'visible') {
+       router.reload({ only: ['ticket', 'work_hours'] });
+     }
+   }, 30000);
+
+   return () => window.clearInterval(timer);
+ }, [work_hours]);
+
+ useEffect(() => {
+   if (!ticket?.id) return;
+
+   return subscribe(`ticket.${ticket.id}`, {
+     '.TicketMessagePosted': ({ log }) => {
+       if (log?.aksi?.startsWith('work_hours')) {
+         router.reload({ only: ['ticket', 'work_hours'] });
+       }
+     },
+   });
+ }, [ticket?.id]);
+
+ const focusChat = () => {
+   setTab('chat');
+   window.setTimeout(() => {
+     chatPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+     chatPanelRef.current?.focus({ preventScroll: true });
+   }, 0);
+ };
  const isBooking = Boolean(ticket.booking);
  const bookingServiceTitle = (() => {
    const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
@@ -68,7 +106,10 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
  );
  const bookingNotStarted = isBooking && ticket.booking?.tanggal_mulai && new Date(ticket.booking.tanggal_mulai) > new Date();
  const bookingActive = isBooking && !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking?.status) && !isBookingPast;
- const canCancel = !isBookingPast && (ticket.status === 'open' || (bookingNotStarted && bookingActive)) && ticket.status !== 'dibatalkan' && ticket.status !== 'reject';
+ const canCancelAfterHours = isWorkHoursPaused && work_hours?.resume_status === 'open';
+ const canCancel = !isBookingPast
+   && (ticket.status === 'open' || canCancelAfterHours || (bookingNotStarted && bookingActive))
+   && ticket.status !== 'dibatalkan' && ticket.status !== 'reject';
 
  useEffect(() => {
    if (previewFile) attachmentDialogRef.current?.showModal();
@@ -280,27 +321,20 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
      <div className="max-w-4xl mx-auto py-8 px-4">
        <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
-       {isQueued && (
-         <div role="status" className="mb-6 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-           <Clock className="h-5 w-5 shrink-0 text-amber-600 mt-0.5" />
-           <div className="space-y-1">
-             <p className="text-sm font-semibold text-amber-900">Tiket sudah diterima petugas</p>
-             <p className="text-sm text-amber-800">
-               Saat ini petugas masih menangani tiket lain, jadi tiket Anda menunggu giliran.
-               Hitungan waktu SLA berhenti selama menunggu dan baru berjalan lagi ketika petugas mulai mengerjakan.
-             </p>
-           </div>
+       {work_hours && (
+         <div className="mb-6">
+           <TicketWorkHoursNotice workHours={work_hours} isAdmin={false} onContact={focusChat} />
          </div>
        )}
-       <div className="flex justify-between items-center mb-6">
-         <div>
-           <h1 className="text-2xl font-bold flex items-center gap-3">
-             #TKT-{formatTicketId(ticket.id)}
+       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+         <div className="min-w-0">
+           <h1 className="text-xl sm:text-2xl font-bold flex flex-wrap items-center gap-2 sm:gap-3">
+             <span className="whitespace-nowrap">#TKT-{formatTicketId(ticket.id)}</span>
              <StatusBadge status={ticket.status} />
            </h1>
            <p className="text-slate-500 mt-1">Dibuat pada {formatDateId(ticket.created_at)}</p>
          </div>
-         <div className="flex items-center gap-2">
+         <div className="flex flex-wrap items-center gap-2">
            {showCsat && (
              <CsatDialog ticketId={ticket.id} existingRating={ticket.csat?.rating} existingKomentar={ticket.csat?.komentar} />
            )}
@@ -566,11 +600,11 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
        </Dialog>
 
        {/* Tabs Navigation for Ticket Details */}
-       <Tabs defaultValue="chat" className="w-full space-y-6">
+       <Tabs value={tab} onValueChange={setTab} className="w-full space-y-6">
          <TabsList className="grid grid-cols-4 w-full max-w-lg bg-zinc-100 p-1 rounded-xl">
            <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
              <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
-             <span>Chat Tiket</span>
+             <span>Pesan Chat</span>
            </TabsTrigger>
            <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Info className="h-3.5 w-3.5" />
@@ -587,7 +621,7 @@ export default function Detail({ ticket, formFields, maxRevisions }: DetailProps
          </TabsList>
 
          {/* TAB 0: CHAT & DISKUSI */}
-         <TabsContent value="chat" className="space-y-6">
+         <TabsContent value="chat" id="chat-tiket" className="space-y-6" ref={chatPanelRef} tabIndex={-1}>
            <TicketChatBox
              ticket={ticket}
              isAdmin={false}

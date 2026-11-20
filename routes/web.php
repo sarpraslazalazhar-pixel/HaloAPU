@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminManagementController;
 use App\Http\Controllers\Admin\AiBotController;
+use App\Http\Controllers\Admin\BulkTicketController;
 use App\Http\Controllers\Admin\CsatController as AdminCsatController;
 use App\Http\Controllers\Admin\DeviceLockConfigController;
 use App\Http\Controllers\Admin\DivisiController;
@@ -204,11 +205,20 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::post('/profil/avatar', [App\Http\Controllers\Admin\ProfileController::class, 'uploadAvatar'])->name('profil.upload-avatar');
 
         // CSAT & Laporan Admin
+        Route::get('/laporan/tiket', [LaporanTiketController::class, 'index'])
+            ->middleware('permission:akses-laporan|assess-ticket-workload')
+            ->name('laporan.tiket');
+        Route::get('/laporan/tiket/belum-dinilai/jumlah', [LaporanTiketController::class, 'workloadCount'])
+            ->middleware('permission:assess-ticket-workload')
+            ->name('laporan.tiket.workload-count');
+        Route::put('/laporan/tiket/{ticket}/penilaian-beban', [LaporanTiketController::class, 'saveWorkloadAssessment'])
+            ->middleware('permission:assess-ticket-workload')
+            ->name('laporan.tiket.penilaian-beban');
+
         Route::middleware('permission:akses-laporan')->group(function () {
             Route::get('/csat', [AdminCsatController::class, 'index'])->name('csat.index');
             Route::get('/laporan/tiket/export-pdf', [LaporanTiketController::class, 'exportPdf'])->name('laporan.tiket.export-pdf');
             Route::get('/laporan/tiket/export', [LaporanTiketController::class, 'export'])->name('laporan.tiket.export');
-            Route::get('/laporan/tiket', [LaporanTiketController::class, 'index'])->name('laporan.tiket');
             Route::get('/laporan/kinerja-operator', [LaporanOperatorController::class, 'index'])->name('laporan.operator');
             Route::get('/laporan/kinerja-operator/{admin}/ulasan', [LaporanOperatorController::class, 'ulasan'])->name('laporan.operator.ulasan');
             Route::get('/laporan/kinerja-operator/export', [LaporanOperatorController::class, 'export'])->name('laporan.operator.export');
@@ -338,6 +348,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/{ticket}/reply', [TicketController::class, 'reply'])->name('reply');
             Route::patch('/{ticket}/assign', [TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [TicketController::class, 'updateStatus'])->name('status');
+            Route::post('/{ticket}/resume-work', [TicketController::class, 'resumeWork'])->name('resume-work');
             Route::patch('/{ticket}/priority', [TicketController::class, 'updatePriority'])->name('priority');
             Route::patch('/{ticket}/antrean', [TicketController::class, 'moveInQueue'])->name('queue-move');
             Route::patch('/{ticket}/form', [TicketController::class, 'updateForm'])->name('form');
@@ -369,6 +380,18 @@ Route::prefix('admin')->name('admin.')->group(function () {
             return redirect()->route('pulse');
         })->name('pulse');
     });
+
+    // Pengajuan banyak tiket — tetap dapat dikenali akun web agar non-Admin
+    // mendapat 403, bukan dialihkan seolah tamu. Superadmin ikut.
+    Route::middleware(['auth:admin,web', 'role:Admin|superadmin|Super Admin,admin'])
+        ->prefix('tickets')
+        ->name('tickets.')
+        ->group(function () {
+            Route::get('/bulk-create', [BulkTicketController::class, 'create'])
+                ->name('bulk.create');
+            Route::post('/bulk-store', [BulkTicketController::class, 'store'])
+                ->name('bulk.store');
+        });
 });
 
 // Laravel Pulse Dashboard

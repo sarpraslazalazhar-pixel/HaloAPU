@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Ticket extends Model
 {
+    public const WORKLOAD_FINISHED_STATUSES = ['solve', 'selesai'];
+
     public $incrementing = false;
     protected $keyType = 'integer';
 
@@ -41,6 +45,8 @@ class Ticket extends Model
         if ($status) {
             if (is_array($status)) {
                 $query->whereIn('tickets.status', $status);
+            } elseif ($status === 'solve') {
+                $query->whereIn(DB::raw('LOWER(tickets.status)'), self::WORKLOAD_FINISHED_STATUSES);
             } else {
                 $query->where('tickets.status', $status);
             }
@@ -76,6 +82,7 @@ class Ticket extends Model
         'user_id', 'created_by_admin_id', 'divisi_id', 'org_unit_id', 'jabatan_id',
         'unit_id', 'sub_unit_id', 'form_data', 'status', 'priority', 'assigned_admin_id',
         'assignment_queued_at', 'assignment_resume_status',
+        'work_hours_resume_status', 'work_hours_sla_paused_at',
         'source',
         'revision_count', 'waiting_approval_at', 'is_result_accepted', 'dikembalikan_at',
         'kondisi_kembali', 'catatan_kembali'
@@ -123,7 +130,19 @@ class Ticket extends Model
         'is_result_accepted' => 'boolean',
         'dikembalikan_at' => 'datetime',
         'assignment_queued_at' => 'datetime',
+        'work_hours_sla_paused_at' => 'datetime',
     ];
+
+    protected $hidden = [
+        'work_hours_sla_paused_at',
+    ];
+
+    /** Tiket masih standing dan belum pernah dijeda jam kerja. */
+    public function isOpenForCancellation(): bool
+    {
+        return $this->status === 'open'
+            || ($this->status === 'pending' && $this->work_hours_resume_status === 'open');
+    }
 
     public function createdByAdmin()
     {
@@ -183,6 +202,29 @@ class Ticket extends Model
     public function csat()
     {
         return $this->hasOne(Csat::class);
+    }
+
+    public function workloadAssessment()
+    {
+        return $this->hasOne(TicketWorkloadAssessment::class);
+    }
+
+    public function scopeForCoordinatedServices(Builder $query, Admin $admin): void
+    {
+        $units = $admin->units()->select('units.id')->getQuery();
+        $services = $admin->subUnits()->select('sub_units.id')->getQuery();
+
+        $query->where(fn ($tickets) => $tickets
+            ->whereIn('tickets.unit_id', $units)
+            ->orWhereHas('subUnit', fn ($subUnit) => $subUnit->whereIn('sub_units.unit_id', $units))
+            ->orWhereIn('tickets.sub_unit_id', $services)
+        );
+    }
+
+    public function scopeAwaitingWorkloadAssessment(Builder $query): void
+    {
+        $query->whereIn(DB::raw('LOWER(tickets.status)'), self::WORKLOAD_FINISHED_STATUSES)
+            ->whereDoesntHave('workloadAssessment');
     }
 
     public function booking()

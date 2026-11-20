@@ -43,15 +43,7 @@ class SlaCalculator
         }
 
         if (!$config) {
-            return [
-                'senin'  => ['08:00', '16:00'],
-                'selasa' => ['08:00', '16:00'],
-                'rabu'   => ['08:00', '16:00'],
-                'kamis'  => ['08:00', '16:00'],
-                'jumat'  => ['08:00', '16:00'],
-                'sabtu'  => null,
-                'minggu' => null,
-            ];
+            return $this->normalizeWorkingHours($this->defaultWorkingHours());
         }
 
         $decoded = json_decode($config->value, true);
@@ -59,18 +51,57 @@ class SlaCalculator
         // Fallback jika JSON rusak/invalid
         if (!is_array($decoded)) {
             Log::warning('Konfigurasi jam_kerja memiliki JSON yang tidak valid, menggunakan default.');
-            return [
-                'senin'  => ['08:00', '16:00'],
-                'selasa' => ['08:00', '16:00'],
-                'rabu'   => ['08:00', '16:00'],
-                'kamis'  => ['08:00', '16:00'],
-                'jumat'  => ['08:00', '16:00'],
-                'sabtu'  => null,
-                'minggu' => null,
-            ];
+            return $this->normalizeWorkingHours($this->defaultWorkingHours());
         }
 
-        return $decoded;
+        return $this->normalizeWorkingHours($decoded);
+    }
+
+    protected function defaultWorkingHours(): array
+    {
+        return [
+            'senin'  => ['08:00', '16:00'],
+            'selasa' => ['08:00', '16:00'],
+            'rabu'   => ['08:00', '16:00'],
+            'kamis'  => ['08:00', '16:00'],
+            'jumat'  => ['08:00', '16:00'],
+            'sabtu'  => null,
+            'minggu' => null,
+        ];
+    }
+
+    /** Pasangan jam tidak valid atau start >= end diperlakukan sebagai hari tutup. */
+    protected function normalizeWorkingHours(array $hours): array
+    {
+        $normalized = [];
+        foreach ($this->dayMap as $dayName) {
+            $normalized[$dayName] = $this->validPair($hours[$dayName] ?? null);
+        }
+
+        return $normalized;
+    }
+
+    private function validPair(mixed $pair): ?array
+    {
+        if (!is_array($pair) || count($pair) < 2) {
+            return null;
+        }
+
+        [$start, $end] = array_values($pair);
+        if (!is_string($start) || !is_string($end)
+            || !preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $start)
+            || !preg_match('/^\d{1,2}:\d{2}(:\d{2})?$/', $end)) {
+            return null;
+        }
+
+        try {
+            $startAt = Carbon::createFromTimeString($start);
+            $endAt = Carbon::createFromTimeString($end);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $startAt->lt($endAt) ? [$start, $end] : null;
     }
 
     protected function isWorkingDay(Carbon $date): bool
@@ -112,7 +143,39 @@ class SlaCalculator
             return false;
         }
 
-        return $date->between($start, $end);
+        return $date->gte($start) && $date->lt($end);
+    }
+
+    /**
+     * @return array{is_open: bool, closed_since: ?Carbon, next_open_at: ?Carbon}
+     */
+    public function workingHoursState(Carbon $at): array
+    {
+        $at = $at->copy()->setTimezone(config('app.timezone'));
+
+        if ($this->isWithinWorkingHours($at)) {
+            return ['is_open' => true, 'closed_since' => null, 'next_open_at' => null];
+        }
+
+        $closedSince = null;
+        for ($i = 0; $i <= 7; $i++) {
+            $end = $this->getWorkEnd($at->copy()->subDays($i)->startOfDay());
+            if ($end && $end->lte($at)) {
+                $closedSince = $end;
+                break;
+            }
+        }
+
+        $nextOpen = null;
+        for ($i = 0; $i <= 7; $i++) {
+            $start = $this->getWorkStart($at->copy()->addDays($i)->startOfDay());
+            if ($start && $start->gt($at)) {
+                $nextOpen = $start;
+                break;
+            }
+        }
+
+        return ['is_open' => false, 'closed_since' => $closedSince, 'next_open_at' => $nextOpen];
     }
 
     public function calculateResponseDeadline(Ticket $ticket): Carbon
@@ -218,7 +281,7 @@ class SlaCalculator
         Log::info("SLA #{$sla->id} di-pause pada {$sla->paused_at}");
     }
 
-    public function resumeSla(TicketSlaTracking $sla, ?Carbon $at = null): void
+    public function resumeSla(TicketSlaTracking $sla, ?Carbon $at = null, bool $preserveScheduledResolution = false): void
     {
         $resumeAt = ($at ?? Carbon::now())->copy()->microsecond(0);
         $pausedAt = $sla->paused_at;
@@ -244,6 +307,10 @@ class SlaCalculator
             $key = "sla_{$phase}_deadline";
             $deadline = $sla->$key;
             if ($phase === 'resolution' && $sla->sla_resolution_starts_at && $sla->sla_resolution_base_deadline) {
+                if ($preserveScheduledResolution && $deadline !== null) {
+                    continue;
+                }
+
                 $deadline ??= $sla->sla_resolution_base_deadline;
                 $seconds = max(0, $resumeAt->timestamp - max($pausedAt->timestamp, $sla->sla_resolution_starts_at->timestamp));
                 $updates[$key] = $deadline->copy()->setTimestamp($deadline->timestamp + $seconds);

@@ -54,6 +54,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $webUser,
                 'admin' => $adminUser,
                 'is_super_admin' => fn () => $adminUser ? $adminUser->hasRole(['superadmin', 'Super Admin']) : false,
+                'can_assess_ticket_workload' => fn () => $adminUser ? $adminUser->can('assess-ticket-workload') : false,
                 'permissions' => fn () => $adminUser
                     ? Cache::remember(
                         "admin_perms_{$adminUser->id}",

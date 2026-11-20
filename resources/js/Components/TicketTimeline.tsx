@@ -53,6 +53,24 @@ const actionConfigMap = {
     badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
     nodeBg: 'bg-sky-500',
   },
+  work_hours_paused: {
+    label: 'Ditunda karena jam kerja',
+    icon: PauseCircle,
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+    nodeBg: 'bg-amber-500',
+  },
+  work_hours_queued: {
+    label: 'Antrean di luar jam kerja',
+    icon: Clock,
+    badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+    nodeBg: 'bg-amber-500',
+  },
+  work_hours_resumed: {
+    label: 'Tiket dilanjutkan',
+    icon: PlayCircle,
+    badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
+    nodeBg: 'bg-sky-500',
+  },
   pending: {
     label: 'Tiket Ditunda',
     icon: PauseCircle,

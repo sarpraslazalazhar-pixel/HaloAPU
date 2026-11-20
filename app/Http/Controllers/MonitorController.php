@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\RoomVehicleBooking;
+use App\Models\Ticket;
 use Carbon\Carbon;
 use Inertia\Inertia;
 
@@ -16,7 +17,7 @@ class MonitorController extends Controller
      * - Dipesan: ada booking disetujui yang belum mulai tapi hari ini
      * - Sedang Dipakai: ada booking yang sedang berlangsung (tanggal_mulai <= now <= tanggal_selesai)
      */
-    protected function getAssetData(?string $tipe = null)
+    protected function getAssetData(\Closure $ticketUrl, ?string $tipe = null)
     {
         $now = Carbon::now();
         $oneHourAgo = $now->copy()->subHour();
@@ -27,7 +28,11 @@ class MonitorController extends Controller
                 $tq->whereNotIn('status', ['reject', 'dibatalkan']);
             })
             ->where('tanggal_selesai', '>=', $oneHourAgo)
-            ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name']);
+            ->with([
+                'ticket:id,user_id,created_by_admin_id,status',
+                'ticket.user:id,username,name',
+                'ticket.createdByAdmin:id,username,name',
+            ]);
         if ($tipe) {
             $query->where('tipe', $tipe);
         }
@@ -96,7 +101,7 @@ class MonitorController extends Controller
         };
 
         // Map status per aset
-        return $allAssets->map(function ($asset) use ($bookings, $now, $oneHourAgo, $formatWaktu) {
+        return $allAssets->map(function ($asset) use ($bookings, $now, $oneHourAgo, $formatWaktu, $ticketUrl) {
             $assetBookings = $bookings->where('nama_aset', $asset->nama_aset);
 
             // 1. Cek apakah sedang aktif berlangsung saat ini (mulai <= now < selesai)
@@ -117,6 +122,7 @@ class MonitorController extends Controller
                     'user' => $userStr,
                     'waktu' => $formatWaktu($activeBooking->tanggal_mulai, $activeBooking->tanggal_selesai),
                     'booking_id' => $activeBooking->id,
+                    'ticket_url' => $ticketUrl($activeBooking->ticket),
                 ];
             }
 
@@ -137,6 +143,7 @@ class MonitorController extends Controller
                     'user' => $userStr,
                     'waktu' => $formatWaktu($upcomingBooking->tanggal_mulai, $upcomingBooking->tanggal_selesai),
                     'booking_id' => $upcomingBooking->id,
+                    'ticket_url' => $ticketUrl($upcomingBooking->ticket),
                 ];
             }
 
@@ -155,6 +162,7 @@ class MonitorController extends Controller
                     'user' => $userStr,
                     'waktu' => $formatWaktu($recentlyFinishedBooking->tanggal_mulai, $recentlyFinishedBooking->tanggal_selesai),
                     'booking_id' => $recentlyFinishedBooking->id,
+                    'ticket_url' => $ticketUrl($recentlyFinishedBooking->ticket),
                 ];
             }
 
@@ -165,23 +173,53 @@ class MonitorController extends Controller
                 'user' => null,
                 'waktu' => null,
                 'booking_id' => null,
+                'ticket_url' => null,
             ];
         });
     }
 
     /**
+     * Booking jadi tautan hanya bila penonton berhak membuka tiketnya.
+     * User hanya tiketnya sendiri; admin mengikuti akses detail tiket.
+     */
+    protected function ticketUrlResolver(bool $isAdmin): \Closure
+    {
+        if ($isAdmin) {
+            $admin = auth('admin')->user();
+            $canViewAll = $admin->hasRole(['Admin', 'admin', 'superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+                || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+            $accessibleIds = $canViewAll ? null : Ticket::accessibleBy($admin)->pluck('id')->flip();
+
+            return fn (?Ticket $ticket): ?string => $ticket && ($canViewAll || $accessibleIds->has($ticket->id))
+                ? route('admin.tiket.show', $ticket->id)
+                : null;
+        }
+
+        $userId = auth('web')->id();
+
+        return fn (?Ticket $ticket): ?string => $ticket && $userId !== null && (int) $ticket->user_id === (int) $userId
+            ? route('tiket.show', $ticket->id)
+            : null;
+    }
+
+    /**
      * Data kalender: booking dikelompokkan per tanggal (30 hari ke depan).
      */
-    protected function getCalendarData()
+    protected function getCalendarData(\Closure $ticketUrl)
     {
         $now = Carbon::now();
+
         $bookings = RoomVehicleBooking::whereNotIn('status', ['reject', 'dibatalkan', 'selesai'])
             ->whereHas('ticket', function ($tq) {
                 $tq->whereNotIn('status', ['reject', 'dibatalkan']);
             })
             ->where('tanggal_selesai', '>=', $now->copy()->startOfDay())
             ->where('tanggal_mulai', '<=', $now->copy()->addDays(30)->endOfDay())
-            ->with(['ticket.user:id,username,name', 'ticket.createdByAdmin:id,username,name'])
+            ->with([
+                'ticket:id,user_id,created_by_admin_id,status',
+                'ticket.user:id,username,name',
+                'ticket.createdByAdmin:id,username,name',
+            ])
             ->orderBy('tanggal_mulai')
             ->get()
             ->groupBy(fn ($b) => Carbon::parse($b->tanggal_mulai)->format('Y-m-d'));
@@ -196,17 +234,20 @@ class MonitorController extends Controller
                 'jam_selesai' => Carbon::parse($b->tanggal_selesai)->format('H:i'),
                 'user' => $b->ticket?->user?->name ?? $b->ticket?->createdByAdmin?->name ?? $b->ticket?->user?->username ?? $b->ticket?->createdByAdmin?->username ?? '-',
                 'status' => $b->status,
+                'booking_id' => $b->id,
+                'ticket_url' => $ticketUrl($b->ticket),
             ]),
         ])->values();
     }
 
     public function userIndex()
     {
-        $alat = $this->getAlatData();
+        $ticketUrl = $this->ticketUrlResolver(false);
+        $alat = $this->getAlatData($ticketUrl);
 
         return Inertia::render('User/Monitor/Index', [
-            'assets' => $this->getAssetData(),
-            'calendarData' => $this->getCalendarData(),
+            'assets' => $this->getAssetData($ticketUrl),
+            'calendarData' => $this->getCalendarData($ticketUrl),
             'alatPinjam' => $alat['peminjaman'],
             'ketersediaanAlat' => $alat['ketersediaan'],
             'lastUpdated' => now()->format('H:i:s'),
@@ -215,18 +256,19 @@ class MonitorController extends Controller
 
     public function adminIndex()
     {
-        $alat = $this->getAlatData();
+        $ticketUrl = $this->ticketUrlResolver(true);
+        $alat = $this->getAlatData($ticketUrl);
 
         return Inertia::render('Admin/Monitor/Index', [
-            'assets' => $this->getAssetData(),
-            'calendarData' => $this->getCalendarData(),
+            'assets' => $this->getAssetData($ticketUrl),
+            'calendarData' => $this->getCalendarData($ticketUrl),
             'alatPinjam' => $alat['peminjaman'],
             'ketersediaanAlat' => $alat['ketersediaan'],
             'lastUpdated' => now()->format('H:i:s'),
         ]);
     }
 
-    protected function getAlatData()
+    protected function getAlatData(\Closure $ticketUrl)
     {
         $sevenDaysAgo = Carbon::now()->subDays(7);
         $now = Carbon::now();
@@ -266,12 +308,13 @@ class MonitorController extends Controller
                     'waktu' => null,
                     'ticket_id' => null,
                     'formatted_id' => null,
+                    'ticket_url' => null,
                 ]);
             }
         }
 
         // 2. Map data tiket dan update ketersediaan alat
-        $peminjaman = $tickets->map(function ($t) use ($now, $masterTools) {
+        $peminjaman = $tickets->map(function ($t) use ($now, $masterTools, $ticketUrl) {
             $userStr = $t->user?->name ?? $t->createdByAdmin?->name ?? $t->user?->username ?? $t->createdByAdmin?->username ?? '-';
             $divisiStr = $t->user?->divisi?->nama_divisi ?? ($t->createdByAdmin ? 'Internal Admin' : '-');
             $formData = is_array($t->form_data) ? $t->form_data : [];
@@ -338,6 +381,7 @@ class MonitorController extends Controller
                                 'waktu' => $rentangWaktu,
                                 'ticket_id' => $t->id,
                                 'formatted_id' => $t->formatted_id,
+                                'ticket_url' => $ticketUrl($t),
                             ]);
                         }
                     } else {
@@ -354,6 +398,7 @@ class MonitorController extends Controller
                                     'waktu' => $rentangWaktu,
                                     'ticket_id' => $t->id,
                                     'formatted_id' => $t->formatted_id,
+                                    'ticket_url' => $ticketUrl($t),
                                 ]);
                             }
                         }
@@ -366,6 +411,7 @@ class MonitorController extends Controller
             return [
                 'ticket_id' => $t->id,
                 'formatted_id' => $t->formatted_id,
+                'ticket_url' => $ticketUrl($t),
                 'peminjam' => $userStr,
                 'layanan' => $t->subUnit?->nama_layanan ?? 'Peminjaman Alat',
                 'alat' => $alatName,

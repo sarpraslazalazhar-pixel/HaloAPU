@@ -8,6 +8,7 @@ import { Wrench, CheckCircle2, Clock, AlertTriangle, ExternalLink, CalendarDays,
 export interface AlatPinjamItem {
   ticket_id: number;
   formatted_id: string;
+  ticket_url: string | null;
   peminjam: string;
   layanan: string;
   alat: string;
@@ -26,15 +27,15 @@ export interface KetersediaanAlatItem {
   waktu: string | null;
   ticket_id: number | null;
   formatted_id: string | null;
+  ticket_url: string | null;
 }
 
 interface MonitorAlatProps {
   items: AlatPinjamItem[];
   ketersediaan?: KetersediaanAlatItem[];
-  isAdmin?: boolean;
 }
 
-export default function MonitorAlat({ items = [], ketersediaan = [], isAdmin = false }: MonitorAlatProps) {
+export default function MonitorAlat({ items = [], ketersediaan = [] }: MonitorAlatProps) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterKatalog, setFilterKatalog] = useState<string>('all');
@@ -128,9 +129,7 @@ export default function MonitorAlat({ items = [], ketersediaan = [], isAdmin = f
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
               {filteredKatalog.map((tool, idx) => {
                 const isAvailable = tool.status === 'Tersedia';
-                const detailUrl = tool.ticket_id
-                  ? (isAdmin ? route('admin.tiket.show', tool.ticket_id) : route('tiket.show', tool.ticket_id))
-                  : null;
+                const detailUrl = tool.ticket_url;
 
                 return (
                   <div
@@ -257,16 +256,16 @@ export default function MonitorAlat({ items = [], ketersediaan = [], isAdmin = f
               <TableBody>
                 {filteredTickets.length > 0 ? (
                   filteredTickets.map(item => {
-                    const detailUrl = isAdmin
-                      ? route('admin.tiket.show', item.ticket_id)
-                      : route('tiket.show', item.ticket_id);
+                    const detailUrl = item.ticket_url;
 
                     return (
                       <TableRow key={item.ticket_id} className="hover:bg-slate-50/50">
                         <TableCell className="font-mono text-xs font-semibold text-slate-700">
-                          <Link href={detailUrl} className="text-blue-600 hover:underline">
-                            #{item.formatted_id}
-                          </Link>
+                          {detailUrl ? (
+                            <Link href={detailUrl} className="text-blue-600 hover:underline">
+                              #{item.formatted_id}
+                            </Link>
+                          ) : `#${item.formatted_id}`}
                         </TableCell>
                         <TableCell className="text-xs font-medium text-slate-800">
                           {item.peminjam}
@@ -321,12 +320,14 @@ export default function MonitorAlat({ items = [], ketersediaan = [], isAdmin = f
                           )}
                         </TableCell>
                         <TableCell className="text-right">
-                          <Link
-                            href={detailUrl}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
-                          >
-                            Detail <ExternalLink className="w-3 h-3" />
-                          </Link>
+                          {detailUrl && (
+                            <Link
+                              href={detailUrl}
+                              className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 hover:underline"
+                            >
+                              Detail <ExternalLink className="w-3 h-3" />
+                            </Link>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

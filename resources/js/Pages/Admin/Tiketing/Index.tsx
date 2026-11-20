@@ -36,7 +36,7 @@ const TABS = [
  { key: 'saya_ajukan', label: 'Tiket Saya Ajukan', Icon: Send },
 ];
 
-export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts, operatorLoads = [] }: any) {
+export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts, operatorLoads = [], canBulkCreate = false }: any) {
  const [showFilter, setShowFilter] = useState(() => {
  return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
  });
@@ -207,6 +207,9 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  >
  <span className="font-medium text-slate-700">{op.name}</span>
  <span className="rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-800">{op.working} dikerjakan</span>
+ {op.paused > 0 && (
+ <span className="rounded bg-orange-100 px-1.5 py-0.5 font-semibold text-orange-800">{op.paused} tertunda</span>
+ )}
  {op.queued > 0 && (
  <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">{op.queued} antre</span>
  )}
@@ -222,7 +225,9 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  <span className="text-slate-500">{tk.service}</span>
  <StatusBadge status={tk.status} />
  <span className={`font-medium ${tk.position === null ? 'text-sky-700' : 'text-amber-700'}`}>
- {tk.position === null ? 'Sedang dikerjakan' : `Antrean ke-${tk.position}`}
+ {tk.position !== null
+   ? op.work_hours_open ? `Antrean ke-${tk.position}` : `Antrean ke-${tk.position} • menunggu jam kerja`
+   : tk.is_work_hours_paused ? 'Tertunda' : 'Sedang dikerjakan'}
  </span>
  {tk.urgent && (
  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Urgen</span>
@@ -282,11 +287,16 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
                   </button>
  )}
  </div>
- <div className="flex items-center gap-2">
+ <div className="flex flex-wrap items-center gap-2">
  <Button onClick={() => setShowFilter(!showFilter)} variant="outline" className="flex items-center gap-2">
  <Filter className="w-4 h-4" />
  {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
  </Button>
+ {canBulkCreate && (
+ <Button variant="outline" onClick={() => router.get(route('admin.tickets.bulk.create'))} className="flex items-center gap-2">
+ <Send className="w-4 h-4" /> Ajukan Banyak Tiket
+ </Button>
+ )}
  <Button onClick={() => router.get(route('admin.tiket.create'))} className="flex items-center gap-2">
  <Plus className="w-4 h-4" /> Ajukan Tiket
  </Button>

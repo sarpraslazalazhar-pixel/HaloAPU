@@ -2,6 +2,7 @@
 
 use Illuminate\Support\Facades\Schedule;
 
+Schedule::command('tickets:work-hours')->everyMinute()->withoutOverlapping(5);
 Schedule::command('sla:check')->everyMinute();
 Schedule::command('booking:schedule-check')->everyMinute();
 Schedule::command('reminder:booking')->dailyAt('07:00');

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Input } from '@/Components/ui/input';
 import { Badge } from '@/Components/ui/badge';
+import { Link } from '@inertiajs/react';
 import { CalendarDays, Car, DoorOpen } from 'lucide-react';
 
 interface BookingItem {
@@ -11,6 +12,7 @@ interface BookingItem {
  jam_selesai: string;
  user: string;
  status: string;
+ ticket_url?: string | null;
 }
 
 interface CalendarDay {
@@ -100,15 +102,25 @@ export default function MonitorCalendar({ calendarData = [] }: MonitorCalendarPr
  <tbody>
  {activeDay.bookings.map((b, i) => (
  <tr key={i} className="border-b last:border-0">
- <td className="py-2 pr-4">
- <div className="flex items-center gap-2">
- {isVehicleAsset(b.tipe, b.nama_aset)
- ? <Car className="h-4 w-4 text-muted-foreground shrink-0" />
- : <DoorOpen className="h-4 w-4 text-muted-foreground shrink-0" />
- }
- <span className="font-medium">{b.nama_aset}</span>
- </div>
- </td>
+                  <td className="py-2 pr-4">
+                    <div className="flex items-center gap-2">
+                      {isVehicleAsset(b.tipe, b.nama_aset)
+                        ? <Car className="h-4 w-4 text-muted-foreground shrink-0" />
+                        : <DoorOpen className="h-4 w-4 text-muted-foreground shrink-0" />
+                      }
+                      {b.ticket_url ? (
+                        <Link
+                          href={b.ticket_url}
+                          className="rounded-sm font-medium text-blue-700 underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        >
+                          {b.nama_aset}
+                          <span className="sr-only"> — buka tiket</span>
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{b.nama_aset}</span>
+                      )}
+                    </div>
+                  </td>
  <td className="py-2 pr-4 text-sm">
  {b.jam_mulai} — {b.jam_selesai}
  </td>

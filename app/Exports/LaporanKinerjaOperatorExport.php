@@ -50,8 +50,7 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
                       $sub->select(DB::raw(1))
                           ->from('tickets')
                           ->where(function ($t) {
-                              $t->whereColumn('tickets.assigned_admin_id', 'admins.id')
-                                ->orWhereColumn('tickets.created_by_admin_id', 'admins.id');
+                              $t->whereColumn('tickets.assigned_admin_id', 'admins.id');
                           });
                   });
             });
@@ -70,10 +69,7 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
 
         $operators = $adminQuery->orderBy('name')->get();
 
-        $ticketSubQuery = Ticket::query()->where(function ($q) {
-            $q->whereNotNull('tickets.assigned_admin_id')
-              ->orWhereNotNull('tickets.created_by_admin_id');
-        });
+        $ticketSubQuery = Ticket::query()->whereNotNull('tickets.assigned_admin_id');
 
         if ($dateFrom && $dateTo) {
             $ticketSubQuery->whereBetween('tickets.created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59']);
@@ -93,9 +89,9 @@ class LaporanKinerjaOperatorExport implements FromCollection, WithMapping, WithH
             ->leftJoin('ticket_sla_tracking', 'tickets.id', '=', 'ticket_sla_tracking.ticket_id')
             ->leftJoin('csats', 'tickets.id', '=', 'csats.ticket_id')
             ->selectRaw('
-                COALESCE(tickets.assigned_admin_id, tickets.created_by_admin_id) as responsible_admin_id,
+                tickets.assigned_admin_id as responsible_admin_id,
                 COUNT(tickets.id) as total_tickets,
-                SUM(CASE WHEN tickets.status IN ("on_proses", "pending", "need_revision", "waiting_approval") THEN 1 ELSE 0 END) as active_tickets,
+                SUM(CASE WHEN tickets.status IN ("open", "on_proses", "pending", "need_revision", "waiting_approval") THEN 1 ELSE 0 END) as active_tickets,
                 SUM(CASE WHEN tickets.status IN ("solve", "selesai") THEN 1 ELSE 0 END) as solved_tickets,
                 SUM(CASE WHEN tickets.status IN ("reject", "dibatalkan") THEN 1 ELSE 0 END) as rejected_tickets,
                 SUM(CASE WHEN ticket_sla_tracking.resolved_at IS NOT NULL THEN 1 ELSE 0 END) as total_resolved,

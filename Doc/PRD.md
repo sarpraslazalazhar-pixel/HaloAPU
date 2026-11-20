@@ -169,6 +169,7 @@ Ambang waktu tiap tier tetap dapat diedit admin (default mengikuti requirement a
 ### 6.4 Jam Kerja & Jeda Saat Pending
 - **Jam kerja operasional** (misal Senin–Jumat 08:00–17:00, diatur di Modul Konfigurasi) dipakai untuk menghitung deadline SLA — tiket yang masuk di luar jam kerja tidak langsung dianggap telat begitu jam kerja mulai lagi.
 - **SLA berhenti berjalan (paused)** selama tiket berstatus **Pending** (misal menunggu info tambahan dari user), dan lanjut lagi saat kembali ke On Proses. Ini supaya SLA adil — bukan salah admin kalau sedang menunggu user.
+- **Jeda di luar jam kerja**: interval jam kerja bersifat `[buka, tutup)` — tepat jam tutup sudah tutup. Saat jam kerja berakhir, tiket berstatus `open`, `on_proses`, dan `need_revision` otomatis menjadi `pending` dengan alasan jam kerja; SLA ikut dijeda. Antrean petugas **tidak berubah posisi** dan tiket yang tertunda tetap memegang slot, sehingga antrean tidak melompat. Saat jam kerja buka, tiket tetap tertunda sampai petugas yang ditugaskan memilih **Lanjutkan Tiket**; status semula dipulihkan dan tercatat di riwayat. Tiket baru dan pesan pengaju di luar jam kerja menjelaskan alasan pending, jam buka berikutnya, serta arahan menghubungi petugas lewat chat tiket untuk kebutuhan hari itu (lembur mengikuti prosedur kantor). Tidak ada persetujuan lembur otomatis.
 
 Ilustrasi struktur data untuk mendukung logika ini:
 ```sql

@@ -79,6 +79,12 @@ Ensure you have the following installed on your machine:
 - `routes/` - Application routing (web.php for Inertia routes)
 - `database/` - Migrations and seeders
 
+## Live Monitor
+
+- Pengguna dapat membuka tiket miliknya dari kartu aset, jadwal reservasi, dan pemantauan alat; tiket pengguna lain tidak memiliki tautan.
+- Admin dan superadmin dapat melihat semua detail tiket dan lampirannya. Perubahan tiket tetap dibatasi untuk tim yang berwenang.
+- Operator dan koordinator tetap mengikuti batas akses tiket sesuai penugasan atau unitnya.
+
 ## 📝 License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

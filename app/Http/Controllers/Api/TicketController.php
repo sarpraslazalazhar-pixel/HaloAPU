@@ -404,6 +404,9 @@ class TicketController extends Controller
 
         // Verify ownership
         $isAdmin = $user instanceof Admin;
+        if ($isAdmin && ! $ticket->isAccessibleBy($user)) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
         if (! $isAdmin && (int) $ticket->user_id !== (int) $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
         }
@@ -443,6 +446,7 @@ class TicketController extends Controller
         });
 
         $responseData['formData'] = $ticket->form_data ?? [];
+        $responseData['work_hours'] = TicketWorkQueue::workHoursFor($ticket, $user);
 
         $responseData['editHistories'] = $ticket->editHistories->map(fn ($h) => $h->toPayload())->values();
         $responseData['canEditForm'] = $isAdmin
@@ -629,8 +633,9 @@ class TicketController extends Controller
 
         // Notify admins / user
         if (! $isAdmin) {
-            $this->notifyAdminsReply($ticket, $user, $log->catatan);
+            TicketChatBridgeService::notifyReplyRecipients($ticket, null, $log->catatan);
         } else {
+            TicketChatBridgeService::notifyReplyRecipients($ticket, $user, $log->catatan);
             try {
                 $ticket->user?->notify(new BrowserNotification(
                     "Balasan Tiket #{$ticket->formatted_id}",
@@ -689,7 +694,7 @@ class TicketController extends Controller
 
         try {
             $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($user, $isAdmin, $targetStatus, $catatan) {
-                if ($locked->status !== 'open') {
+                if (! $locked->isOpenForCancellation()) {
                     throw new \InvalidArgumentException('Hanya tiket dengan status Open yang bisa dibatalkan');
                 }
 
@@ -1037,6 +1042,44 @@ class TicketController extends Controller
 
         return response()->json([
             'message' => 'Status tiket berhasil diperbarui',
+            'data' => $this->formatTicket($ticket->fresh()),
+        ]);
+    }
+
+    /**
+     * Lanjutkan tiket yang ditunda jam kerja (petugas saja).
+     */
+    public function resumeWork(Request $request, string $id)
+    {
+        $user = $request->user();
+
+        if (! $user instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat melanjutkan tiket'], 403);
+        }
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (! $ticket->isAccessibleBy($user)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk tiket ini.'], 403);
+        }
+        if ($ticket->assigned_admin_id === null || (int) $ticket->assigned_admin_id !== (int) $user->id) {
+            return response()->json(['message' => 'Hanya petugas yang ditugaskan yang dapat melanjutkan tiket ini.'], 403);
+        }
+
+        try {
+            $ticket = TicketWorkQueue::resumeAfterHours($ticket, $user, new SlaCalculator);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Tiket dilanjutkan setelah jam kerja buka.',
             'data' => $this->formatTicket($ticket->fresh()),
         ]);
     }

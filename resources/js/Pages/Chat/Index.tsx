@@ -216,7 +216,7 @@ export default function UserChatIndex({
 
   return (
     <UserLayout title="Chat" hideBottomNav={isMobile && activeId !== null}>
-      <Head title="Chat Tiket" />
+      <Head title="Pesan Tiket" />
 
       <div className="h-[calc(100vh-130px)] bg-white border border-zinc-200 rounded-2xl overflow-hidden shadow-xs grid grid-cols-1 md:grid-cols-[320px_1fr] lg:grid-cols-[360px_1fr] min-h-0 relative">
         <div className={`flex-col min-h-0 h-full w-full md:flex ${isMobile && activeId ? 'hidden' : 'flex'}`}>

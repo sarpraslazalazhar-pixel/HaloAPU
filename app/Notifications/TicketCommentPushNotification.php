@@ -65,6 +65,7 @@ class TicketCommentPushNotification extends Notification
             'title' => 'Komentar Baru: Tiket #' . $this->ticket->id,
             'message' => $this->senderName . ' menambahkan komentar baru.',
             'url' => $this->url,
+            'aksi_url' => $this->url,
         ];
     }
 

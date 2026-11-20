@@ -138,6 +138,7 @@ class TicketHistoryController extends Controller
             'ticket' => $ticket,
             'formFields' => $formFields,
             'maxRevisions' => $maxRevisions,
+            'work_hours' => TicketWorkQueue::workHoursFor($ticket, auth()->user()),
         ]);
     }
 
@@ -156,7 +157,7 @@ class TicketHistoryController extends Controller
 
                 $canCancelBooking = $booking && $at->lt($booking->tanggal_mulai)
                     && ! in_array($booking->status, ['dibatalkan', 'reject', 'selesai'], true);
-                if ($locked->status !== 'open' && ! $canCancelBooking) {
+                if (! $locked->isOpenForCancellation() && ! $canCancelBooking) {
                     throw new \InvalidArgumentException('Hanya tiket berstatus Open atau peminjaman yang belum dimulai yang bisa dibatalkan.');
                 }
 
@@ -261,17 +262,7 @@ class TicketHistoryController extends Controller
 
         TicketChatBridgeService::afterCommit(fn () => $log->broadcastTimeline());
 
-        $notifiedAdmins = Admin::whereHas('units', function ($query) use ($ticket) {
-            $query->where('units.id', $ticket->subUnit->unit_id);
-        })->orWhereHas('roles', function ($q) {
-            $q->whereIn('name', ['superadmin', 'Super Admin']);
-        })->get();
-
-        if ($notifiedAdmins->isNotEmpty()) {
-            $senderName = auth()->user()->name ?? auth()->user()->username;
-            $url = route('admin.tiket.show', $ticket->id);
-            Notification::send($notifiedAdmins, new TicketCommentPushNotification($ticket, $senderName, $log->catatan, $url));
-        }
+        TicketChatBridgeService::notifyReplyRecipients($ticket->loadMissing(['user', 'subUnit.unit']), null, $log->catatan);
 
         app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.replied');
 

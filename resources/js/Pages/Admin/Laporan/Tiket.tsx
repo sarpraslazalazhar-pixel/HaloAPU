@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Head, router } from '@inertiajs/react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
@@ -11,6 +11,10 @@ import { Eye, Folder, Clock, Hourglass, CheckCircle, XCircle, Ban, Printer, Down
 import LazyECharts from '@/Components/Charts/LazyECharts';
 import { formatTicketId } from '@/lib/utils';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
+import { Input } from '@/Components/ui/input';
+import { Label } from '@/Components/ui/label';
+import { Textarea } from '@/Components/ui/textarea';
 
 const STATUS_META = {
  open: { label: 'Tiket Masuk', bg: 'from-blue-500 to-blue-600', icon: Folder, anim: 'group-hover:-translate-y-2 group-hover:rotate-12 group-hover:opacity-100' },
@@ -20,6 +24,26 @@ const STATUS_META = {
  reject: { label: 'Ditolak', bg: 'from-red-500 to-red-600', icon: XCircle, anim: 'group-hover:rotate-90 group-hover:scale-110 group-hover:opacity-100' },
  dibatalkan: { label: 'Dibatalkan', bg: 'from-rose-500 to-rose-600', icon: Ban, anim: 'group-hover:scale-90 group-hover:opacity-100' },
 } satisfies Record<string, { label: string; bg: string; icon: React.ElementType; anim: string }>;
+
+const WORKLOAD_LABELS: Record<string, string> = {
+ '1': '1/5 Sangat ringan',
+ '2': '2/5 Ringan',
+ '3': '3/5 Sedang',
+ '4': '4/5 Berat',
+ '5': '5/5 Sangat berat',
+};
+
+const WORKLOAD_ERROR = 'Penilaian gagal disimpan. Muat ulang laporan dan coba lagi.';
+
+const toWorkloadMinutes = (hours: string) => Math.round(Number(hours) * 60);
+
+function formatWorkloadDuration(totalMinutes: number) {
+ const hours = Math.floor(totalMinutes / 60);
+ const minutes = totalMinutes % 60;
+ if (!hours) return `${minutes} menit`;
+ const hourLabel = `${hours.toLocaleString('id-ID')} jam`;
+ return minutes ? `${hourLabel} ${minutes} menit` : hourLabel;
+}
 
 const STATUS_LIST = [
  { value: 'open', label: 'Baru' },
@@ -38,9 +62,13 @@ export default function LaporanTiket({
  monthlyTrend, ticketsByUnit, ticketsByStatus: _ticketsByStatus, ticketsByLayanan, tickets
 }: any) {
  const maxLayanan = ticketsByLayanan?.length > 0 ? Math.max(...ticketsByLayanan.map((t: any) => t.count)) : 1;
+ const pageProps = usePage<any>().props;
+ const auth = pageProps.auth;
+ const canAssess = !!auth?.can_assess_ticket_workload;
+ const canExport = pageProps.canExport !== false;
 
  const [month, setMonth] = useState(filters?.month || '');
- const [year, setYear] = useState(filters?.year || new Date().getFullYear().toString());
+ const [year, setYear] = useState(filters?.year ?? '');
  const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
  const [dateTo, setDateTo] = useState(filters?.date_to || '');
  const [unitId, setUnitId] = useState(filters?.unit_id || '');
@@ -51,10 +79,31 @@ export default function LaporanTiket({
  const [showFilter, setShowFilter] = useState(false);
  const [exporting, setExporting] = useState(false);
  const [search, setSearch] = useState(filters?.search || '');
+ const workload = filters?.workload === 'unassessed' ? 'unassessed' : '';
+ const [selectedTicket, setSelectedTicket] = useState<any | null>(null);
+ const [generalError, setGeneralError] = useState('');
+ const openerRef = useRef<HTMLElement | null>(null);
+ const { data, setData, transform, put, processing, errors, setError, clearErrors, reset } = useForm({
+ score: '',
+ effort_hours: '',
+ effort_minutes: '',
+ note: '',
+ });
+ const effortDescriptionId = errors.effort_hours ? 'workload-effort-error' : 'workload-effort-help';
 
  useEffect(() => {
  if (unitId && (!subUnits || subUnits.length === 0)) {
  fetch(`/api/sub-units/${unitId}`).then(r => r.json()).then(setSubUnits);
+ }
+ }, []);
+
+ useEffect(() => {
+ setYear(filters?.year ?? '');
+ }, [filters?.year]);
+
+ useEffect(() => {
+ if (window.location.hash === '#rincian-tiket') {
+ document.getElementById('rincian-tiket')?.scrollIntoView();
  }
  }, []);
 
@@ -78,7 +127,79 @@ export default function LaporanTiket({
  if (divisiId) params.divisi_id = divisiId;
 
  if (search) params.search = search;
+
+ if (canAssess && workload === 'unassessed') params.workload = 'unassessed';
  router.get(route('admin.laporan.tiket'), params, { preserveState: true });
+ };
+
+ const applyWorkloadFilter = (value: string) => {
+ const source = filters || {};
+ const params: Record<string, string> = {};
+ ['year', 'month', 'date_from', 'date_to', 'unit_id', 'sub_unit_id', 'status', 'divisi_id', 'search'].forEach(key => {
+ if (source[key] !== null && source[key] !== undefined && source[key] !== '') params[key] = String(source[key]);
+ });
+ if (value) params.workload = value;
+ router.get(route('admin.laporan.tiket'), params, { preserveState: true, preserveScroll: true });
+ };
+
+ const openAssessment = (ticket: any) => {
+ clearErrors();
+ reset();
+ setGeneralError('');
+ const existing = ticket.workload_assessment;
+ if (existing) {
+ const minutes = toWorkloadMinutes(existing.effort_hours ?? '');
+ setData({
+ score: String(existing.score ?? ''),
+ effort_hours: minutes ? String(Math.floor(minutes / 60)) : '',
+ effort_minutes: minutes ? String(minutes % 60) : '',
+ note: existing.note ?? '',
+ });
+ }
+ setSelectedTicket(ticket);
+ };
+
+ const closeAssessment = () => {
+ if (processing) return;
+ setSelectedTicket(null);
+ setGeneralError('');
+ };
+
+ const submitAssessment = (e: React.FormEvent) => {
+ e.preventDefault();
+ if (!selectedTicket) return;
+ setGeneralError('');
+ const totalMinutes = Number(data.effort_hours) * 60 + Number(data.effort_minutes);
+ const hasDuration = data.effort_hours !== '' || data.effort_minutes !== '';
+ if (hasDuration && totalMinutes === 0) {
+ setError('effort_hours', 'Isi minimal 1 menit atau kosongkan kedua kolom.');
+ return;
+ }
+ clearErrors('effort_hours');
+ const savedHours = selectedTicket.workload_assessment?.effort_hours;
+ const effortHours = savedHours && toWorkloadMinutes(savedHours) === totalMinutes
+ ? savedHours
+ : (totalMinutes / 60).toFixed(2);
+ transform(({ effort_minutes: _, ...fields }) => ({
+ ...fields,
+ effort_hours: hasDuration ? effortHours : '',
+ }));
+ put(route('admin.laporan.tiket.penilaian-beban', { ticket: selectedTicket.id }), {
+ preserveScroll: true,
+ onSuccess: () => {
+ setSelectedTicket(null);
+ setGeneralError('');
+ reset();
+ },
+ onNetworkError: () => {
+ setGeneralError(WORKLOAD_ERROR);
+ return false;
+ },
+ onHttpException: () => {
+ setGeneralError(WORKLOAD_ERROR);
+ return false;
+ },
+ });
  };
 
  const handlePrint = () => {
@@ -195,6 +316,41 @@ export default function LaporanTiket({
  ),
  },
  { key: 'status', header: 'Status', render: (t: any) => <StatusBadge status={t.status} /> },
+ ...(canAssess ? [{
+ key: 'workload',
+ header: 'Beban Kerja',
+ className: 'print:hidden min-w-36',
+ render: (t: any) => {
+ const finished = ['solve', 'selesai'].includes(String(t.status ?? '').toLowerCase());
+ const assessment = t.workload_assessment;
+ const openDialog = (e: React.MouseEvent<HTMLButtonElement>) => {
+ openerRef.current = e.currentTarget;
+ openAssessment(t);
+ };
+ if (!assessment) {
+ return finished ? (
+ <div className="space-y-1">
+ <p className="text-xs text-muted-foreground">Belum dinilai</p>
+ <Button variant="outline" size="sm" className="h-11" onClick={openDialog}>Nilai beban</Button>
+ </div>
+ ) : (
+ <span className="text-muted-foreground">
+ <span aria-hidden="true">-</span>
+ <span className="sr-only">Penilaian tersedia setelah tiket selesai</span>
+ </span>
+ );
+ }
+ return (
+ <div className="space-y-1">
+ <p className="font-medium text-sm">{WORKLOAD_LABELS[String(assessment.score)] || `${assessment.score}/5`}</p>
+ {assessment.effort_hours !== null && assessment.effort_hours !== undefined && (
+ <p className="text-xs text-slate-500">Waktu pengerjaan: {formatWorkloadDuration(toWorkloadMinutes(assessment.effort_hours))}</p>
+ )}
+ {finished && <Button variant="outline" size="sm" className="h-11" onClick={openDialog}>Ubah nilai</Button>}
+ </div>
+ );
+ },
+ }] : []),
  {
  key: 'aksi',
  header: 'Aksi',
@@ -232,12 +388,16 @@ export default function LaporanTiket({
  <Filter className="w-4 h-4 mr-2" />
  {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
  </Button>
+ {canExport && (
+ <>
  <Button variant="outline" onClick={handleExportPdf} disabled={exporting}>
  <Printer className="w-4 h-4 mr-2" /> {exporting ? 'Membuat PDF...' : 'Export PDF'}
  </Button>
  <Button variant="default" onClick={handleExportExcel} disabled={exporting}>
  <Download className={`w-4 h-4 mr-2 ${exporting ? 'animate-bounce' : ''}`} /> {exporting ? 'Mengunduh...' : 'Export Excel'}
  </Button>
+ </>
+ )}
  </div>
  </div>
 
@@ -246,8 +406,9 @@ export default function LaporanTiket({
  <Card className="bg-slate-50/50 border-dashed print:hidden">
  <CardContent className="p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
  <div className="space-y-1.5">
- <label className="text-xs font-semibold">Tahun</label>
- <select className="w-full rounded-md border-input bg-background text-sm h-9" value={year} onChange={e => setYear(e.target.value)}>
+ <label className="text-xs font-semibold" htmlFor="filter-tahun-laporan">Tahun</label>
+ <select id="filter-tahun-laporan" className="w-full rounded-md border-input bg-background text-sm h-9" value={year} onChange={e => setYear(e.target.value)}>
+ {workload === 'unassessed' && <option value="">Semua tahun</option>}
  {years.map(y => <option key={y.value} value={y.value}>{y.label}</option>)}
  </select>
  </div>
@@ -288,6 +449,20 @@ export default function LaporanTiket({
  {STATUS_LIST.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
  </select>
  </div>
+ {canAssess && (
+ <div className="space-y-1.5">
+ <label className="text-xs font-semibold" htmlFor="filter-penilaian-beban">Penilaian beban</label>
+ <select
+ id="filter-penilaian-beban"
+ className="w-full rounded-md border-input bg-background text-sm h-11"
+ value={workload}
+ onChange={e => applyWorkloadFilter(e.target.value)}
+ >
+ <option value="">Semua tiket</option>
+ <option value="unassessed">Belum dinilai</option>
+ </select>
+ </div>
+ )}
  <div className="space-y-1.5">
  <label className="text-xs font-semibold">Divisi Pengaju</label>
  <select className="w-full rounded-md border-input bg-background text-sm h-9" value={divisiId} onChange={e => setDivisiId(e.target.value)}>
@@ -509,9 +684,24 @@ export default function LaporanTiket({
 
  {/* Rincian Tiket Table */}
  <div className="mt-8 space-y-4 print:break-before-page">
- <h2 className="text-xl font-bold tracking-tight">Rincian Tiket</h2>
+ <h2 id="rincian-tiket" tabIndex={-1} className="text-xl font-bold tracking-tight focus:outline-2 focus:outline-offset-2 focus:outline-ring">Rincian Tiket</h2>
+ {workload === 'unassessed' && (
+ <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 print:hidden">
+ <p className="text-sm text-muted-foreground">
+ Tiket selesai yang belum dinilai{!filters.year && !filters.date_from && !filters.date_to && !filters.month ? ' dari semua tahun. Ringkasan di atas tetap untuk tahun berjalan.' : '.'}
+ </p>
+ <Link href={route('admin.laporan.tiket')} className="inline-flex min-h-11 items-center rounded-md text-sm font-medium text-foreground underline underline-offset-4">
+ Lihat semua tiket
+ </Link>
+ </div>
+ )}
  <div className="overflow-x-auto rounded-md border">
- <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: any) => t.id} />
+ <DataTable
+ columns={columns}
+ data={tickets.data || []}
+ keyExtractor={(t: any) => t.id}
+ emptyMessage={canAssess && workload === 'unassessed' ? 'Tidak ada tiket selesai yang belum dinilai untuk filter ini.' : undefined}
+ />
  </div>
  <div className="print:hidden">
  <Pagination links={tickets.links} />
@@ -520,6 +710,103 @@ export default function LaporanTiket({
  </div>
 
  {/* Print Styles */}
+ <Dialog open={selectedTicket !== null} onOpenChange={(open) => { if (!open) closeAssessment(); }}>
+ <DialogContent
+ className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+ showCloseButton={false}
+ finalFocus={() => (openerRef.current?.isConnected ? openerRef.current : document.getElementById('rincian-tiket'))}
+ >
+ <DialogHeader>
+ <DialogTitle>Penilaian Beban Tiket</DialogTitle>
+ <DialogDescription>
+ #TKT-{formatTicketId(selectedTicket?.id)} · {selectedTicket?.assigned_admin?.name || selectedTicket?.assigned_admin?.username || 'Belum ditugaskan'}
+ </DialogDescription>
+ </DialogHeader>
+ {selectedTicket?.workload_assessment && (
+ <p className="text-xs text-muted-foreground">
+ Dinilai oleh {selectedTicket.workload_assessment.assessor?.name || selectedTicket.workload_assessment.assessor?.username || 'Akun penilai tidak tersedia'} · {new Date(selectedTicket.workload_assessment.updated_at).toLocaleString('id-ID')}
+ </p>
+ )}
+ <form onSubmit={submitAssessment} className="space-y-4">
+ <div className="space-y-1.5">
+ <Label htmlFor="workload-score">Tingkat beban</Label>
+ <select
+ id="workload-score"
+ required
+ className="w-full rounded-md border-input bg-background text-sm h-11"
+ value={data.score}
+ onChange={e => setData('score', e.target.value)}
+ aria-invalid={!!errors.score}
+ aria-describedby={errors.score ? 'workload-score-error' : undefined}
+ >
+ <option value="">Pilih tingkat beban</option>
+ {Object.entries(WORKLOAD_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+ </select>
+ {errors.score && <p id="workload-score-error" className="text-xs text-destructive">{errors.score}</p>}
+ </div>
+ <fieldset className="min-w-0 space-y-2">
+ <legend className="text-sm font-medium">Waktu pengerjaan (opsional)</legend>
+ <div className="grid grid-cols-2 gap-3">
+ <div className="space-y-1.5">
+ <Label htmlFor="workload-effort-hours">Jam</Label>
+ <Input
+ id="workload-effort-hours"
+ type="number"
+ inputMode="numeric"
+ min={0}
+ max={9999}
+ step={1}
+ className="h-11"
+ value={data.effort_hours}
+ onChange={e => setData('effort_hours', e.target.value)}
+ aria-invalid={!!errors.effort_hours}
+ aria-describedby={effortDescriptionId}
+ />
+ </div>
+ <div className="space-y-1.5">
+ <Label htmlFor="workload-effort-minutes">Menit</Label>
+ <Input
+ id="workload-effort-minutes"
+ type="number"
+ inputMode="numeric"
+ min={0}
+ max={59}
+ step={1}
+ className="h-11"
+ value={data.effort_minutes}
+ onChange={e => setData('effort_minutes', e.target.value)}
+ aria-invalid={!!errors.effort_hours}
+ aria-describedby={effortDescriptionId}
+ />
+ </div>
+ </div>
+ {errors.effort_hours ? (
+ <p id="workload-effort-error" role="alert" className="text-xs text-destructive">{errors.effort_hours}</p>
+ ) : (
+ <p id="workload-effort-help" className="text-xs text-muted-foreground">Isi waktu kerja saja, tanpa waktu menunggu.</p>
+ )}
+ </fieldset>
+ <div className="space-y-1.5">
+ <Label htmlFor="workload-note">Catatan (opsional)</Label>
+ <Textarea
+ id="workload-note"
+ maxLength={1000}
+ value={data.note}
+ onChange={e => setData('note', e.target.value)}
+ aria-invalid={!!errors.note}
+ aria-describedby={errors.note ? 'workload-note-error' : undefined}
+ />
+ {errors.note && <p id="workload-note-error" className="text-xs text-destructive">{errors.note}</p>}
+ </div>
+ {generalError && <p role="alert" className="text-sm text-destructive">{generalError}</p>}
+ <DialogFooter>
+ <Button type="button" variant="outline" className="h-11" disabled={processing} onClick={closeAssessment}>Batal</Button>
+ <Button type="submit" className="h-11" disabled={processing}>{processing ? 'Menyimpan…' : 'Simpan penilaian'}</Button>
+ </DialogFooter>
+ </form>
+ </DialogContent>
+ </Dialog>
+
  <style>{`
  @media print {
  @page { size: landscape; margin: 10mm; }

@@ -65,7 +65,7 @@ class Admin extends Authenticatable
     public function isCoordinator(): bool
     {
         return $this->hasRole(['Koordinator', 'koordinator', 'Pengatur Tim', 'pengatur tim'])
-            || $this->hasPermissionTo('akses-assign-operator');
+            || $this->checkPermissionTo('akses-assign-operator');
     }
 
     public function units()

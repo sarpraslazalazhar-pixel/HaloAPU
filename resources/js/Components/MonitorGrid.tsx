@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { usePoll } from '@inertiajs/react';
+import { Link, usePoll } from '@inertiajs/react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Badge } from '@/Components/ui/badge';
 import { Button } from '@/Components/ui/button';
-import { Car, DoorOpen, User, Clock, Grid3X3, CalendarDays } from 'lucide-react';
+import { Car, DoorOpen, User, Clock, Grid3X3, CalendarDays, ExternalLink } from 'lucide-react';
 import MonitorCalendar from '@/Components/MonitorCalendar';
 
 interface AssetData {
@@ -15,6 +15,7 @@ interface AssetData {
   waktu_selesai?: string | null;
   waktu?: string | null;
   booking_id: number | null;
+  ticket_url?: string | null;
 }
 
 interface CalendarDay {
@@ -27,6 +28,7 @@ interface CalendarDay {
     jam_selesai: string;
     user: string;
     status: string;
+    ticket_url?: string | null;
   }[];
 }
 
@@ -121,45 +123,69 @@ export default function MonitorGrid({ assets = [], calendarData = [], lastUpdate
     groupedAssets[type].push(asset);
   }
 
-  const renderAssetCard = (asset: AssetData) => (
-    <Card
-      key={asset.nama_aset}
-      className={`border-2 transition-all duration-300 ${STATUS_COLORS[asset.status]}`}
-    >
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {isVehicleAsset(asset.tipe, asset.nama_aset)
-              ? <Car className="h-5 w-5 text-muted-foreground" />
-              : <DoorOpen className="h-5 w-5 text-muted-foreground" />
-            }
-            <CardTitle className="text-base font-semibold">{asset.nama_aset}</CardTitle>
-          </div>
-          <Badge className={STATUS_BADGE_COLORS[asset.status]}>
-            {asset.status}
-          </Badge>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {asset.status !== 'Tersedia' ? (
-          <div className="space-y-1 text-sm">
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-muted-foreground" />
-              <span>{asset.user}</span>
+  const renderAssetCard = (asset: AssetData) => {
+    const cardKey = `${asset.tipe}-${asset.nama_aset}`;
+    const card = (
+      <Card
+        key={cardKey}
+        className={`h-full border-2 transition-all duration-300 ${STATUS_COLORS[asset.status]}`}
+      >
+        <CardHeader className="pb-2">
+          <div className="flex flex-col items-start gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {isVehicleAsset(asset.tipe, asset.nama_aset)
+                ? <Car className="h-5 w-5 shrink-0 text-muted-foreground" />
+                : <DoorOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
+              }
+              <CardTitle className="break-words text-base font-semibold">{asset.nama_aset}</CardTitle>
             </div>
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span>{asset.waktu}</span>
-            </div>
+            <Badge className={STATUS_BADGE_COLORS[asset.status]}>
+              {asset.status}
+            </Badge>
           </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Tidak ada booking saat ini
-          </p>
-        )}
-      </CardContent>
-    </Card>
-  );
+        </CardHeader>
+        <CardContent>
+          {asset.status !== 'Tersedia' ? (
+            <div className="space-y-1 text-sm">
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <span>{asset.user}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-muted-foreground" />
+                <span>{asset.waktu}</span>
+              </div>
+              {asset.ticket_url && (
+                <div className="flex items-center gap-2 pt-1 font-medium text-blue-700">
+                  <ExternalLink className="h-4 w-4" />
+                  <span>Buka tiket</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Tidak ada booking saat ini
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    );
+
+    if (asset.ticket_url) {
+      return (
+        <Link
+          key={cardKey}
+          href={asset.ticket_url}
+          aria-label={`Buka tiket ${asset.nama_aset} (${asset.status})`}
+          className="block h-full rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        >
+          {card}
+        </Link>
+      );
+    }
+
+    return card;
+  };
 
   return (
     <div className="space-y-8">

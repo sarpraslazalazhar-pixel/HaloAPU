@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Channels\WhatsAppChannel;
 use App\Models\ReminderConfig;
 // use App\Models\RoomVehicleBooking; // Assuming this model will exist or exists
@@ -28,6 +29,10 @@ class BookingReminderNotification extends Notification
 
         $channels = ['database']; // minimal selalu in-app
 
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+
         if ($config && is_array($config->channel_aktif)) {
             if (in_array('email', $config->channel_aktif)) {
                 $channels[] = 'mail';
@@ -38,6 +43,19 @@ class BookingReminderNotification extends Notification
         }
 
         return $channels;
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $data = $this->toDatabase($notifiable);
+
+        return [
+            'title' => $data['title'],
+            'body' => $data['message'],
+            'ticket_id' => (string) $this->booking->ticket_id,
+            'url' => url($data['aksi_url']),
+            'type' => 'booking_reminder',
+        ];
     }
 
     /**
@@ -68,6 +86,7 @@ class BookingReminderNotification extends Notification
         }
 
         return [
+            'type' => 'booking_reminder',
             'booking_id' => $this->booking->id,
             'ticket_id' => $this->booking->ticket_id,
             'tipe' => $this->booking->tipe,
@@ -75,11 +94,20 @@ class BookingReminderNotification extends Notification
             'tanggal_mulai' => $tglMulai,
             'tanggal_selesai' => $tglSelesai,
             'stage' => $this->stage,
+            'title' => $judul,
+            'message' => $pesan,
             'judul' => $judul,
             'pesan' => $pesan,
             'icon' => $icon,
-            'aksi_url' => $notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}",
+            'aksi_url' => $this->targetPath($notifiable),
         ];
+    }
+
+    private function targetPath(object $notifiable): string
+    {
+        return $notifiable instanceof \App\Models\Admin
+            ? "/admin/tiket/{$this->booking->ticket_id}"
+            : "/tiket/{$this->booking->ticket_id}";
     }
 
     /**
@@ -101,7 +129,7 @@ class BookingReminderNotification extends Notification
                 ->line("**Mulai:** {$tglMulai}")
                 ->line("**Selesai:** {$tglSelesai}")
                 ->line("Mohon pastikan persiapan kamu telah selesai.")
-                ->action('Lihat Detail', url($notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}"));
+                ->action('Lihat Detail', url($this->targetPath($notifiable)));
         } elseif ($this->stage === 'started') {
             $mail->subject("Jadwal Pemakaian {$tipeLabel} Dimulai — Halo APU")
                 ->greeting("Halo, {$notifiable->name}!")
@@ -110,7 +138,7 @@ class BookingReminderNotification extends Notification
                 ->line("**Mulai:** {$tglMulai}")
                 ->line("**Selesai:** {$tglSelesai}")
                 ->line("Selamat beraktivitas dan mohon tetap menjaga kebersihan serta fasilitas aset.")
-                ->action('Lihat Detail', url($notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}"));
+                ->action('Lihat Detail', url($this->targetPath($notifiable)));
         } elseif ($this->stage === 'h_min_15_ending') {
             $mail->subject("⚠️ PERINGATAN: 15 Menit Lagi Waktu Pemakaian {$tipeLabel} Habis — Halo APU")
                 ->greeting("Halo, {$notifiable->name}!")
@@ -118,7 +146,7 @@ class BookingReminderNotification extends Notification
                 ->line("**Aset:** {$this->booking->nama_aset}")
                 ->line("**Batas Waktu Selesai:** {$tglSelesai}")
                 ->line("**PENTING:** Harap segera merapikan/mengosongkan ruangan atau mengembalikan kendaraan tepat waktu. Keterlambatan pengembalian dapat dikenakan sanksi/denda sesuai peraturan yang berlaku.")
-                ->action('Lihat Detail', url($notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}"));
+                ->action('Lihat Detail', url($this->targetPath($notifiable)));
         } else {
             $mail->subject("Reminder Booking {$tipeLabel} — Halo APU")
                 ->greeting("Halo, {$notifiable->name}!")
@@ -126,7 +154,7 @@ class BookingReminderNotification extends Notification
                 ->line("**Aset:** {$this->booking->nama_aset}")
                 ->line("**Mulai:** {$tglMulai}")
                 ->line("**Selesai:** {$tglSelesai}")
-                ->action('Lihat Detail', url($notifiable instanceof \App\Models\Admin ? "/admin/tiketing/{$this->booking->ticket_id}" : "/tiket/{$this->booking->ticket_id}"));
+                ->action('Lihat Detail', url($this->targetPath($notifiable)));
         }
 
         return $mail->line('Terima kasih telah menggunakan Halo APU.');

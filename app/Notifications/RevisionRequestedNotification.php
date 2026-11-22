@@ -2,10 +2,12 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Channels\WhatsAppChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Str;
 
 class RevisionRequestedNotification extends Notification
 {
@@ -30,6 +32,9 @@ class RevisionRequestedNotification extends Notification
             if (!empty($notifiable->no_wa)) {
                 $channels[] = WhatsAppChannel::class;
             }
+            if (!empty($notifiable->fcm_token)) {
+                $channels[] = FcmChannel::class;
+            }
         }
 
         if ($notifiable instanceof \Illuminate\Notifications\AnonymousNotifiable) {
@@ -51,6 +56,19 @@ class RevisionRequestedNotification extends Notification
             ->body("Tiket {$this->ticket->formatted_id} ({$layanan}) perlu direvisi. Catatan: " . \Illuminate\Support\Str::limit($this->catatan, 50))
             ->action('Lihat Tiket', url('/admin/tiket/' . $this->ticket->id))
             ->data(['url' => url('/admin/tiket/' . $this->ticket->id)]);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $layanan = $this->ticket->subUnit->nama_layanan ?? '-';
+
+        return [
+            'title' => 'Permintaan Revisi Tiket',
+            'body' => "Tiket {$this->ticket->formatted_id} ({$layanan}) perlu direvisi. Catatan: " . Str::limit($this->catatan, 100),
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url('/admin/tiket/' . $this->ticket->id),
+            'type' => 'revision_requested',
+        ];
     }
 
     public function toDatabase(object $notifiable): array

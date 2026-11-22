@@ -12,6 +12,7 @@ use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\User;
+use App\Notifications\DirectChatMessageNotification;
 use App\Notifications\TicketCommentPushNotification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -192,12 +193,13 @@ class TicketChatBridgeService
     }
 
     /**
-     * Send reply notifications to the admins who can actually act on the ticket.
+     * Send reply notifications to the admins who can actually act on the ticket
+     * and to the ticket requester when an admin replies.
      * Never notifies the sender; recipients are deduplicated across sources.
      */
     public static function notifyReplyRecipients(Ticket $ticket, ?Admin $sender, string $message): void
     {
-        $ticket->loadMissing(['assignedAdmin', 'createdByAdmin', 'subUnit.unit']);
+        $ticket->loadMissing(['user', 'assignedAdmin', 'createdByAdmin', 'subUnit.unit']);
 
         $recipients = collect();
 
@@ -211,7 +213,7 @@ class TicketChatBridgeService
             $recipients->push($ticket->assignedAdmin);
         }
 
-        if ($ticket->work_hours_resume_status !== null && $ticket->createdByAdmin) {
+        if ($ticket->createdByAdmin) {
             $recipients->push($ticket->createdByAdmin);
         }
 
@@ -219,18 +221,130 @@ class TicketChatBridgeService
             ->filter(fn ($admin) => $admin && ($sender === null || (int) $admin->id !== (int) $sender->id))
             ->unique('id');
 
-        if ($recipients->isEmpty()) {
-            return;
-        }
-
         $senderName = $sender ? ($sender->name ?? $sender->username) : ($ticket->user?->name ?? $ticket->user?->username ?? 'Pengguna');
-        $url = route('admin.tiket.show', $ticket->id);
+        $adminUrl = route('admin.tiket.show', $ticket->id);
 
         foreach ($recipients as $recipient) {
             try {
-                $recipient->notify(new TicketCommentPushNotification($ticket, $senderName, $message, $url));
+                $recipient->notify(new TicketCommentPushNotification($ticket, $senderName, $message, $adminUrl));
             } catch (\Throwable $e) {
                 Log::error("Gagal mengirim notifikasi balasan tiket #{$ticket->id} ke admin #{$recipient->id}: ".$e->getMessage());
+            }
+        }
+
+        if ($sender !== null && $ticket->user) {
+            try {
+                $ticket->user->notify(new TicketCommentPushNotification(
+                    $ticket,
+                    $senderName,
+                    $message,
+                    url("/tiket/{$ticket->id}")
+                ));
+            } catch (\Throwable $e) {
+                Log::error("Gagal mengirim notifikasi balasan tiket #{$ticket->id} ke user #{$ticket->user->id}: ".$e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * Send database + FCM notifications to chat recipients after commit.
+     */
+    public static function notifyChatMessageRecipients(Message $message): void
+    {
+        $message->loadMissing([
+            'conversation.ticket',
+            'conversation.user',
+            'conversation.adminOne',
+            'conversation.adminTwo',
+            'ticket',
+            'sender',
+            'attachments',
+        ]);
+
+        $conversation = $message->conversation;
+        if (! $conversation) {
+            return;
+        }
+
+        $body = trim((string) $message->body);
+        if ($body === '' && $message->attachments->isNotEmpty()) {
+            $body = '[Lampiran Chat]';
+        }
+
+        if ($body === '') {
+            return;
+        }
+
+        $isAdminSender = $message->sender_type === Admin::class;
+        $senderAdmin = $isAdminSender && $message->sender instanceof Admin ? $message->sender : null;
+        $ticket = $message->ticket ?? $conversation->ticket;
+
+        if ($conversation->type === 'ticket' || $ticket !== null) {
+            if ($ticket) {
+                self::notifyReplyRecipients($ticket, $senderAdmin, $body);
+            }
+
+            return;
+        }
+
+        if ($conversation->type === 'public_global') {
+            return;
+        }
+
+        $senderName = $message->sender?->name ?? $message->sender?->username ?? 'Pengguna';
+
+        if ($isAdminSender) {
+            if ($conversation->user) {
+                try {
+                    $conversation->user->notify(new DirectChatMessageNotification(
+                        $conversation,
+                        $senderName,
+                        $body,
+                        url('/chat')
+                    ));
+                } catch (\Throwable $e) {
+                    Log::warning("Gagal mengirim notif direct chat ke user #{$conversation->user->id}: ".$e->getMessage());
+                }
+            }
+
+            $adminTargets = collect([$conversation->adminOne, $conversation->adminTwo])
+                ->filter(fn ($adm) => $adm instanceof Admin && (int) $adm->id !== (int) ($senderAdmin?->id ?? 0))
+                ->unique('id');
+
+            foreach ($adminTargets as $targetAdmin) {
+                try {
+                    $targetAdmin->notify(new DirectChatMessageNotification(
+                        $conversation,
+                        $senderName,
+                        $body,
+                        url('/admin/chat')
+                    ));
+                } catch (\Throwable $e) {
+                    Log::warning("Gagal mengirim notif direct chat ke admin #{$targetAdmin->id}: ".$e->getMessage());
+                }
+            }
+
+            return;
+        }
+
+        $adminTargets = collect([$conversation->adminOne, $conversation->adminTwo])
+            ->filter(fn ($adm) => $adm instanceof Admin)
+            ->unique('id');
+
+        if ($adminTargets->isEmpty() && $conversation->type === 'user_support') {
+            $adminTargets = Admin::query()->get();
+        }
+
+        foreach ($adminTargets as $targetAdmin) {
+            try {
+                $targetAdmin->notify(new DirectChatMessageNotification(
+                    $conversation,
+                    $senderName,
+                    $body,
+                    url('/admin/chat')
+                ));
+            } catch (\Throwable $e) {
+                Log::warning("Gagal mengirim notif direct chat ke admin #{$targetAdmin->id}: ".$e->getMessage());
             }
         }
     }

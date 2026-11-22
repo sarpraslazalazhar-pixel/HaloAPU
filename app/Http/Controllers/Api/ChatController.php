@@ -191,9 +191,10 @@ class ChatController extends Controller
         });
 
         // Same event the web chat listens to, so both sides update instantly.
-        \App\Services\TicketChatBridgeService::afterCommit(
-            fn () => \App\Services\TicketChatBridgeService::emitChatMessage($message)
-        );
+        \App\Services\TicketChatBridgeService::afterCommit(function () use ($message): void {
+            \App\Services\TicketChatBridgeService::emitChatMessage($message);
+            \App\Services\TicketChatBridgeService::notifyChatMessageRecipients($message);
+        });
 
         return response()->json([
             'message' => $this->presentMessage($message->load(['sender', 'attachments', 'ticket', 'replyTo'])),

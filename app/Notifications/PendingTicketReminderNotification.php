@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Channels\WhatsAppChannel;
 use App\Models\ReminderConfig;
 use App\Models\Ticket;
@@ -28,6 +29,10 @@ class PendingTicketReminderNotification extends Notification
         $config = ReminderConfig::where('jenis_reminder', 'pending_lama')->first();
         $channels = ['database'];
 
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+
         if ($config && is_array($config->channel_aktif)) {
             if (in_array('email', $config->channel_aktif)) {
                 $channels[] = 'mail';
@@ -40,17 +45,36 @@ class PendingTicketReminderNotification extends Notification
         return $channels;
     }
 
+    public function toFcm(object $notifiable): array
+    {
+        $data = $this->toDatabase($notifiable);
+
+        return [
+            'title' => $data['title'],
+            'body' => $data['message'],
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url("/admin/tiket/{$this->ticket->id}"),
+            'type' => 'pending_ticket_reminder',
+        ];
+    }
+
     public function toDatabase(object $notifiable): array
     {
+        $title = 'Tiket Pending Lama';
+        $message = "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah pending selama {$this->hariPending} hari. Silakan tindak lanjuti.";
+
         return [
+            'type' => 'pending_ticket_reminder',
             'ticket_id' => $this->ticket->id,
             'judul_tiket' => $this->ticket->judul,
             'status' => 'Pending',
             'hari_pending' => $this->hariPending,
             'unit' => $this->ticket->subUnit?->unit?->nama_unit,
             'sub_unit' => $this->ticket->subUnit?->nama_layanan,
-            'judul' => "Tiket Pending Lama",
-            'pesan' => "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah pending selama {$this->hariPending} hari. Silakan tindak lanjuti.",
+            'title' => $title,
+            'message' => $message,
+            'judul' => $title,
+            'pesan' => $message,
             'icon' => 'clock',
             'aksi_url' => "/admin/tiket/{$this->ticket->id}",
         ];

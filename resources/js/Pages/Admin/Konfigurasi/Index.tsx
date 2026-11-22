@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
+import { Badge } from '@/Components/ui/badge';
 import { Switch } from '@/Components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/Components/ui/tabs';
 import AppUpdateTab, { type AppReleaseItem } from './AppUpdateTab';
@@ -20,6 +21,17 @@ interface HumasAdminItem {
  id: number | string;
  name: string;
  username: string;
+}
+
+interface FcmDiagnosticStatus {
+ enabled: boolean;
+ configured: boolean;
+ mode: 'http_v1_panel' | 'http_v1_env' | 'legacy_key' | 'unconfigured';
+ project_id: string | null;
+ client_email_masked: string | null;
+ uploaded_at: string | null;
+ registered_users_count: number;
+ registered_admins_count: number;
 }
 
 const VALID_TABS = new Set([
@@ -45,10 +57,12 @@ export default function KonfigurasiIndex({
  configs,
  appReleases = [],
  allowedReleaseHosts = [],
+ fcmStatus,
 }: {
  configs: any;
  appReleases?: AppReleaseItem[];
  allowedReleaseHosts?: string[];
+ fcmStatus?: FcmDiagnosticStatus;
 }) {
  const [activeTab, setActiveTab] = React.useState<string>(getInitialTab);
 
@@ -64,6 +78,7 @@ export default function KonfigurasiIndex({
  wa_number_key: configs.wa_number_key || '',
  wa_gateway_url: configs.wa_gateway_url || '',
  wa_notification_enabled: configs.wa_notification_enabled !== undefined ? Boolean(configs.wa_notification_enabled) : true,
+ fcm_enabled: configs.fcm_enabled !== undefined ? Boolean(configs.fcm_enabled) : true,
  device_lock_enabled: configs.device_lock_enabled !== undefined ? Boolean(configs.device_lock_enabled) : true,
  nomor_wa_utama: configs.nomor_wa_utama || '',
  nomor_wa_fallback: configs.nomor_wa_fallback || '',
@@ -93,6 +108,46 @@ export default function KonfigurasiIndex({
 
  const [testPhone, setTestPhone] = React.useState('');
  const [testingWa, setTestingWa] = React.useState(false);
+ const [uploadingFirebase, setUploadingFirebase] = React.useState(false);
+ const [testingFcm, setTestingFcm] = React.useState(false);
+
+ const handleUploadFirebase = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const file = e.target.files?.[0];
+
+  if (!file) return;
+
+  const formData = new window.FormData();
+  formData.append('firebase_credentials', file);
+
+  setUploadingFirebase(true);
+
+  router.post(route('admin.konfigurasi.upload-firebase'), formData, {
+   preserveScroll: true,
+   onFinish: () => {
+    setUploadingFirebase(false);
+    e.target.value = '';
+   },
+  });
+ };
+
+ const handleDeleteFirebase = () => {
+  if (!window.confirm('Hapus kredensial Firebase Service Account JSON yang diunggah melalui panel?')) {
+   return;
+  }
+
+  router.delete(route('admin.konfigurasi.delete-firebase'), {
+   preserveScroll: true,
+  });
+ };
+
+ const handleTestFcm = () => {
+  setTestingFcm(true);
+
+  router.post(route('admin.konfigurasi.test-fcm'), {}, {
+   preserveScroll: true,
+   onFinish: () => setTestingFcm(false),
+  });
+ };
 
  const handleTestWa = () => {
  if (!testPhone) return;
@@ -341,6 +396,110 @@ export default function KonfigurasiIndex({
               )}
  </div>
  </CardContent>
+ </Card>
+
+ <Card>
+  <CardHeader className="flex flex-row items-center justify-between gap-2">
+   <CardTitle className="text-base">Push Notification Mobile (Firebase Cloud Messaging HTTP v1)</CardTitle>
+   {fcmStatus?.configured ? (
+    <Badge className="bg-emerald-600 text-white">
+     {fcmStatus.mode === 'http_v1_panel'
+      ? 'Aktif — HTTP v1 (Panel)'
+      : fcmStatus.mode === 'http_v1_env'
+       ? 'Aktif — HTTP v1 (ENV)'
+       : 'Aktif — Legacy Key'}
+    </Badge>
+   ) : (
+    <Badge variant="outline" className="border-amber-400 bg-amber-50 text-amber-900">
+     Mode Fallback Polling (Belum Dikonfigurasi)
+    </Badge>
+   )}
+  </CardHeader>
+  <CardContent className="space-y-4">
+   <div className="flex items-center justify-between p-3 border rounded-lg bg-slate-50">
+    <div className="pr-4">
+     <Label htmlFor="fcm_enabled" className="font-semibold text-sm text-slate-900">
+      Aktifkan Push Notification Mobile (FCM)
+     </Label>
+     <p className="text-xs text-slate-600">
+      Mengirim push real-time ke aplikasi Android meskipun aplikasi sedang ditutup (terminated).
+     </p>
+    </div>
+    <Switch
+     id="fcm_enabled"
+     checked={data.fcm_enabled}
+     onCheckedChange={(checked) => setData('fcm_enabled', checked)}
+    />
+   </div>
+
+   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg border bg-slate-50 text-xs">
+    <div>
+     <div className="text-slate-500">Project ID</div>
+     <div className="font-mono font-semibold text-slate-900 mt-0.5">
+      {fcmStatus?.project_id || '-'}
+     </div>
+    </div>
+    <div>
+     <div className="text-slate-500">Service Account</div>
+     <div className="font-mono font-semibold text-slate-900 mt-0.5">
+      {fcmStatus?.client_email_masked || '-'}
+     </div>
+    </div>
+    <div>
+     <div className="text-slate-500">Perangkat Terdaftar (FCM Token)</div>
+     <div className="font-semibold text-slate-900 mt-0.5">
+      {fcmStatus ? `${fcmStatus.registered_users_count} User • ${fcmStatus.registered_admins_count} Admin` : '0 User • 0 Admin'}
+     </div>
+    </div>
+    <div>
+     <div className="text-slate-500">Diunggah Pada</div>
+     <div className="font-semibold text-slate-900 mt-0.5">
+      {fcmStatus?.uploaded_at ? new Date(fcmStatus.uploaded_at).toLocaleString('id-ID') : '-'}
+     </div>
+    </div>
+   </div>
+
+   <div className="space-y-2">
+    <Label htmlFor="firebase_credentials">Unggah Firebase Service Account JSON (.json)</Label>
+    <p className="text-xs text-slate-600">
+     Unduh dari Firebase Console → Project Settings → Service Accounts → Generate New Private Key. File disimpan aman di direktori privat server di luar webroot.
+    </p>
+    <div className="flex flex-wrap items-center gap-2">
+     <Input
+      id="firebase_credentials"
+      type="file"
+      accept=".json,application/json"
+      disabled={uploadingFirebase}
+      onChange={handleUploadFirebase}
+      className="max-w-md"
+     />
+     {fcmStatus?.mode === 'http_v1_panel' && (
+      <Button
+       type="button"
+       variant="destructive"
+       size="sm"
+       onClick={handleDeleteFirebase}
+      >
+       Hapus Kredensial
+      </Button>
+     )}
+    </div>
+   </div>
+
+   <div className="pt-3 border-t flex flex-wrap items-center justify-between gap-2">
+    <p className="text-xs text-slate-600">
+     Kirim notifikasi uji ke perangkat Admin/User yang memiliki token FCM terdaftar.
+    </p>
+    <Button
+     type="button"
+     variant="outline"
+     disabled={testingFcm || !fcmStatus?.configured || !data.fcm_enabled}
+     onClick={handleTestFcm}
+    >
+     {testingFcm ? 'Mengirim...' : 'Uji Push Notification Mobile'}
+    </Button>
+   </div>
+  </CardContent>
  </Card>
  </TabsContent>
 

@@ -27,8 +27,8 @@ class FcmChannel
         } elseif (method_exists($notification, 'toArray')) {
             $arrayData = $notification->toArray($notifiable);
             $payload = [
-                'title' => $arrayData['title'] ?? 'Halo APU',
-                'body' => $arrayData['message'] ?? $arrayData['body'] ?? 'Ada pembaruan tiket baru',
+                'title' => $arrayData['title'] ?? $arrayData['judul'] ?? 'Halo APU',
+                'body' => $arrayData['message'] ?? $arrayData['body'] ?? $arrayData['pesan'] ?? 'Ada pembaruan tiket baru',
                 'data' => $arrayData,
             ];
         }
@@ -41,7 +41,7 @@ class FcmChannel
         $body = $payload['body'] ?? $payload['message'] ?? '';
         $data = $payload['data'] ?? [];
 
-        // Pastikan ticket_id atau id tersertakan di payload data jika ada di level atas
+        // Pastikan ticket_id, id, dan notification_id tersertakan di payload data
         if (isset($payload['ticket_id']) && !isset($data['ticket_id'])) {
             $data['ticket_id'] = $payload['ticket_id'];
         }
@@ -50,6 +50,14 @@ class FcmChannel
         }
         if (isset($payload['type']) && !isset($data['type'])) {
             $data['type'] = $payload['type'];
+        }
+        if (!empty($notification->id)) {
+            if (!isset($data['notification_id'])) {
+                $data['notification_id'] = (string) $notification->id;
+            }
+            if (!isset($data['id'])) {
+                $data['id'] = (string) $notification->id;
+            }
         }
 
         try {

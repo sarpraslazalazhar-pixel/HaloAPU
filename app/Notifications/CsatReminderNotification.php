@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Channels\WhatsAppChannel;
 use App\Models\ReminderConfig;
 use App\Models\Ticket;
@@ -27,6 +28,10 @@ class CsatReminderNotification extends Notification
         $config = ReminderConfig::where('jenis_reminder', 'csat')->first();
         $channels = ['database'];
 
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+
         if ($config && is_array($config->channel_aktif)) {
             if (in_array('email', $config->channel_aktif)) {
                 $channels[] = 'mail';
@@ -39,14 +44,33 @@ class CsatReminderNotification extends Notification
         return $channels;
     }
 
+    public function toFcm(object $notifiable): array
+    {
+        $data = $this->toDatabase($notifiable);
+
+        return [
+            'title' => $data['title'],
+            'body' => $data['message'],
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url("/tiket/{$this->ticket->id}"),
+            'type' => 'csat_reminder',
+        ];
+    }
+
     public function toDatabase(object $notifiable): array
     {
+        $title = 'Berikan Rating Tiket Kamu';
+        $message = "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah diselesaikan {$this->hariSejak} hari lalu. Mohon berikan rating kamu.";
+
         return [
+            'type' => 'csat_reminder',
             'ticket_id' => $this->ticket->id,
             'judul_tiket' => $this->ticket->judul,
             'hari_sejak_solve' => $this->hariSejak,
-            'judul' => "Berikan Rating Tiket Kamu",
-            'pesan' => "Tiket #{$this->ticket->formatted_id} \"{$this->ticket->judul}\" sudah diselesaikan {$this->hariSejak} hari lalu. Mohon berikan rating kamu.",
+            'title' => $title,
+            'message' => $message,
+            'judul' => $title,
+            'pesan' => $message,
             'icon' => 'star',
             'aksi_url' => "/tiket/{$this->ticket->id}",
         ];

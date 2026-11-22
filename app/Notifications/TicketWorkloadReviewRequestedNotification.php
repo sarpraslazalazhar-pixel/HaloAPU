@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use App\Traits\FilterNotificationChannels;
 use Illuminate\Bus\Queueable;
@@ -19,7 +20,26 @@ class TicketWorkloadReviewRequestedNotification extends Notification implements 
 
     public function via(object $notifiable): array
     {
-        return $this->filterChannels(['database', 'broadcast'], $notifiable);
+        $channels = ['database', 'broadcast'];
+
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+
+        return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $payload = $this->payload();
+
+        return [
+            'title' => $payload['title'],
+            'body' => $payload['message'],
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => $payload['url'],
+            'type' => $payload['type'],
+        ];
     }
 
     private function payload(): array

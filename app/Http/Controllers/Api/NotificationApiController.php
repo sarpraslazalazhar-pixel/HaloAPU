@@ -53,8 +53,8 @@ class NotificationApiController extends Controller
 
             $item = [
                 'id' => (string) $notif->id,
-                'title' => $data['title'] ?? 'Pembaruan Tiket',
-                'body' => $data['body'] ?? $data['message'] ?? '',
+                'title' => $data['title'] ?? $data['judul'] ?? 'Pembaruan Tiket',
+                'body' => $data['body'] ?? $data['message'] ?? $data['pesan'] ?? '',
                 'type' => $type,
                 'createdAt' => $notif->created_at ? $notif->created_at->toIso8601String() : now()->toIso8601String(),
                 'isRead' => $notif->read_at !== null,

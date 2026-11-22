@@ -2,9 +2,11 @@
 
 namespace App\Notifications;
 
+use App\Channels\FcmChannel;
 use App\Models\Ticket;
 use Illuminate\Bus\Queueable;
 use Illuminate\Notifications\Notification;
+use Illuminate\Support\Str;
 use NotificationChannels\WebPush\WebPushChannel;
 use NotificationChannels\WebPush\WebPushMessage;
 
@@ -27,7 +29,27 @@ class TicketRatedAdminNotification extends Notification
 
     public function via(object $notifiable): array
     {
-        return $this->filterChannels(['database', WebPushChannel::class], $notifiable);
+        $channels = ['database', WebPushChannel::class];
+
+        if (!empty($notifiable->fcm_token)) {
+            $channels[] = FcmChannel::class;
+        }
+
+        return $this->filterChannels($channels, $notifiable);
+    }
+
+    public function toFcm(object $notifiable): array
+    {
+        $komentar = trim((string) $this->komentar);
+        $suffix = $komentar !== '' ? ' ' . Str::limit($komentar, 80) : '';
+
+        return [
+            'title' => 'Rating Baru: Tiket #' . $this->ticket->id,
+            'body' => "Tiket diberi rating {$this->rating} bintang.{$suffix}",
+            'ticket_id' => (string) $this->ticket->id,
+            'url' => url('/admin/tiket/' . $this->ticket->id),
+            'type' => 'ticket_rated',
+        ];
     }
 
     public function toWebPush($notifiable, $notification)

@@ -337,7 +337,10 @@ class ChatController extends Controller
             return $message;
         });
 
-        TicketChatBridgeService::afterCommit(fn () => TicketChatBridgeService::emitChatMessage($message));
+        TicketChatBridgeService::afterCommit(function () use ($message): void {
+            TicketChatBridgeService::emitChatMessage($message);
+            TicketChatBridgeService::notifyChatMessageRecipients($message);
+        });
 
         $message->load(['sender', 'attachments', 'ticket.subUnit', 'replyTo.sender', 'reads']);
 

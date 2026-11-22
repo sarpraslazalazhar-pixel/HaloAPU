@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Models\AppRelease;
 use App\Models\SystemConfig;
+use App\Models\User;
+use App\Notifications\TestPushNotification;
+use App\Services\FcmService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -28,6 +31,7 @@ class SystemConfigController extends Controller
             'wa_number_key' => SystemConfig::getValue('wa_number_key'),
             'wa_gateway_url' => SystemConfig::getValue('wa_gateway_url'),
             'wa_notification_enabled' => (bool) SystemConfig::getValue('wa_notification_enabled', true),
+            'fcm_enabled' => (bool) SystemConfig::getValue('fcm_enabled', true),
             'nomor_wa_utama' => SystemConfig::getValue('nomor_wa_utama'),
             'nomor_wa_fallback' => SystemConfig::getValue('nomor_wa_fallback'),
             'device_lock_enabled' => (bool) SystemConfig::getValue('device_lock_enabled', true),
@@ -88,6 +92,7 @@ class SystemConfigController extends Controller
             'humasAdmins' => $humasAdmins,
             'appReleases' => $appReleases,
             'allowedReleaseHosts' => AppRelease::allowedDownloadHosts(),
+            'fcmStatus' => FcmService::getDiagnosticStatus(),
         ]);
     }
 
@@ -100,6 +105,7 @@ class SystemConfigController extends Controller
             'wa_number_key' => 'nullable|string|max:255',
             'wa_gateway_url' => 'nullable|string|max:255',
             'wa_notification_enabled' => 'nullable|boolean',
+            'fcm_enabled' => 'nullable|boolean',
             'device_lock_enabled' => 'nullable|boolean',
             'nomor_wa_utama' => 'nullable|string|max:20',
             'nomor_wa_fallback' => 'nullable|string|max:20',
@@ -126,6 +132,9 @@ class SystemConfigController extends Controller
         SystemConfig::setValue('wa_number_key', $validated['wa_number_key']);
         SystemConfig::setValue('wa_gateway_url', $validated['wa_gateway_url']);
         SystemConfig::setValue('wa_notification_enabled', $request->boolean('wa_notification_enabled'));
+        if ($request->has('fcm_enabled')) {
+            SystemConfig::setValue('fcm_enabled', $request->boolean('fcm_enabled', true));
+        }
         SystemConfig::setValue('device_lock_enabled', $request->boolean('device_lock_enabled', true));
         SystemConfig::setValue('nomor_wa_utama', $validated['nomor_wa_utama']);
         SystemConfig::setValue('nomor_wa_fallback', $validated['nomor_wa_fallback']);
@@ -395,5 +404,141 @@ class SystemConfigController extends Controller
             'webm' => 'audio/webm',
             default => 'audio/mpeg',
         };
+    }
+
+    public function uploadFirebaseCredentials(Request $request)
+    {
+        $request->validate([
+            'firebase_credentials' => 'required|file|max:256',
+        ]);
+
+        $file = $request->file('firebase_credentials');
+        $rawJson = (string) file_get_contents($file->getPathname());
+        $decoded = json_decode($rawJson, true);
+
+        if (! is_array($decoded)) {
+            return back()->withErrors([
+                'firebase_credentials' => 'File harus berupa JSON Firebase Service Account yang valid.',
+            ]);
+        }
+
+        $validationError = FcmService::validateServiceAccountArray($decoded);
+        if ($validationError !== null) {
+            return back()->withErrors([
+                'firebase_credentials' => $validationError,
+            ]);
+        }
+
+        $storagePath = 'firebase/service-account.json';
+        Storage::disk('local')->put($storagePath, $rawJson);
+
+        SystemConfig::setValue('fcm_service_account_path', $storagePath);
+        SystemConfig::setValue('fcm_project_id', trim((string) $decoded['project_id']));
+        SystemConfig::setValue('fcm_client_email', trim((string) $decoded['client_email']));
+        SystemConfig::setValue('fcm_uploaded_at', now()->toIso8601String());
+
+        FcmService::clearCachedAccessToken();
+
+        return back()->with(
+            'success',
+            'Firebase Service Account (' . trim((string) $decoded['project_id']) . ') berhasil diunggah dan diverifikasi.'
+        );
+    }
+
+    public function deleteFirebaseCredentials()
+    {
+        FcmService::clearCachedAccessToken();
+
+        $configuredPath = trim((string) SystemConfig::getValue('fcm_service_account_path', ''));
+        if ($configuredPath !== '' && Storage::disk('local')->exists($configuredPath)) {
+            Storage::disk('local')->delete($configuredPath);
+        }
+
+        if (Storage::disk('local')->exists('firebase/service-account.json')) {
+            Storage::disk('local')->delete('firebase/service-account.json');
+        }
+
+        SystemConfig::setValue('fcm_service_account_path', null);
+        SystemConfig::setValue('fcm_project_id', null);
+        SystemConfig::setValue('fcm_client_email', null);
+        SystemConfig::setValue('fcm_uploaded_at', null);
+
+        return back()->with('success', 'Kredensial Firebase Service Account dari panel berhasil dihapus.');
+    }
+
+    public function testFcmPush(Request $request)
+    {
+        $status = FcmService::getDiagnosticStatus();
+
+        if (! $status['enabled']) {
+            return back()->with('error', 'Push Notification FCM sedang dinonaktifkan.');
+        }
+
+        if (! $status['configured']) {
+            return back()->with(
+                'error',
+                'Firebase Service Account JSON belum dikonfigurasi. Unggah file JSON dari Firebase Console terlebih dahulu.'
+            );
+        }
+
+        $currentAdmin = $request->user('admin');
+        $targets = collect();
+
+        if ($currentAdmin instanceof Admin && ! empty($currentAdmin->fcm_token)) {
+            $targets->push($currentAdmin);
+        } else {
+            $admins = Admin::query()
+                ->whereNotNull('fcm_token')
+                ->where('fcm_token', '!=', '')
+                ->limit(5)
+                ->get();
+
+            $users = User::query()
+                ->where('is_active', true)
+                ->whereNotNull('fcm_token')
+                ->where('fcm_token', '!=', '')
+                ->limit(5)
+                ->get();
+
+            $targets = $admins->concat($users)->take(5);
+        }
+
+        if ($targets->isEmpty()) {
+            return back()->with(
+                'error',
+                'Belum ada perangkat User atau Admin yang memiliki fcm_token terdaftar. Login terlebih dahulu melalui aplikasi mobile.'
+            );
+        }
+
+        $sentCount = 0;
+        $lastError = null;
+        $notification = new TestPushNotification();
+
+        foreach ($targets as $target) {
+            FcmService::resetLastSendStatus();
+
+            try {
+                $target->notify($notification);
+                if (FcmService::lastSendSucceeded()) {
+                    $sentCount++;
+                } else {
+                    $lastError = FcmService::getLastError() ?? $lastError;
+                }
+            } catch (\Throwable $e) {
+                $lastError = $e->getMessage();
+            }
+        }
+
+        if ($sentCount > 0) {
+            return back()->with(
+                'success',
+                "Tes Push Notification berhasil dikirim ke {$sentCount}/{$targets->count()} perangkat terdaftar."
+            );
+        }
+
+        return back()->with(
+            'error',
+            'Tes Push Notification gagal dikirim' . ($lastError ? ": {$lastError}" : '.')
+        );
     }
 }

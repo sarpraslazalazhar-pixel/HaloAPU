@@ -238,6 +238,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/konfigurasi/upload-banner', [SystemConfigController::class, 'uploadBanner'])->name('konfigurasi.upload-banner');
             Route::post('/konfigurasi/upload-favicon', [SystemConfigController::class, 'uploadFavicon'])->name('konfigurasi.upload-favicon');
             Route::post('/konfigurasi/upload-sound', [SystemConfigController::class, 'uploadSound'])->name('konfigurasi.upload-sound');
+            Route::post('/konfigurasi/upload-firebase', [SystemConfigController::class, 'uploadFirebaseCredentials'])->name('konfigurasi.upload-firebase');
+            Route::delete('/konfigurasi/firebase-credentials', [SystemConfigController::class, 'deleteFirebaseCredentials'])->name('konfigurasi.delete-firebase');
+            Route::post('/konfigurasi/test-fcm', [SystemConfigController::class, 'testFcmPush'])
+                ->middleware('throttle:5,5')
+                ->name('konfigurasi.test-fcm');
             Route::post('/konfigurasi/test-sparc', [SystemConfigController::class, 'testSparcConnection'])->name('konfigurasi.test-sparc');
             Route::post('/konfigurasi/generate-sparc-credentials', [SystemConfigController::class, 'generateSparcCredentials'])->name('konfigurasi.generate-sparc-credentials');
 

@@ -33,6 +33,7 @@ class NotificationApiController extends Controller
                 'csat', 'csat_reminder' => 'csat',
                 'sla', 'sla_escalation' => 'sla',
                 'ticket_form_edited', 'ticket_edited' => 'edited',
+                'app_update' => 'app_update',
                 'ticket_status_updated', 'ticket_status_updated_operator' => (function () use ($data) {
                     $title = strtolower($data['title'] ?? '');
                     $body = strtolower($data['message'] ?? $data['body'] ?? '');
@@ -50,7 +51,7 @@ class NotificationApiController extends Controller
                 default => 'ticket',
             };
 
-            return [
+            $item = [
                 'id' => (string) $notif->id,
                 'title' => $data['title'] ?? 'Pembaruan Tiket',
                 'body' => $data['body'] ?? $data['message'] ?? '',
@@ -59,6 +60,22 @@ class NotificationApiController extends Controller
                 'isRead' => $notif->read_at !== null,
                 'ticketId' => isset($data['ticket_id']) ? (string) $data['ticket_id'] : (isset($data['ticketId']) ? (string) $data['ticketId'] : null),
             ];
+
+            if ($type === 'app_update') {
+                $item['channel'] = $data['channel'] ?? null;
+                $item['version_name'] = $data['version_name'] ?? null;
+                $item['build_number'] = isset($data['build_number']) ? (string) $data['build_number'] : null;
+                $item['data'] = [
+                    'type' => 'app_update',
+                    'channel' => $data['channel'] ?? null,
+                    'version_name' => $data['version_name'] ?? null,
+                    'build_number' => isset($data['build_number']) ? (string) $data['build_number'] : null,
+                    'force_update' => (string) ($data['force_update'] ?? '0'),
+                    'release_id' => isset($data['release_id']) ? (string) $data['release_id'] : null,
+                ];
+            }
+
+            return $item;
         });
 
         return response()->json([

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Admin;
 use App\Models\AppRelease;
 use App\Models\User;
+use App\Services\FcmService;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
@@ -348,7 +349,7 @@ class AppReleaseTest extends TestCase
             ->assertRedirect()
             ->assertSessionHas('success');
 
-        // Exactly 2 FCM requests sent (active user + admin; inactive user & tokenless user skipped)
+        // Exactly 2 FCM requests sent (active user + admin; inactive user & tokenless accounts skipped for FCM)
         Http::assertSentCount(2);
         Http::assertSent(function ($request) {
             return $request->url() === 'https://fcm.googleapis.com/fcm/send'
@@ -359,10 +360,33 @@ class AppReleaseTest extends TestCase
                 && ($request['data']['force_update'] ?? null) === '0';
         });
 
+        // All 4 active accounts (2 users + 2 admins, including tokenless ones) receive database notifications
         $release13->refresh();
         $this->assertNotNull($release13->last_notified_at);
-        $this->assertSame(2, $release13->last_notified_count);
+        $this->assertSame(4, $release13->last_notified_count);
         $this->assertSame('all', $release13->last_notified_target);
+
+        $this->assertSame(1, $webUser->notifications()->count());
+        $this->assertSame(1, $activeUserWithToken->notifications()->count());
+        $this->assertSame(0, $inactiveUserWithToken->notifications()->count());
+        $this->assertSame(1, $configAdmin->notifications()->count());
+        $this->assertSame(1, $unprivilegedAdmin->notifications()->count());
+
+        // Mobile API /api/notifications and /api/notifications/unread-count expose app_update cleanly
+        $this->actingAs($webUser, 'sanctum')
+            ->getJson('/api/notifications/unread-count')
+            ->assertOk()
+            ->assertJsonPath('data.count', 1);
+
+        $this->actingAs($webUser, 'sanctum')
+            ->getJson('/api/notifications')
+            ->assertOk()
+            ->assertJsonPath('data.0.type', 'app_update')
+            ->assertJsonPath('data.0.title', 'Update Halo APU v1.0.3')
+            ->assertJsonPath('data.0.channel', 'production')
+            ->assertJsonPath('data.0.version_name', '1.0.3')
+            ->assertJsonPath('data.0.build_number', '13')
+            ->assertJsonPath('data.0.data.type', 'app_update');
 
         // Deactivate Build 13 -> public endpoint returns null, and Build 13 can now be deleted
         $this->actingAs($configAdmin, 'admin')
@@ -377,5 +401,105 @@ class AppReleaseTest extends TestCase
             ->assertSessionHas('success');
 
         $this->assertDatabaseMissing('app_releases', ['id' => $release13->id]);
+    }
+
+    public function test_fcm_service_http_v1_exchanges_jwt_and_caches_access_token(): void
+    {
+        $opensslConfig = [
+            'private_key_bits' => 2048,
+            'private_key_type' => OPENSSL_KEYTYPE_RSA,
+        ];
+
+        $windowsOpensslCnf = dirname(PHP_BINARY).DIRECTORY_SEPARATOR.'extras'.DIRECTORY_SEPARATOR.'ssl'.DIRECTORY_SEPARATOR.'openssl.cnf';
+        if (is_file($windowsOpensslCnf)) {
+            $opensslConfig['config'] = $windowsOpensslCnf;
+        }
+
+        $keyResource = openssl_pkey_new($opensslConfig);
+        $this->assertNotFalse($keyResource);
+
+        $privateKeyPem = '';
+        $this->assertTrue(openssl_pkey_export($keyResource, $privateKeyPem, null, $opensslConfig));
+
+        $tempCredsPath = tempnam(sys_get_temp_dir(), 'fcm_test_');
+        $this->assertNotFalse($tempCredsPath);
+
+        try {
+            file_put_contents($tempCredsPath, json_encode([
+                'type' => 'service_account',
+                'project_id' => 'halo-apu-test',
+                'private_key_id' => 'key-1',
+                'private_key' => $privateKeyPem,
+                'client_email' => 'firebase-adminsdk@halo-apu-test.iam.gserviceaccount.com',
+                'token_uri' => 'https://oauth2.googleapis.com/token',
+            ]));
+
+            config([
+                'services.fcm.service_account_json' => $tempCredsPath,
+                'services.fcm.project_id' => 'halo-apu-test',
+                'services.fcm.key' => null,
+            ]);
+
+            Http::fake([
+                'https://oauth2.googleapis.com/token' => Http::response([
+                    'access_token' => 'mock-oauth-v1-token',
+                    'expires_in' => 3600,
+                    'token_type' => 'Bearer',
+                ], 200),
+                'https://fcm.googleapis.com/v1/projects/halo-apu-test/messages:send' => Http::response([
+                    'name' => 'projects/halo-apu-test/messages/msg-001',
+                ], 200),
+            ]);
+
+            $firstResult = FcmService::sendToToken(
+                'device-fcm-token-1',
+                'Update Halo APU v1.0.5',
+                'Versi baru tersedia',
+                [
+                    'type' => 'app_update',
+                    'channel' => 'staging',
+                    'version_name' => '1.0.5',
+                    'build_number' => 25,
+                ]
+            );
+
+            $this->assertTrue($firstResult);
+            $this->assertTrue(FcmService::lastSendSucceeded());
+
+            // Second send reuses cached OAuth2 token
+            $secondResult = FcmService::sendToToken(
+                'device-fcm-token-2',
+                'Update Halo APU v1.0.5',
+                'Versi baru tersedia',
+                ['type' => 'app_update']
+            );
+
+            $this->assertTrue($secondResult);
+
+            Http::assertSentCount(3); // 1 OAuth token exchange + 2 FCM v1 message sends
+
+            Http::assertSent(function ($request) {
+                if ($request->url() !== 'https://oauth2.googleapis.com/token') {
+                    return false;
+                }
+
+                $assertion = (string) ($request['assertion'] ?? '');
+
+                return ($request['grant_type'] ?? null) === 'urn:ietf:params:oauth:grant-type:jwt-bearer'
+                    && substr_count($assertion, '.') === 2;
+            });
+
+            Http::assertSent(function ($request) {
+                return $request->url() === 'https://fcm.googleapis.com/v1/projects/halo-apu-test/messages:send'
+                    && $request->hasHeader('Authorization', 'Bearer mock-oauth-v1-token')
+                    && ($request['message']['token'] ?? null) === 'device-fcm-token-1'
+                    && ($request['message']['notification']['title'] ?? null) === 'Update Halo APU v1.0.5'
+                    && ($request['message']['data']['type'] ?? null) === 'app_update'
+                    && ($request['message']['data']['build_number'] ?? null) === '25'
+                    && ($request['message']['android']['priority'] ?? null) === 'HIGH';
+            });
+        } finally {
+            @unlink($tempCredsPath);
+        }
     }
 }

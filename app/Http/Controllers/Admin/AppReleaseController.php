@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Admin;
 use App\Models\AppRelease;
 use App\Models\User;
+use App\Notifications\AppUpdateAvailableNotification;
 use App\Services\FcmService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -177,74 +178,72 @@ class AppReleaseController extends Controller
             'notification_body' => ['required', 'string', 'max:300'],
         ]);
 
-        $payload = [
-            'type' => 'app_update',
-            'channel' => $appRelease->channel,
-            'version_name' => $appRelease->version_name,
-            'build_number' => (string) $appRelease->build_number,
-            'force_update' => '0',
-        ];
-
         $target = $validated['target'];
         $title = trim($validated['notification_title']);
         $body = trim($validated['notification_body']);
-        $totalTargets = 0;
-        $sentCount = 0;
+        $notification = new AppUpdateAvailableNotification($appRelease, $title, $body);
+
+        $notifiedCount = 0;
+        $fcmTargetCount = 0;
+        $fcmSentCount = 0;
+
+        $sendToRecipient = function (User|Admin $recipient) use (
+            $notification,
+            &$notifiedCount,
+            &$fcmTargetCount,
+            &$fcmSentCount
+        ): void {
+            $hasFcmToken = ! empty($recipient->fcm_token);
+            if ($hasFcmToken) {
+                $fcmTargetCount++;
+            }
+
+            FcmService::resetLastSendStatus();
+
+            try {
+                $recipient->notify($notification);
+                $notifiedCount++;
+
+                if ($hasFcmToken && FcmService::lastSendSucceeded()) {
+                    $fcmSentCount++;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('AppRelease notify failed for recipient', [
+                    'recipient_type' => $recipient::class,
+                    'recipient_id' => $recipient->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        };
 
         if ($target === 'all' || $target === 'users') {
             User::query()
                 ->where('is_active', true)
-                ->whereNotNull('fcm_token')
-                ->where('fcm_token', '!=', '')
-                ->chunkById(100, function ($users) use (&$totalTargets, &$sentCount, $title, $body, $payload): void {
+                ->chunkById(100, function ($users) use ($sendToRecipient): void {
                     foreach ($users as $user) {
-                        $totalTargets++;
-
-                        try {
-                            if (FcmService::sendToUser($user, $title, $body, $payload)) {
-                                $sentCount++;
-                            }
-                        } catch (\Throwable $e) {
-                            Log::warning('AppRelease FCM notify failed for user', [
-                                'user_id' => $user->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
+                        $sendToRecipient($user);
                     }
                 });
         }
 
         if ($target === 'all' || $target === 'admins') {
             Admin::query()
-                ->whereNotNull('fcm_token')
-                ->where('fcm_token', '!=', '')
-                ->chunkById(100, function ($admins) use (&$totalTargets, &$sentCount, $title, $body, $payload): void {
+                ->chunkById(100, function ($admins) use ($sendToRecipient): void {
                     foreach ($admins as $admin) {
-                        $totalTargets++;
-
-                        try {
-                            if (FcmService::sendToUser($admin, $title, $body, $payload)) {
-                                $sentCount++;
-                            }
-                        } catch (\Throwable $e) {
-                            Log::warning('AppRelease FCM notify failed for admin', [
-                                'admin_id' => $admin->id,
-                                'error' => $e->getMessage(),
-                            ]);
-                        }
+                        $sendToRecipient($admin);
                     }
                 });
         }
 
         $appRelease->update([
             'last_notified_at' => now(),
-            'last_notified_count' => $totalTargets,
+            'last_notified_count' => $notifiedCount,
             'last_notified_target' => $target,
         ]);
 
         return back()->with(
             'success',
-            "Notifikasi update v{$appRelease->version_name} (Build {$appRelease->build_number}) dikirim ke {$totalTargets} perangkat target ({$sentCount} terkirim via FCM)."
+            "Notifikasi update v{$appRelease->version_name} (Build {$appRelease->build_number}) dikirim ke {$notifiedCount} akun penerima ({$fcmSentCount}/{$fcmTargetCount} FCM push terkirim)."
         );
     }
 }

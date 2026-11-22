@@ -50,6 +50,13 @@ export default function KonfigurasiIndex({
  appReleases?: AppReleaseItem[];
  allowedReleaseHosts?: string[];
 }) {
+ const [activeTab, setActiveTab] = React.useState<string>(getInitialTab);
+
+ const showConfigSaveButton =
+  activeTab === 'branding' ||
+  activeTab === 'notifikasi' ||
+  activeTab === 'operasional';
+
  const { data, setData, put, processing, errors } = useForm({
  nama_sistem: configs.nama_sistem || 'Halo APU',
  email_admin: configs.email_admin || '',
@@ -204,7 +211,7 @@ export default function KonfigurasiIndex({
  <div className="max-w-4xl mx-auto space-y-6">
  <h1 className="text-2xl font-bold">Konfigurasi Sistem</h1>
 
- <Tabs defaultValue={getInitialTab()}>
+ <Tabs value={activeTab} onValueChange={setActiveTab}>
  <TabsList className="flex-wrap h-auto">
  <TabsTrigger value="branding">Branding</TabsTrigger>
  <TabsTrigger value="notifikasi">Notifikasi</TabsTrigger>
@@ -404,9 +411,11 @@ export default function KonfigurasiIndex({
  </Card>
  </TabsContent>
 
- <div className="flex justify-end mt-4">
- <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
- </div>
+ {showConfigSaveButton && (
+  <div className="flex justify-end mt-4">
+   <Button type="submit" disabled={processing}>Simpan Perubahan</Button>
+  </div>
+ )}
  </form>
 
  <TabsContent value="sparc" className="space-y-4 mt-4">

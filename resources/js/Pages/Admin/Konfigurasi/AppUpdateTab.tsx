@@ -311,12 +311,12 @@ export default function AppUpdateTab({
 
   return (
     <div className="space-y-6">
-      <Alert className="border-amber-500/40 bg-amber-500/10">
-        <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-        <AlertTitle className="text-amber-800 dark:text-amber-200">
+      <Alert className="border-amber-300 bg-amber-50 text-amber-950">
+        <ShieldCheck className="h-4 w-4 text-amber-700" />
+        <AlertTitle className="font-semibold text-amber-950">
           Pemberitahuan Versi Baru &amp; Update Langsung Tanpa Uninstall (In-Place Update)
         </AlertTitle>
-        <AlertDescription className="text-xs text-amber-900/90 dark:text-amber-100/90 space-y-1">
+        <AlertDescription className="text-xs text-amber-900 space-y-1 [&_p:not(:last-child)]:mb-1.5">
           <p>
             Pemberitahuan update di aplikasi mobile selalu bersifat <strong>opsional</strong> —
             hanya memberi tahu pengguna ada versi baru, pengguna tetap dapat memilih{' '}

@@ -7,6 +7,7 @@ import { Input } from '@/Components/ui/input';
 import { Label } from '@/Components/ui/label';
 import { Switch } from '@/Components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/Components/ui/tabs';
+import AppUpdateTab, { type AppReleaseItem } from './AppUpdateTab';
 
 const DAYS = ['senin', 'selasa', 'rabu', 'kamis', 'jumat', 'sabtu', 'minggu'] as const;
 
@@ -14,13 +15,41 @@ const DAY_LABELS = {
  senin: 'Senin', selasa: 'Selasa', rabu: 'Rabu', kamis: 'Kamis',
  jumat: 'Jumat', sabtu: 'Sabtu', minggu: 'Minggu',
 } satisfies Record<string, string>;
+
 interface HumasAdminItem {
  id: number | string;
  name: string;
  username: string;
 }
 
-export default function KonfigurasiIndex({ configs }: any) {
+const VALID_TABS = new Set([
+ 'branding',
+ 'notifikasi',
+ 'operasional',
+ 'sparc',
+ 'scheduler',
+ 'update_aplikasi',
+]);
+
+function getInitialTab(): string {
+ if (typeof window === 'undefined') {
+  return 'branding';
+ }
+
+ const tab = new URLSearchParams(window.location.search).get('tab');
+
+ return tab && VALID_TABS.has(tab) ? tab : 'branding';
+}
+
+export default function KonfigurasiIndex({
+ configs,
+ appReleases = [],
+ allowedReleaseHosts = [],
+}: {
+ configs: any;
+ appReleases?: AppReleaseItem[];
+ allowedReleaseHosts?: string[];
+}) {
  const { data, setData, put, processing, errors } = useForm({
  nama_sistem: configs.nama_sistem || 'Halo APU',
  email_admin: configs.email_admin || '',
@@ -83,6 +112,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  preserveScroll: true,
  });
  };
+
  const [sparcState, setSparcState] = React.useState({
  sparc_integration_enabled: Boolean(configs.sparc_integration_enabled),
  sparc_base_url: configs.sparc_base_url || '',
@@ -90,6 +120,7 @@ export default function KonfigurasiIndex({ configs }: any) {
  sparc_webhook_secret: configs.sparc_webhook_secret || '',
  sparc_default_admin_id: configs.sparc_default_admin_id || '',
  });
+
  const [isSavingSparc, setIsSavingSparc] = React.useState(false);
  const [isGeneratingCreds, setIsGeneratingCreds] = React.useState(false);
  const [isTestingSparc, setIsTestingSparc] = React.useState(false);
@@ -97,15 +128,20 @@ export default function KonfigurasiIndex({ configs }: any) {
 
  const handleGenerateCreds = async () => {
  setIsGeneratingCreds(true);
+
  try {
+ const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
+
  const res = await fetch(route('admin.konfigurasi.generate-sparc-credentials'), {
  method: 'POST',
  headers: {
  'Content-Type': 'application/json',
- 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+ 'X-CSRF-TOKEN': csrfToken,
  },
  });
+
  const json = await res.json();
+
  if (json.success && json.data) {
  setSparcState((prev) => ({
  ...prev,
@@ -121,19 +157,24 @@ export default function KonfigurasiIndex({ configs }: any) {
  const handleTestSparc = async () => {
  setIsTestingSparc(true);
  setTestSparcResult(null);
+
  try {
+ const csrfToken = document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content || '';
+
  const res = await fetch(route('admin.konfigurasi.test-sparc'), {
  method: 'POST',
  headers: {
  'Content-Type': 'application/json',
- 'X-CSRF-TOKEN': (document.querySelector('meta[name="csrf-token"]') as HTMLMetaElement)?.content || '',
+ 'X-CSRF-TOKEN': csrfToken,
  },
  body: JSON.stringify({
  sparc_base_url: sparcState.sparc_base_url,
  sparc_webhook_secret: sparcState.sparc_webhook_secret,
  }),
  });
+
  const json = await res.json();
+
  setTestSparcResult({ success: json.success, message: json.message });
  } catch (e: unknown) {
  const msg = e instanceof Error ? e.message : 'Gagal menghubungi server.';
@@ -163,13 +204,14 @@ export default function KonfigurasiIndex({ configs }: any) {
  <div className="max-w-4xl mx-auto space-y-6">
  <h1 className="text-2xl font-bold">Konfigurasi Sistem</h1>
 
- <Tabs defaultValue="branding">
- <TabsList>
+ <Tabs defaultValue={getInitialTab()}>
+ <TabsList className="flex-wrap h-auto">
  <TabsTrigger value="branding">Branding</TabsTrigger>
  <TabsTrigger value="notifikasi">Notifikasi</TabsTrigger>
  <TabsTrigger value="operasional">Operasional</TabsTrigger>
  <TabsTrigger value="sparc">Integrasi SPARC</TabsTrigger>
  <TabsTrigger value="scheduler">Scheduler</TabsTrigger>
+ <TabsTrigger value="update_aplikasi">Update Aplikasi</TabsTrigger>
  </TabsList>
 
  <form onSubmit={handleSubmit}>
@@ -534,6 +576,13 @@ export default function KonfigurasiIndex({ configs }: any) {
  </div>
  </CardContent>
  </Card>
+ </TabsContent>
+
+ <TabsContent value="update_aplikasi" className="space-y-4 mt-4">
+ <AppUpdateTab
+  appReleases={appReleases}
+  allowedReleaseHosts={allowedReleaseHosts}
+ />
  </TabsContent>
  </Tabs>
  </div>

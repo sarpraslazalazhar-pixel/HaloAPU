@@ -41,6 +41,7 @@ declare global {
     Echo: EchoClient | null;
     Pusher: unknown;
     __realtime?: RealtimeConfig | null;
+    axios?: import('axios').AxiosInstance;
   }
 }
 

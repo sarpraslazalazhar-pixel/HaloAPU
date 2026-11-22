@@ -46,4 +46,12 @@ return [
         'model' => env('GEMINI_MODEL', 'gemini-3.6-flash'),
     ],
 
+    'app_release' => [
+        'webhook_secret' => env('APP_RELEASE_WEBHOOK_SECRET'),
+        'allowed_hosts' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('APP_RELEASE_ALLOWED_HOSTS', ''))
+        ))),
+    ],
+
 ];

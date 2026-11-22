@@ -334,7 +334,27 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()->delete();
+        $user = $request->user();
+        $currentToken = $user?->currentAccessToken();
+
+        if ($currentToken && method_exists($currentToken, 'delete')) {
+            $currentToken->delete();
+        }
+
+        // Only clear the account's FCM token once no active Sanctum tokens remain
+        // so a delayed logout from a stale session cannot wipe a freshly re-logged-in session.
+        if ($user && ($user instanceof User || $user instanceof Admin)) {
+            $hasNoRemainingTokens = $user->tokens()->doesntExist();
+            $matchesSubmittedFcm = $request->filled('fcm_token')
+                && $user->fcm_token === $request->input('fcm_token');
+
+            if ($hasNoRemainingTokens && (! $request->filled('fcm_token') || $matchesSubmittedFcm)) {
+                if ($user->fcm_token !== null) {
+                    $user->fcm_token = null;
+                    $user->save();
+                }
+            }
+        }
 
         return response()->json([
             'message' => 'Berhasil keluar'

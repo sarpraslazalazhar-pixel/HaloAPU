@@ -1,6 +1,11 @@
 import axios from 'axios';
 import Echo from 'laravel-echo';
 import Pusher from 'pusher-js';
+import toast from 'react-hot-toast';
+import {
+  COOKIE_BLOCKED_ERROR_MESSAGE,
+  handleSessionExpiredReload,
+} from './utils/sessionRecovery';
 
 window.axios = axios;
 
@@ -10,11 +15,14 @@ window.axios.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error?.response?.status === 419) {
-      sessionStorage.setItem(
-        'session_expired_alert',
-        'Sesi kamu telah berakhir karena batas waktu tidak aktif (3 jam). Silakan login kembali.'
-      );
-      window.location.reload();
+      const reloaded = handleSessionExpiredReload();
+
+      if (!reloaded) {
+        toast.error(COOKIE_BLOCKED_ERROR_MESSAGE, {
+          id: 'session-cookie-error',
+          duration: 6000,
+        });
+      }
     }
 
     return Promise.reject(error);

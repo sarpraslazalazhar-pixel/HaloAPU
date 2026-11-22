@@ -1,6 +1,10 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import React, { FormEventHandler, useEffect, useState } from 'react';
 import toast, { Toaster } from 'react-hot-toast';
+import {
+  consumeSessionExpiredAlert,
+  registerBfcacheReload,
+} from '@/utils/sessionRecovery';
 
 export default function UserLogin() {
   const { appConfig, flash } = usePage<any>().props;
@@ -16,12 +20,13 @@ export default function UserLogin() {
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedRoleLoading, setSelectedRoleLoading] = useState<string | null>(null);
 
+  useEffect(() => registerBfcacheReload(), []);
+
   useEffect(() => {
-    const sessionAlert = sessionStorage.getItem('session_expired_alert');
+    const sessionAlert = consumeSessionExpiredAlert();
 
     if (sessionAlert) {
       toast.error(sessionAlert, { id: 'session-expired-toast', duration: 5000 });
-      sessionStorage.removeItem('session_expired_alert');
     }
 
     if (flash?.error) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Admin;
+use App\Models\AppRelease;
 use App\Models\SystemConfig;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -52,9 +53,41 @@ class SystemConfigController extends Controller
             ->select('id', 'name', 'username')
             ->get();
 
+        $appReleases = AppRelease::query()
+            ->with('createdByAdmin:id,name,username')
+            ->orderByDesc('is_active')
+            ->orderByDesc('build_number')
+            ->orderByDesc('id')
+            ->get()
+            ->map(fn (AppRelease $release) => [
+                'id' => $release->id,
+                'platform' => $release->platform,
+                'channel' => $release->channel,
+                'version_name' => $release->version_name,
+                'build_number' => (int) $release->build_number,
+                'min_supported_build_number' => (int) $release->min_supported_build_number,
+                'force_update' => (bool) $release->force_update,
+                'title' => $release->title,
+                'release_notes' => $release->release_notes,
+                'download_url' => $release->download_url,
+                'sha256' => $release->sha256,
+                'file_size_bytes' => $release->file_size_bytes !== null ? (int) $release->file_size_bytes : null,
+                'is_active' => (bool) $release->is_active,
+                'published_at' => $release->published_at?->toIso8601String(),
+                'last_notified_at' => $release->last_notified_at?->toIso8601String(),
+                'last_notified_count' => (int) $release->last_notified_count,
+                'last_notified_target' => $release->last_notified_target,
+                'created_by_name' => $release->createdByAdmin?->name ?? $release->createdByAdmin?->username,
+                'created_at' => $release->created_at?->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+
         return Inertia::render('Admin/Konfigurasi/Index', [
             'configs' => $configs,
             'humasAdmins' => $humasAdmins,
+            'appReleases' => $appReleases,
+            'allowedReleaseHosts' => AppRelease::allowedDownloadHosts(),
         ]);
     }
 

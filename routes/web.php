@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminManagementController;
 use App\Http\Controllers\Admin\AiBotController;
+use App\Http\Controllers\Admin\AppReleaseController;
 use App\Http\Controllers\Admin\BulkTicketController;
 use App\Http\Controllers\Admin\CsatController as AdminCsatController;
 use App\Http\Controllers\Admin\DeviceLockConfigController;
@@ -97,7 +98,7 @@ Route::withoutMiddleware(['web'])->get('/build/{path}', function ($path) {
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [UserLoginController::class, 'showLoginForm'])->name('login');
-    Route::post('login', [UserLoginController::class, 'login'])->middleware('throttle:5,1');
+    Route::post('login', [UserLoginController::class, 'login'])->middleware('throttle:login');
 
     Route::get('register', [RegisterController::class, 'showForm'])->name('register');
 
@@ -193,7 +194,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
         Route::get('login', function () {
             return redirect()->route('login');
         })->name('login');
-        Route::post('login', [AdminLoginController::class, 'login'])->middleware('throttle:5,1');
+        Route::post('login', [AdminLoginController::class, 'login'])->middleware('throttle:login');
     });
 
     Route::middleware('auth:admin')->group(function () {
@@ -239,6 +240,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/konfigurasi/upload-sound', [SystemConfigController::class, 'uploadSound'])->name('konfigurasi.upload-sound');
             Route::post('/konfigurasi/test-sparc', [SystemConfigController::class, 'testSparcConnection'])->name('konfigurasi.test-sparc');
             Route::post('/konfigurasi/generate-sparc-credentials', [SystemConfigController::class, 'generateSparcCredentials'])->name('konfigurasi.generate-sparc-credentials');
+
+            Route::prefix('app-releases')->name('app-releases.')->group(function () {
+                Route::post('/', [AppReleaseController::class, 'store'])->name('store');
+                Route::put('/{appRelease}', [AppReleaseController::class, 'update'])->name('update');
+                Route::post('/{appRelease}/activate', [AppReleaseController::class, 'activate'])->name('activate');
+                Route::post('/{appRelease}/deactivate', [AppReleaseController::class, 'deactivate'])->name('deactivate');
+                Route::post('/{appRelease}/notify', [AppReleaseController::class, 'notify'])
+                    ->middleware('throttle:5,5')
+                    ->name('notify');
+                Route::delete('/{appRelease}', [AppReleaseController::class, 'destroy'])->name('destroy');
+            });
 
             // System Optimization (protected — admin only)
             Route::get('/system/optimize', function () {

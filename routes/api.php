@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AppVersionController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\ChatController;
 use App\Http\Controllers\Api\CsatApiController;
@@ -11,9 +12,11 @@ use App\Http\Controllers\Api\SparcIntegrationController;
 use App\Http\Controllers\Api\TicketController;
 use Illuminate\Support\Facades\Route;
 
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:api-login');
 Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
 Route::post('/contact-admin', [AuthController::class, 'contactAdmin'])->middleware('throttle:10,1');
+Route::get('/app-version', [AppVersionController::class, 'show'])->middleware('throttle:60,1');
+Route::post('/internal/app-releases', [AppVersionController::class, 'storeInternal'])->middleware('throttle:20,1');
 
 Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive::class.':api'])->group(function () {
     // Proxy to serve attachments with CORS headers for Flutter Web

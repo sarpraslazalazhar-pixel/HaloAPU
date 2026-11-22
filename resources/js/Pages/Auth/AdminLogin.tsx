@@ -2,6 +2,10 @@ import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import React, { FormEventHandler, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import toast, { Toaster } from 'react-hot-toast';
+import {
+  consumeSessionExpiredAlert,
+  registerBfcacheReload,
+} from '@/utils/sessionRecovery';
 
 export default function AdminLogin() {
   const { appConfig, flash } = usePage<any>().props;
@@ -14,12 +18,13 @@ export default function AdminLogin() {
 
   const [showPassword, setShowPassword] = useState(false);
 
+  useEffect(() => registerBfcacheReload(), []);
+
   useEffect(() => {
-    const sessionAlert = sessionStorage.getItem('session_expired_alert');
+    const sessionAlert = consumeSessionExpiredAlert();
 
     if (sessionAlert) {
       toast.error(sessionAlert, { id: 'session-expired-toast', duration: 5000 });
-      sessionStorage.removeItem('session_expired_alert');
     }
 
     if (flash?.error) {

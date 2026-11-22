@@ -4,10 +4,12 @@ namespace App\Providers;
 
 use App\Models\Admin;
 use App\Models\SystemConfig;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Notifications\Events\NotificationSent;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Cache;
@@ -109,14 +111,52 @@ class AppServiceProvider extends ServiceProvider
             // table not ready yet (migration)
         }
 
-        RateLimiter::for('login', function ($request) {
-            return Limit::perMinute(5)
-                ->by($request->input('username') . '|' . $request->ip())
-                ->response(function () {
-                    return back()->withErrors([
-                        'username' => 'Terlalu banyak percobaan login. Silakan coba lagi dalam 1 menit.',
-                    ]);
-                });
+        RateLimiter::for('login', function (Request $request) {
+            $username = Str::lower(trim((string) $request->input('username', '')));
+            $ip = (string) $request->ip();
+
+            $responseCallback = function (Request $request, array $headers) {
+                $seconds = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                return back()
+                    ->withErrors([
+                        'username' => "Terlalu banyak percobaan login. Silakan coba lagi dalam {$seconds} detik.",
+                    ])
+                    ->onlyInput('username');
+            };
+
+            return [
+                Limit::perMinute(5)
+                    ->by('web-login:' . $username . '|' . $ip)
+                    ->response($responseCallback),
+                Limit::perMinute(30)
+                    ->by('web-login-ip:' . $ip)
+                    ->response($responseCallback),
+            ];
+        });
+
+        RateLimiter::for('api-login', function (Request $request) {
+            $email = Str::lower(trim((string) $request->input('email', '')));
+            $ip = (string) $request->ip();
+
+            $responseCallback = function (Request $request, array $headers) {
+                $seconds = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                return response()->json([
+                    'message' => "Terlalu banyak percobaan login. Silakan coba lagi dalam {$seconds} detik.",
+                    'error_code' => 'RATE_LIMITED',
+                    'retry_after' => $seconds,
+                ], 429, $headers);
+            };
+
+            return [
+                Limit::perMinute(6)
+                    ->by('api-login:' . $email . '|' . $ip)
+                    ->response($responseCallback),
+                Limit::perMinute(30)
+                    ->by('api-login-ip:' . $ip)
+                    ->response($responseCallback),
+            ];
         });
 
         // Implicitly grant "Super Admin" role all permissions

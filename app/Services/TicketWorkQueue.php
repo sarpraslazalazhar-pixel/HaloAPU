@@ -24,19 +24,14 @@ class TicketWorkQueue
 
     /**
      * Slot holder plus the operator's pending queue, ordered exactly like promotion
-     * (urgent first, then FIFO by `assignment_queued_at`).
+     * (urgent first, then FIFO by `assignment_queued_at`), along with manual pending tickets.
      *
-     * @return array{work_hours_open: bool, next_open_at: ?string, active: array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: null}|null, queue: list<array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: int}>}
+     * @return array{work_hours_open: bool, next_open_at: ?string, active: array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: null, is_work_hours_paused: bool}|null, queue: list<array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: int, is_work_hours_paused: bool}>, paused: list<array{id: int, formatted_id: string, service: string, status: string, urgent: bool, position: null, is_work_hours_paused: bool}>}
      */
     public static function payload(int $adminId): array
     {
         $tickets = Ticket::where('assigned_admin_id', $adminId)
-            ->where(fn ($q) => $q->whereIn('status', self::ACTIVE_STATUSES)
-                ->orWhere(fn ($extra) => $extra->where('status', 'pending')
-                    ->where(fn ($pending) => $pending
-                        ->where(fn ($queued) => $queued->whereNotNull('assignment_queued_at')
-                            ->whereNotNull('assignment_resume_status'))
-                        ->orWhereNotNull('work_hours_resume_status'))))
+            ->whereIn('status', ['open', 'on_proses', 'pending', 'need_revision'])
             ->with('subUnit:id,nama_layanan')
             ->orderByRaw("CASE WHEN status = 'pending' THEN 1 ELSE 0 END")
             ->orderByRaw(self::QUEUE_ORDER_SQL)
@@ -47,6 +42,7 @@ class TicketWorkQueue
 
         $active = $tickets->first(fn (Ticket $ticket) => self::holdsSlot($ticket));
         $queued = $tickets->filter(fn (Ticket $ticket) => self::isQueued($ticket))->values();
+        $paused = $tickets->filter(fn (Ticket $ticket) => $ticket->status === 'pending' && ! self::holdsSlot($ticket) && ! self::isQueued($ticket))->values();
         $workHoursState = (new SlaCalculator)->workingHoursState(Carbon::now());
 
         $format = fn (Ticket $ticket, ?int $position) => [
@@ -64,6 +60,7 @@ class TicketWorkQueue
             'next_open_at' => $workHoursState['next_open_at']?->toIso8601String(),
             'active' => $active ? $format($active, null) : null,
             'queue' => $queued->map(fn (Ticket $ticket, int $i) => $format($ticket, $i + 1))->all(),
+            'paused' => $paused->map(fn (Ticket $ticket) => $format($ticket, null))->all(),
         ];
     }
 

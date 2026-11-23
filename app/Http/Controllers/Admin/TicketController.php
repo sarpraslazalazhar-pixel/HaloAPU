@@ -99,24 +99,44 @@ class TicketController extends Controller
         $workHoursOpen = (new SlaCalculator)->workingHoursState(Carbon::now())['is_open'];
 
         $operatorLoads = Ticket::query()
-            ->where(fn ($q) => $q->whereIn('status', TicketWorkQueue::ACTIVE_STATUSES)
-                ->orWhere(fn ($extra) => $extra->where('status', 'pending')
-                    ->where(fn ($pending) => $pending
-                        ->where(fn ($queued) => $queued->whereNotNull('assignment_queued_at')
-                            ->whereNotNull('assignment_resume_status'))
-                        ->orWhereNotNull('work_hours_resume_status'))))
+            ->accessibleBy($admin)
+            ->whereIn('status', $activeStatuses)
             ->whereNotNull('assigned_admin_id')
             ->with(['assignedAdmin:id,name,username', 'subUnit:id,nama_layanan'])
-            ->get(['id', 'assigned_admin_id', 'status', 'priority', 'sub_unit_id', 'assignment_queued_at', 'work_hours_resume_status'])
+            ->get([
+                'id',
+                'assigned_admin_id',
+                'status',
+                'priority',
+                'sub_unit_id',
+                'assignment_queued_at',
+                'assignment_resume_status',
+                'work_hours_resume_status',
+                'created_at',
+            ])
             ->groupBy('assigned_admin_id')
             ->map(function ($rows) use ($canSeeQueues, $workHoursOpen) {
-                $working = $rows->whereNotIn('status', ['pending']);
-                $paused = $rows->where('status', 'pending')
-                    ->filter(fn ($t) => $t->work_hours_resume_status !== null && $t->assignment_queued_at === null)
+                $isQueued = fn ($t): bool => $t->status === 'pending'
+                    && $t->assignment_queued_at !== null
+                    && $t->assignment_resume_status !== null;
+
+                $working = $rows->whereIn('status', TicketWorkQueue::ACTIVE_STATUSES)->values();
+                $queued = $rows->filter($isQueued)
+                    ->sortBy(fn ($t) => [
+                        $t->priority === 'Urgen' ? 0 : 1,
+                        (string) $t->assignment_queued_at,
+                        (string) $t->created_at,
+                        (int) $t->id,
+                    ])
                     ->values();
-                $queued = $rows->where('status', 'pending')
-                    ->filter(fn ($t) => $t->assignment_queued_at !== null)
-                    ->sortBy(fn ($t) => [$t->priority === 'Urgen' ? 0 : 1, (string) $t->assignment_queued_at, (int) $t->id])
+                $paused = $rows->filter(fn ($t) => $t->status === 'pending')
+                    ->reject($isQueued)
+                    ->sortBy(fn ($t) => [
+                        $t->work_hours_resume_status !== null ? 0 : 1,
+                        $t->priority === 'Urgen' ? 0 : 1,
+                        (string) $t->created_at,
+                        (int) $t->id,
+                    ])
                     ->values();
 
                 $mapRow = fn ($t, ?int $position) => [
@@ -127,20 +147,22 @@ class TicketController extends Controller
                     'urgent' => $t->priority === 'Urgen',
                     'position' => $position,
                     'is_work_hours_paused' => $position === null && $t->work_hours_resume_status !== null,
+                    'is_manual_pending' => $position === null && $t->status === 'pending' && $t->work_hours_resume_status === null,
                     'waiting_for_work_hours' => $position !== null && ! $workHoursOpen,
                 ];
 
                 return [
                     'admin_id' => (int) $rows->first()->assigned_admin_id,
                     'name' => $rows->first()->assignedAdmin?->name ?? $rows->first()->assignedAdmin?->username ?? 'Petugas',
+                    'total' => $rows->count(),
                     'working' => $working->count(),
                     'paused' => $paused->count(),
                     'queued' => $queued->count(),
                     'work_hours_open' => $workHoursOpen,
                     'tickets' => $canSeeQueues
                         ? $working->map(fn ($t) => $mapRow($t, null))
-                            ->concat($paused->map(fn ($t) => $mapRow($t, null)))
                             ->concat($queued->map(fn ($t, $i) => $mapRow($t, $i + 1)))
+                            ->concat($paused->map(fn ($t) => $mapRow($t, null)))
                             ->values()->all()
                         : [],
                 ];

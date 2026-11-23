@@ -16,6 +16,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -456,5 +457,106 @@ class TicketWorkQueueTest extends TestCase
 
         $this->assertNull($legacyPending->fresh()->assignment_queued_at);
         $this->assertNull($legacyPending->fresh()->assignment_resume_status);
+    }
+
+    public function test_operator_loads_on_admin_index_counts_all_assigned_active_and_pending_tickets(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:00:00'));
+
+        $active = $this->ticket('on_proses');
+        $this->tracking($active);
+        TicketWorkQueue::assign($active, $this->operatorA, $this->superAdmin);
+
+        $queued = $this->ticket('open');
+        $this->tracking($queued);
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:05:00'));
+        TicketWorkQueue::assign($queued, $this->operatorA, $this->superAdmin);
+
+        $manualPendingIds = [];
+        for ($i = 0; $i < 5; $i++) {
+            Carbon::setTestNow(Carbon::parse('2026-07-13 09:10:00')->addMinutes($i));
+            $pendingTicket = $this->ticket('pending');
+            $this->tracking($pendingTicket, ['paused_at' => Carbon::now()]);
+            $pendingTicket->update(['assigned_admin_id' => $this->operatorA->id]);
+            $manualPendingIds[] = (int) $pendingTicket->id;
+        }
+
+        // Tiket selesai tidak masuk beban kerja aktif/terbuka.
+        $solved = $this->ticket('solve');
+        $solved->update(['assigned_admin_id' => $this->operatorA->id]);
+
+        $this->actingAs($this->superAdmin, 'admin')
+            ->get(route('admin.tiket.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Tiketing/Index')
+                ->has('operatorLoads', 1)
+                ->where('operatorLoads.0.admin_id', $this->operatorA->id)
+                ->where('operatorLoads.0.total', 7)
+                ->where('operatorLoads.0.working', 1)
+                ->where('operatorLoads.0.queued', 1)
+                ->where('operatorLoads.0.paused', 5)
+                ->has('operatorLoads.0.tickets', 7)
+                ->where('operatorLoads.0.tickets.0.id', (int) $active->id)
+                ->where('operatorLoads.0.tickets.0.position', null)
+                ->where('operatorLoads.0.tickets.0.is_manual_pending', false)
+                ->where('operatorLoads.0.tickets.1.id', (int) $queued->id)
+                ->where('operatorLoads.0.tickets.1.position', 1)
+                ->where('operatorLoads.0.tickets.2.id', $manualPendingIds[0])
+                ->where('operatorLoads.0.tickets.2.position', null)
+                ->where('operatorLoads.0.tickets.2.is_manual_pending', true)
+                ->where('operatorLoads.0.tickets.2.is_work_hours_paused', false)
+            );
+    }
+
+    public function test_operator_loads_on_admin_index_respects_accessible_by_unit_scope(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:00:00'));
+
+        $otherUnit = Unit::create(['nama_unit' => 'Keuangan', 'deskripsi' => 'Finance', 'aktif' => true]);
+        $otherSubUnit = SubUnit::create([
+            'unit_id' => $otherUnit->id,
+            'nama_layanan' => 'Reimbursement',
+            'deskripsi' => 'Keuangan',
+            'aktif' => true,
+            'is_monitored' => false,
+        ]);
+
+        $otherOperator = Admin::create([
+            'username' => 'queue_operator_other_unit',
+            'email' => 'queue_operator_other_unit@example.com',
+            'name' => 'OPERATOR OTHER',
+            'password' => Hash::make('password'),
+        ]);
+        $otherOperator->assignRole('Operator');
+        $otherOperator->units()->attach($otherUnit->id);
+
+        $unitAdmin = $this->makeAdmin('queue_unit_admin', 'Operator');
+
+        $visibleTicket = $this->ticket('open');
+        $this->tracking($visibleTicket);
+        TicketWorkQueue::assign($visibleTicket, $this->operatorA, $this->superAdmin);
+
+        $hiddenTicket = Ticket::create([
+            'user_id' => $this->user->id,
+            'unit_id' => $otherUnit->id,
+            'sub_unit_id' => $otherSubUnit->id,
+            'form_data' => [(string) $this->startField->id => '2026-07-13'],
+            'status' => 'pending',
+            'priority' => 'Sedang',
+            'assigned_admin_id' => $otherOperator->id,
+        ]);
+
+        $this->actingAs($unitAdmin, 'admin')
+            ->get(route('admin.tiket.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Tiketing/Index')
+                ->has('operatorLoads', 1)
+                ->where('operatorLoads.0.admin_id', $this->operatorA->id)
+                ->where('operatorLoads.0.total', 1)
+            );
+
+        $this->assertSame('pending', $hiddenTicket->fresh()->status);
     }
 }

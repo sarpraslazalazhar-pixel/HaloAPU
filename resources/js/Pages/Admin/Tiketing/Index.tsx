@@ -31,12 +31,47 @@ interface Ticket {
  assignment_queued_at?: string | null;
 }
 
+interface OperatorLoadTicket {
+ id: number;
+ formatted_id: string;
+ service: string;
+ status: string;
+ urgent: boolean;
+ position: number | null;
+ is_work_hours_paused?: boolean;
+ is_manual_pending?: boolean;
+ waiting_for_work_hours?: boolean;
+}
+
+interface OperatorLoad {
+ admin_id: number;
+ name: string;
+ total?: number;
+ working: number;
+ paused: number;
+ queued: number;
+ work_hours_open: boolean;
+ tickets: OperatorLoadTicket[];
+}
+
+type TicketFilterParams = {
+ tab: string;
+ unit_id?: string;
+ sub_unit_id?: string;
+ status?: string[];
+ date_from?: string;
+ date_to?: string;
+ divisi_id?: string;
+ org_unit_id?: string;
+ search?: string;
+};
+
 const TABS = [
  { key: 'masuk', label: 'Tiket Masuk', Icon: Inbox },
  { key: 'saya_ajukan', label: 'Tiket Saya Ajukan', Icon: Send },
 ];
 
-export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts, operatorLoads = [], canBulkCreate = false }: any) {
+export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts, operatorLoads = [], canBulkCreate = false }: { tickets: any; filters: any; units: any; divisiList: any; orgUnitList: any; currentTab?: string; tabCounts: any; operatorLoads?: OperatorLoad[]; canBulkCreate?: boolean }) {
  const [showFilter, setShowFilter] = useState(() => {
  return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
  });
@@ -75,7 +110,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  };
 
   const applyFilter = (searchOverride?: string) => {
-    const params: { [key: string]: string | string[] | undefined } = { tab: currentTab };
+    const params: TicketFilterParams = { tab: currentTab };
     const keyword = searchOverride ?? search;
 
  if (unitId) params.unit_id = unitId;
@@ -155,6 +190,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  header: 'Sumber',
  render: (t: Ticket) => {
  const isMobile = (t.source || 'web') === 'mobile';
+
  return (
  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${isMobile ? 'bg-sky-50 text-sky-700' : 'bg-slate-100 text-slate-600'}`}>
  {isMobile ? 'Mobile' : 'Web'}
@@ -194,24 +230,28 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  <div className="mb-4 rounded-lg border bg-white p-3">
  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Beban Kerja Petugas</p>
  <ul className="flex flex-col gap-1">
- {operatorLoads.map((op: any) => {
+ {operatorLoads.map((op: OperatorLoad) => {
  const expanded = openOperator === op.admin_id;
  const hasDetail = (op.tickets?.length ?? 0) > 0;
+
  return (
  <li key={op.admin_id} className="rounded-md border">
  <button
  type="button"
  onClick={() => hasDetail && setOpenOperator(expanded ? null : op.admin_id)}
  aria-expanded={expanded}
- className="flex w-full items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
+ className="flex w-full flex-wrap items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-md"
  >
  <span className="font-medium text-slate-700">{op.name}</span>
+ <span className="rounded bg-slate-100 px-1.5 py-0.5 font-semibold text-slate-700">
+ {op.total ?? (op.working + op.paused + op.queued)} tiket
+ </span>
  <span className="rounded bg-sky-100 px-1.5 py-0.5 font-semibold text-sky-800">{op.working} dikerjakan</span>
- {op.paused > 0 && (
- <span className="rounded bg-orange-100 px-1.5 py-0.5 font-semibold text-orange-800">{op.paused} tertunda</span>
- )}
  {op.queued > 0 && (
  <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">{op.queued} antre</span>
+ )}
+ {op.paused > 0 && (
+ <span className="rounded bg-orange-100 px-1.5 py-0.5 font-semibold text-orange-800">{op.paused} tertunda</span>
  )}
  {hasDetail && (
  <ChevronDown className={`ml-auto h-3.5 w-3.5 text-slate-400 transition-transform ${expanded ? 'rotate-180' : ''}`} />
@@ -219,15 +259,27 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </button>
  {expanded && hasDetail && (
  <ul className="space-y-1 border-t px-2.5 py-2">
- {op.tickets.map((tk: any) => (
+ {op.tickets.map((tk: OperatorLoadTicket) => (
  <li key={tk.id} className="flex flex-wrap items-center gap-2 text-xs">
  <span className="font-mono font-medium">#TKT-{tk.formatted_id}</span>
  <span className="text-slate-500">{tk.service}</span>
  <StatusBadge status={tk.status} />
- <span className={`font-medium ${tk.position === null ? 'text-sky-700' : 'text-amber-700'}`}>
+ <span
+ className={`font-medium ${
+ tk.position !== null
+ ? 'text-amber-700'
+ : tk.is_work_hours_paused || tk.is_manual_pending || tk.status === 'pending'
+ ? 'text-orange-700'
+ : 'text-sky-700'
+ }`}
+ >
  {tk.position !== null
-   ? op.work_hours_open ? `Antrean ke-${tk.position}` : `Antrean ke-${tk.position} • menunggu jam kerja`
-   : tk.is_work_hours_paused ? 'Tertunda' : 'Sedang dikerjakan'}
+ ? op.work_hours_open ? `Antrean ke-${tk.position}` : `Antrean ke-${tk.position} • menunggu jam kerja`
+ : tk.is_work_hours_paused
+ ? 'Tertunda • jeda jam kerja'
+ : tk.status === 'pending'
+ ? 'Tertunda'
+ : 'Sedang dikerjakan'}
  </span>
  {tk.urgent && (
  <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">Urgen</span>

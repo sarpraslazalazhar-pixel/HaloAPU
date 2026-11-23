@@ -21,6 +21,7 @@ export interface ActiveTicketPayload {
   next_open_at: string | null;
   active: ActiveTicket | null;
   queue: ActiveTicket[];
+  paused?: ActiveTicket[];
 }
 
 interface Props {
@@ -33,7 +34,7 @@ interface ActiveTicketEvents {
   '.pusher:subscription_succeeded': Record<string, never>;
 }
 
-const EMPTY: ActiveTicketPayload = { work_hours_open: false, next_open_at: null, active: null, queue: [] };
+const EMPTY: ActiveTicketPayload = { work_hours_open: false, next_open_at: null, active: null, queue: [], paused: [] };
 
 export default function ActiveAssignedTicket({ adminId, initialPayload }: Props) {
   const { auth } = usePage<any>().props;
@@ -65,21 +66,24 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
       if (!response.ok || !(response.headers.get('content-type') ?? '').includes('application/json')) {
         if (response.status === 401 || response.status === 403) setPayload(EMPTY);
         setStale(true);
+
         return;
       }
 
       const body = await response.json();
+
       if (!mounted.current) return;
 
       setPayload({
         active: body.data?.active ?? null,
         queue: body.data?.queue ?? [],
+        paused: body.data?.paused ?? [],
         work_hours_open: body.data?.work_hours_open ?? false,
         next_open_at: body.data?.next_open_at ?? null,
       });
       setStale(false);
     } catch (error) {
-      if (!mounted.current || (error as Error)?.name === 'AbortError') return;
+      if (!mounted.current || (error instanceof Error && error.name === 'AbortError')) return;
       setStale(true);
     }
   }, []);
@@ -104,7 +108,9 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
     const poll = window.Echo ? null : window.setInterval(() => {
       if (!document.hidden) void refresh();
     }, 20000);
+
     const nextOpenAt = payload.next_open_at ? Date.parse(payload.next_open_at) : NaN;
+
     const openingRefresh = window.Echo
       && payload.active?.is_work_hours_paused
       && !payload.work_hours_open
@@ -115,7 +121,9 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
     return () => {
       mounted.current = false;
       inFlight.current?.abort();
+
       if (poll !== null) window.clearInterval(poll);
+
       if (openingRefresh !== null) window.clearTimeout(openingRefresh);
       document.removeEventListener('visibilitychange', onVisible);
       unsubscribe();
@@ -150,14 +158,17 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
     );
   };
 
-  const total = (payload.active ? 1 : 0) + payload.queue.length;
+  const pausedList = payload.paused ?? [];
+  const total = (payload.active ? 1 : 0) + payload.queue.length + pausedList.length;
 
   if (total === 0 && !stale) return null;
 
-  const rows = payload.active ? [payload.active, ...payload.queue] : payload.queue;
+  const rows = [...(payload.active ? [payload.active] : []), ...payload.queue, ...pausedList];
+
   const resumeCount = payload.work_hours_open
     ? rows.filter((ticket) => ticket.is_work_hours_paused).length
     : 0;
+
   const activeState = payload.active?.is_work_hours_paused
     ? payload.work_hours_open ? 'perlu dilanjutkan' : 'tertunda menunggu jam kerja'
     : 'aktif';
@@ -178,12 +189,12 @@ export default function ActiveAssignedTicket({ adminId, initialPayload }: Props)
                 </div>
                 <p className="truncate text-xs text-muted-foreground">{ticket.service}</p>
                 <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className={`text-xs font-medium ${ticket.is_work_hours_paused && payload.work_hours_open ? 'text-amber-700' : 'text-sky-700'}`}>
+                  <span className={`text-xs font-medium ${ticket.position !== null ? 'text-amber-700' : ticket.is_work_hours_paused ? (payload.work_hours_open ? 'text-amber-700' : 'text-orange-700') : ticket.status === 'pending' ? 'text-orange-700' : 'text-sky-700'}`}>
                     {ticket.position !== null
                       ? `Antrean ke-${ticket.position}`
                       : ticket.is_work_hours_paused
                         ? payload.work_hours_open ? 'Perlu dilanjutkan' : 'Tertunda • menunggu jam kerja'
-                        : 'Sedang dikerjakan'}
+                        : ticket.status === 'pending' ? 'Tertunda' : 'Sedang dikerjakan'}
                   </span>
                   {ticket.urgent && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-700">

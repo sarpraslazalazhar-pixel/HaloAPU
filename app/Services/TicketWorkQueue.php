@@ -226,6 +226,37 @@ class TicketWorkQueue
         return self::adminHasHolder($adminId, (int) $ticket->id);
     }
 
+    public static function enqueuePending(Ticket $ticket, Admin $actor): Ticket
+    {
+        return self::mutate($ticket, null, function (Ticket $locked, Carbon $at) {
+            if ($locked->assigned_admin_id === null) {
+                throw new InvalidArgumentException('Pilih petugas terlebih dahulu sebelum memasukkan tiket ke antrean.');
+            }
+
+            if ($locked->status !== 'pending') {
+                throw new InvalidArgumentException('Hanya tiket berstatus tertunda yang dapat dimasukkan ke antrean.');
+            }
+
+            if (self::isQueued($locked)) {
+                throw new InvalidArgumentException('Tiket sudah berada dalam antrean petugas.');
+            }
+
+            if ($locked->work_hours_resume_status !== null) {
+                throw new InvalidArgumentException('Tiket ini ditunda karena jam kerja. Gunakan Lanjutkan Tiket setelah jam kerja buka.');
+            }
+
+            $sla = $locked->slaTracking()->first();
+            $wasInProgress = ($sla && $sla->responded_at !== null)
+                || $locked->logs()->where('aksi', 'on_proses')->exists();
+
+            $readyStatus = in_array($locked->assignment_resume_status, self::ACTIVE_STATUSES, true)
+                ? $locked->assignment_resume_status
+                : ($wasInProgress ? 'on_proses' : 'open');
+
+            self::place($locked, $readyStatus, $at);
+        });
+    }
+
     public static function assign(Ticket $ticket, ?Admin $operator, Admin $actor): Ticket
     {
         $targetAdminId = $operator ? (int) $operator->id : null;
@@ -235,9 +266,9 @@ class TicketWorkQueue
                 return;
             }
 
-            $readyStatus = $locked->assignment_queued_at !== null
-                ? $locked->assignment_resume_status
-                : ($locked->work_hours_resume_status ?? $locked->status);
+            $readyStatus = $locked->assignment_resume_status
+                ?? $locked->work_hours_resume_status
+                ?? $locked->status;
             $locked->assigned_admin_id = $targetAdminId;
             self::writeLog(
                 $locked,
@@ -542,8 +573,17 @@ class TicketWorkQueue
     private static function restore(Ticket $ticket, string $readyStatus, Carbon $at): void
     {
         $wasQueued = $ticket->assignment_queued_at !== null;
-        if ($wasQueued && ($sla = self::unfinishedTracking($ticket))) {
+        $wasPending = $ticket->status === 'pending' && $ticket->work_hours_resume_status === null;
+        if (($wasQueued || $wasPending) && ($sla = self::unfinishedTracking($ticket))) {
             (new SlaCalculator)->resumeSla($sla, $at);
+            if ($readyStatus === 'on_proses' && $sla->responded_at === null) {
+                $sla->refresh();
+                $sla->update([
+                    'responded_at' => $at,
+                    'is_response_breached' => $sla->is_response_breached
+                        || ($sla->sla_response_deadline && $at->gt($sla->sla_response_deadline)),
+                ]);
+            }
         }
 
         $ticket->update([
@@ -552,10 +592,10 @@ class TicketWorkQueue
             'assignment_resume_status' => null,
         ]);
 
-        if ($wasQueued) {
+        if ($wasQueued || $wasPending) {
             $note = self::adminId($ticket) === null
                 ? 'Tiket keluar dari antrean karena penugasan dilepas.'
-                : 'Tiket mendapat giliran petugas.';
+                : ($wasQueued ? 'Tiket mendapat giliran petugas.' : 'Tiket diaktifkan dari status tertunda.');
             self::writeLog($ticket, null, $readyStatus, $note, $at);
             self::notifyStatusChange($ticket);
         }

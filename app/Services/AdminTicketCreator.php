@@ -80,7 +80,8 @@ class AdminTicketCreator
         $data = $row['data'];
         $subUnit = $row['subUnit'];
         $formData = $data['form_data'];
-        $initialStatus = $this->slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
+        $isWorkingHours = $this->slaCalculator->isWithinWorkingHours(now());
+        $initialStatus = $isWorkingHours ? 'open' : 'pending';
 
         $attributes = [
             'user_id' => null,
@@ -89,6 +90,7 @@ class AdminTicketCreator
             'sub_unit_id' => $data['sub_unit_id'],
             'form_data' => $formData,
             'status' => $initialStatus,
+            'assignment_resume_status' => $isWorkingHours ? null : 'open',
             'source' => 'web',
         ];
 

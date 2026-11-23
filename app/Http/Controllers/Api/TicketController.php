@@ -264,7 +264,8 @@ class TicketController extends Controller
         }
 
         $slaCalculator = new SlaCalculator;
-        $initialStatus = $slaCalculator->isWithinWorkingHours(now()) ? 'open' : 'pending';
+        $isWorkingHours = $slaCalculator->isWithinWorkingHours(now());
+        $initialStatus = $isWorkingHours ? 'open' : 'pending';
 
         $ticket = DB::transaction(function () use (
             $request,
@@ -272,6 +273,7 @@ class TicketController extends Controller
             $validated,
             $subUnit,
             $formData,
+            $isWorkingHours,
             $initialStatus,
             $slaCalculator,
             $window,
@@ -298,6 +300,7 @@ class TicketController extends Controller
             $ticket->unit_id = $subUnit->unit_id;
             $ticket->form_data = $formData;
             $ticket->status = $initialStatus;
+            $ticket->assignment_resume_status = $isWorkingHours ? null : 'open';
             $ticket->priority = $validated['priority'] ?? 'normal';
             $ticket->source = 'mobile';
             $ticket->save();
@@ -1040,9 +1043,61 @@ class TicketController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        $fresh = $ticket->fresh();
+
         return response()->json([
-            'message' => 'Status tiket berhasil diperbarui',
-            'data' => $this->formatTicket($ticket->fresh()),
+            'message' => $fresh->assignment_queued_at !== null
+                ? 'Tiket dimasukkan ke antrean petugas dan akan otomatis diproses saat giliran tiba.'
+                : 'Status tiket berhasil diperbarui',
+            'data' => $this->formatTicket($fresh),
+        ]);
+    }
+
+    /**
+     * Enqueue a pending assigned ticket into operator's work queue (Admin only).
+     */
+    public function enqueuePending(Request $request, string $id)
+    {
+        $user = $request->user();
+
+        if (! $user instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat memasukkan tiket ke antrean'], 403);
+        }
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (! $ticket->isAccessibleBy($user)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk mengelola tiket ini.'], 403);
+        }
+
+        $canEnqueue = $user->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || $user->isCoordinator()
+            || $user->checkPermissionTo('akses-assign-operator')
+            || ($ticket->assigned_admin_id !== null && (int) $ticket->assigned_admin_id === (int) $user->id);
+
+        if (! $canEnqueue) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk memasukkan tiket ini ke antrean.'], 403);
+        }
+
+        try {
+            $updated = TicketWorkQueue::enqueuePending($ticket, $user);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        $queued = $updated->assignment_queued_at !== null;
+
+        return response()->json([
+            'message' => $queued
+                ? 'Tiket berhasil dimasukkan ke antrean petugas.'
+                : 'Slot petugas kosong; tiket langsung diaktifkan untuk dikerjakan.',
+            'data' => $this->formatTicket($updated->fresh(['subUnit', 'assignedAdmin', 'user'])),
         ]);
     }
 

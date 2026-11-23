@@ -92,6 +92,22 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [subUnits, setSubUnits] = useState<any[]>([]);
  const [search, setSearch] = useState(filters?.search || '');
  const [openOperator, setOpenOperator] = useState<number | null>(null);
+ const [enqueuingTicketId, setEnqueuingTicketId] = useState<number | null>(null);
+
+ const enqueueTicket = (ticketId: number) => {
+  if (enqueuingTicketId !== null) return;
+
+  setEnqueuingTicketId(ticketId);
+  router.post(
+   route('admin.tiket.enqueue', ticketId),
+   {},
+   {
+    preserveScroll: true,
+    preserveState: true,
+    onFinish: () => setEnqueuingTicketId(null),
+   },
+  );
+ };
 
  useEffect(() => {
  if (unitId) {
@@ -306,6 +322,17 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  <ArrowDown className="size-3.5" />
  </Button>
  </>
+ )}
+ {tk.position === null && !tk.is_work_hours_paused && tk.status === 'pending' && (
+ <Button
+ variant="outline"
+ size="sm"
+ disabled={enqueuingTicketId === tk.id}
+ className="h-7 border-amber-300 bg-amber-50 px-2 text-xs font-medium text-amber-800 hover:bg-amber-100"
+ onClick={() => enqueueTicket(tk.id)}
+ >
+ {enqueuingTicketId === tk.id ? 'Memproses...' : 'Masuk Antrean'}
+ </Button>
  )}
  <Button variant="ghost" size="sm" onClick={() => router.get(route('admin.tiket.show', tk.id))}>
  Lihat

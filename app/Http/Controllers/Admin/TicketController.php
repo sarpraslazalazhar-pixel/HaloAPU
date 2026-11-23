@@ -332,7 +332,46 @@ class TicketController extends Controller
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->back()->with('success', 'Status tiket berhasil diubah.');
+        $queued = $ticket->assignment_queued_at !== null;
+
+        return redirect()->back()->with(
+            'success',
+            $queued
+                ? 'Tiket dimasukkan ke antrean petugas dan akan otomatis diproses saat giliran tiba.'
+                : 'Status tiket berhasil diubah.'
+        );
+    }
+
+    public function enqueuePending(Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak mengelola tiket ini.');
+        }
+
+        $canEnqueue = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || $admin->isCoordinator()
+            || $admin->checkPermissionTo('akses-assign-operator')
+            || ($ticket->assigned_admin_id !== null && (int) $ticket->assigned_admin_id === (int) $admin->id);
+
+        if (! $canEnqueue) {
+            abort(403, 'Kamu tidak memiliki hak akses untuk memasukkan tiket ini ke antrean.');
+        }
+
+        try {
+            $updated = TicketWorkQueue::enqueuePending($ticket, $admin);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        $queued = $updated->assignment_queued_at !== null;
+
+        return redirect()->back()->with(
+            'success',
+            $queued
+                ? 'Tiket berhasil dimasukkan ke antrean petugas.'
+                : 'Slot petugas kosong; tiket langsung diaktifkan untuk dikerjakan.'
+        );
     }
 
     public function resumeWork(Ticket $ticket, SlaCalculator $slaCalculator)

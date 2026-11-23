@@ -55,13 +55,40 @@ class TicketStatusService
                 throw new InvalidArgumentException('Gunakan Lanjutkan Tiket setelah jam kerja buka.');
             }
 
-            if ($newStatus === 'on_proses' && ! (new SlaCalculator)->isWithinWorkingHours($at)) {
-                throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
-            }
+            if ($newStatus === 'on_proses') {
+                if ($lockedTicket->assignment_queued_at !== null) {
+                    throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
+                }
 
-            if ($newStatus === 'on_proses' && ($lockedTicket->assignment_queued_at !== null
-                || ($lockedTicket->assigned_admin_id !== null && TicketWorkQueue::hasOtherActive($lockedTicket, (int) $lockedTicket->assigned_admin_id)))) {
-                throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
+                $withinWorkHours = (new SlaCalculator)->isWithinWorkingHours($at);
+                $operatorBusy = $lockedTicket->assigned_admin_id !== null
+                    && TicketWorkQueue::hasOtherActive($lockedTicket, (int) $lockedTicket->assigned_admin_id);
+
+                if ($oldStatus === 'pending'
+                    && $lockedTicket->assigned_admin_id !== null
+                    && (! $withinWorkHours || $operatorBusy)) {
+                    TicketWorkQueue::place($lockedTicket, 'on_proses', $at);
+
+                    if (filled($catatan)) {
+                        TicketLog::create([
+                            'ticket_id' => $lockedTicket->id,
+                            'admin_id' => $actor?->id,
+                            'aksi' => 'pending',
+                            'catatan' => $catatan,
+                            'timestamp' => $at,
+                        ]);
+                    }
+
+                    return;
+                }
+
+                if (! $withinWorkHours) {
+                    throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
+                }
+
+                if ($operatorBusy) {
+                    throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
+                }
             }
 
             if (! in_array($newStatus, self::VALID_TRANSITIONS[$oldStatus] ?? [], true)) {

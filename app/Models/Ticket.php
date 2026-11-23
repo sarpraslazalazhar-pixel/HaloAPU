@@ -141,7 +141,10 @@ class Ticket extends Model
     public function isOpenForCancellation(): bool
     {
         return $this->status === 'open'
-            || ($this->status === 'pending' && $this->work_hours_resume_status === 'open');
+            || ($this->status === 'pending' && (
+                $this->work_hours_resume_status === 'open'
+                || ($this->assignment_queued_at === null && $this->assignment_resume_status === 'open')
+            ));
     }
 
     public function createdByAdmin()

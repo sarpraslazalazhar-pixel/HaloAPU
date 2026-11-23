@@ -79,7 +79,7 @@ interface TicketDetailData {
 
 interface TicketDetailProps {
   ticket: TicketDetailData;
-  formFields?: Array<{ id: number; label: string; tipe_field: string; [key: string]: unknown }>;
+  formFields?: FormField[];
   operators?: Array<{ id: number; name?: string; username?: string }>;
   isSubmittedByMe?: boolean;
   canManage?: boolean;
@@ -87,12 +87,15 @@ interface TicketDetailProps {
   work_hours?: WorkHoursInfo | null;
 }
 
+interface AdminDetailPageProps {
+  auth?: { is_super_admin?: boolean; permissions?: string[]; admin?: { id?: number } };
+  errors?: Record<string, string>;
+}
+
 export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canEditForm, work_hours }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
-  const { auth, errors: pageErrors } = usePage().props as unknown as {
-    auth?: { is_super_admin?: boolean; permissions?: string[]; admin?: { id?: number } };
-    errors?: Record<string, string>;
-  };
+  const { auth, errors: pageErrors } = usePage().props as AdminDetailPageProps;
+
   const canAssignOperator = auth?.permissions?.includes('akses-assign-operator');
   const slaPaused = ticket.sla_tracking?.paused_at != null || ticket.status.toLowerCase() === 'pending';
   const slaNow = Math.floor(Date.now() / 1000) * 1000;
@@ -103,12 +106,15 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCancelBookingConfirm, setShowCancelBookingConfirm] = useState(false);
   const [showCancelTicketConfirm, setShowCancelTicketConfirm] = useState(false);
-  const isCreator = typeof isSubmittedByMe === 'boolean'
+
+  const isCreator = isSubmittedByMe !== undefined
     ? isSubmittedByMe
     : (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id);
+
   const canCancelTicket = canManage && (ticket.status === 'open'
     || (ticket.status === 'pending' && work_hours?.reason === 'paused' && work_hours.resume_status === 'open'))
     && (auth?.is_super_admin || isCreator);
+
   const [showKembaliModal, setShowKembaliModal] = useState(false);
   const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
   const [catatanKembali, setCatatanKembali] = useState('');
@@ -116,6 +122,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const [isReturned, setIsReturned] = useState(Boolean(ticket.dikembalikan_at));
   const [tab, setTab] = useState(canManage ? 'chat' : 'informasi');
   const [resuming, setResuming] = useState(false);
+  const [enqueuing, setEnqueuing] = useState(false);
   const chatPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -144,18 +151,22 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
 
   const bookingServiceTitle = (() => {
     const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
+
     if (/^peminjaman\s+/i.test(rawName)) {
       return rawName;
     }
+
     if (/^penggunaan\s+/i.test(rawName)) {
       return rawName.replace(/^penggunaan\s+/i, 'Peminjaman ');
     }
+
     return `Peminjaman ${rawName}`;
   })();
 
   const isBookingPast = Boolean(
     ticket.booking?.tanggal_selesai && new Date(ticket.booking.tanggal_selesai) <= new Date()
   );
+
   const canCancelBooking = Boolean(
     canManage && ticket.booking &&
     !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking.status) &&
@@ -185,6 +196,17 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
       preserveScroll: true,
       preserveState: true,
       onFinish: () => setResuming(false),
+    });
+  };
+
+  const enqueueTicket = () => {
+    if (enqueuing) return;
+
+    setEnqueuing(true);
+    router.post(route('admin.tiket.enqueue', ticket.id), {}, {
+      preserveScroll: true,
+      preserveState: true,
+      onFinish: () => setEnqueuing(false),
     });
   };
 
@@ -233,31 +255,40 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     const isPriorityChanged = selectedPriority !== '' && selectedPriority !== currentPriority;
 
     const selectedStatus = isQueued || isWorkHoursPaused ? '' : statusData.status;
+
     if (!selectedStatus && !isOperatorChanged && !isPriorityChanged) {
       alert('Silakan pilih status, operator, atau prioritas yang ingin diubah terlebih dahulu.');
+
       return;
     }
 
     setIsSubmitting(true);
     const stop = () => setIsSubmitting(false);
+
     const afterSuccess = (next: (updatedTicket?: TicketDetailData) => void) => (page: { props: unknown }) => {
+      // SAFETY: Inertia response props carry flash messages and updated ticket payload.
       const { flash, ticket: updatedTicket } = page.props as { flash?: { error?: string }; ticket?: TicketDetailData };
+
       if (flash?.error) {
         stop();
       } else {
         next(updatedTicket);
       }
     };
+
     const savePriority = () => {
       if (!isPriorityChanged) {
         stop();
+
         return;
       }
+
       router.patch(route('admin.tiket.priority', ticket.id), { priority: selectedPriority }, {
         preserveScroll: true,
         onFinish: stop,
       });
     };
+
     const saveAssignment = (next: (updatedTicket?: TicketDetailData) => void) => {
       router.patch(route('admin.tiket.assign', ticket.id), { assigned_admin_id: selectedAssignedId }, {
         preserveScroll: true,
@@ -265,6 +296,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
         onError: stop,
       });
     };
+
     const saveStatus = (next: () => void) => {
       patchStatus(route('admin.tiket.status', ticket.id), {
         preserveScroll: true,
@@ -782,6 +814,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                             disabled={isSubmittingKembali}
                             onClick={() => {
                               setIsSubmittingKembali(true);
+
                               try {
                                 const url = `/admin/tiket/${ticket.id}/kembalikan-alat`;
                                 router.patch(
@@ -856,6 +889,24 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                   <CardTitle>Aksi Tiket</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-5">
+                  {canManage && ticket.status === 'pending' && !isQueued && !isWorkHoursPaused && Boolean(ticket.assigned_admin_id) && (
+                    <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
+                      <p className="text-xs text-amber-900">
+                        Tiket ini berstatus tertunda dan belum berada dalam antrean petugas. Masukkan ke antrean agar otomatis diproses saat giliran tiba.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={enqueuing}
+                        className="w-full border-amber-300 bg-white text-amber-800 hover:bg-amber-100"
+                        onClick={enqueueTicket}
+                      >
+                        {enqueuing ? 'Memasukkan ke Antrean...' : 'Masuk Antrean Petugas'}
+                      </Button>
+                    </div>
+                  )}
+
                   <form onSubmit={handleMainSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <span className="text-sm text-slate-500">Status Saat Ini:</span>
@@ -925,7 +976,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                           />
                           {errorsStatus.catatan && <p className="text-red-500 text-sm">{errorsStatus.catatan}</p>}
                           <p className="text-xs text-slate-500">
-                            Lampiran tambahan dikirim melalui tab Chat.
+                            Lampiran tambahan dikirim melalui tab Pesan.
                           </p>
                         </div>
 
@@ -1157,7 +1208,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
          open={editFormOpen}
          onOpenChange={setEditFormOpen}
          ticket={ticket}
-         formFields={(formFields || []) as unknown as FormField[]}
+         formFields={formFields || []}
        />
      )}
    </AdminLayout>

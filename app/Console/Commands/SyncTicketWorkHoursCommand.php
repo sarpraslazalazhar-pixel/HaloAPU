@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\Ticket;
+use App\Models\TicketLog;
 use App\Notifications\TicketWorkHoursNotification;
 use App\Services\SlaCalculator;
 use App\Services\TicketWorkQueue;
@@ -21,7 +22,7 @@ class SyncTicketWorkHoursCommand extends Command
     {
         $state = $calendar->workingHoursState(now());
 
-        if ($state['closed_since'] === null && $state['next_open_at'] === null) {
+        if (! $state['is_open'] && $state['closed_since'] === null && $state['next_open_at'] === null) {
             $this->warn('Konfigurasi jam kerja tidak memiliki hari kerja valid. Tidak ada tiket yang diubah.');
 
             return self::SUCCESS;
@@ -81,6 +82,51 @@ class SyncTicketWorkHoursCommand extends Command
             } catch (Throwable $e) {
                 $failed++;
                 Log::error("tickets:work-hours gagal mempromosikan antrean petugas #{$adminId}: ".$e->getMessage());
+            }
+        }
+
+        $unassignedIds = Ticket::query()
+            ->whereNull('assigned_admin_id')
+            ->where('status', 'pending')
+            ->whereNull('assignment_queued_at')
+            ->where('assignment_resume_status', 'open')
+            ->pluck('id');
+
+        foreach ($unassignedIds as $ticketId) {
+            try {
+                DB::transaction(function () use ($ticketId, $calendar): void {
+                    $locked = Ticket::lockForUpdate()->find($ticketId);
+                    if (! $locked
+                        || $locked->assigned_admin_id !== null
+                        || $locked->status !== 'pending'
+                        || $locked->assignment_queued_at !== null
+                        || $locked->assignment_resume_status !== 'open') {
+                        return;
+                    }
+
+                    $at = now()->microsecond(0);
+                    $sla = $locked->slaTracking()->lockForUpdate()->first();
+                    if ($sla && ($sla->responded_at === null || $sla->resolved_at === null)) {
+                        $sla->setRelation('ticket', $locked);
+                        $calendar->resumeSla($sla, $at);
+                    }
+
+                    $locked->update([
+                        'status' => 'open',
+                        'assignment_resume_status' => null,
+                    ]);
+
+                    TicketLog::withoutEvents(fn () => TicketLog::create([
+                        'ticket_id' => $locked->id,
+                        'admin_id' => null,
+                        'aksi' => 'open',
+                        'catatan' => 'Jam kerja telah buka. Tiket siap ditindaklanjuti.',
+                        'timestamp' => $at,
+                    ]));
+                });
+            } catch (Throwable $e) {
+                $failed++;
+                Log::error("tickets:work-hours gagal mengaktifkan tiket luar jam kerja #{$ticketId}: ".$e->getMessage());
             }
         }
 

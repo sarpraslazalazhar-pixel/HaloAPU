@@ -559,4 +559,215 @@ class TicketWorkQueueTest extends TestCase
 
         $this->assertSame('pending', $hiddenTicket->fresh()->status);
     }
+
+    public function test_enqueue_pending_urgent_ticket_puts_it_at_queue_position_one_when_operator_busy(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:00:00'));
+
+        $active = $this->ticket('on_proses');
+        $this->tracking($active);
+        TicketWorkQueue::assign($active, $this->operatorA, $this->superAdmin);
+
+        $normalQueued = $this->ticket('open');
+        $this->tracking($normalQueued);
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:05:00'));
+        TicketWorkQueue::assign($normalQueued, $this->operatorA, $this->superAdmin);
+
+        $manualUrgent = $this->ticket('pending');
+        $manualUrgent->update([
+            'priority' => 'Urgen',
+            'assigned_admin_id' => $this->operatorA->id,
+        ]);
+        $this->tracking($manualUrgent, ['paused_at' => Carbon::now()]);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:10:00'));
+        $this->actingAs($this->superAdmin, 'admin')
+            ->post(route('admin.tiket.enqueue', $manualUrgent))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Tiket berhasil dimasukkan ke antrean petugas.');
+
+        $manualUrgent->refresh();
+        $this->assertSame('pending', $manualUrgent->status);
+        $this->assertNotNull($manualUrgent->assignment_queued_at);
+        $this->assertSame('open', $manualUrgent->assignment_resume_status);
+
+        $payload = TicketWorkQueue::payload((int) $this->operatorA->id);
+        $this->assertSame([(int) $manualUrgent->id, (int) $normalQueued->id], array_column($payload['queue'], 'id'));
+        $this->assertSame([1, 2], array_column($payload['queue'], 'position'));
+
+        // Pastikan tiket hasil enqueue dapat digeser urutannya ketika ada tiket urgen lain.
+        $secondUrgent = $this->ticket('open');
+        $secondUrgent->update(['priority' => 'Urgen']);
+        $this->tracking($secondUrgent);
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:15:00'));
+        TicketWorkQueue::assign($secondUrgent, $this->operatorA, $this->superAdmin);
+
+        $this->actingAs($this->superAdmin, 'admin')
+            ->patch(route('admin.tiket.queue-move', $secondUrgent), ['direction' => 'up'])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Urutan antrean diperbarui.');
+
+        $payload = TicketWorkQueue::payload((int) $this->operatorA->id);
+        $this->assertSame((int) $secondUrgent->id, $payload['queue'][0]['id']);
+        $this->assertSame((int) $manualUrgent->id, $payload['queue'][1]['id']);
+    }
+
+    public function test_enqueue_pending_activates_ticket_immediately_when_slot_is_free_and_resumes_sla(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:00:00'));
+
+        $manualPending = $this->ticket('pending');
+        $manualPending->update(['assigned_admin_id' => $this->operatorA->id]);
+        $this->tracking($manualPending, ['paused_at' => Carbon::now()]);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:30:00'));
+        $this->actingAs($this->operatorA, 'admin')
+            ->post(route('admin.tiket.enqueue', $manualPending))
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Slot petugas kosong; tiket langsung diaktifkan untuk dikerjakan.');
+
+        $manualPending->refresh();
+        $this->assertSame('open', $manualPending->status);
+        $this->assertNull($manualPending->assignment_queued_at);
+        $this->assertNull($manualPending->assignment_resume_status);
+        $this->assertNull($manualPending->slaTracking->paused_at);
+        $this->assertSame(30, (int) $manualPending->slaTracking->total_paused_minutes);
+    }
+
+    public function test_enqueue_pending_blocks_cross_unit_and_unauthorized_admins_with_403(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:00:00'));
+
+        $otherUnit = Unit::create(['nama_unit' => 'Keuangan', 'deskripsi' => 'Finance', 'aktif' => true]);
+        $otherOperator = Admin::create([
+            'username' => 'enqueue_outsider',
+            'email' => 'enqueue_outsider@example.com',
+            'name' => 'OUTSIDER',
+            'password' => Hash::make('password'),
+        ]);
+        $otherOperator->assignRole('Operator');
+        $otherOperator->units()->attach($otherUnit->id);
+
+        $manualPending = $this->ticket('pending');
+        $manualPending->update(['assigned_admin_id' => $this->operatorA->id]);
+        $this->tracking($manualPending, ['paused_at' => Carbon::now()]);
+
+        // Admin lintas unit -> 403
+        $this->actingAs($otherOperator, 'admin')
+            ->post(route('admin.tiket.enqueue', $manualPending))
+            ->assertStatus(403);
+
+        // Operator satu unit tapi bukan assignee & bukan koordinator -> 403
+        $this->actingAs($this->operatorB, 'admin')
+            ->post(route('admin.tiket.enqueue', $manualPending))
+            ->assertStatus(403);
+
+        // API lintas unit -> 403
+        Sanctum::actingAs($otherOperator, ['*']);
+        $this->postJson("/api/tickets/{$manualPending->id}/enqueue")
+            ->assertStatus(403);
+
+        $this->assertSame('pending', $manualPending->fresh()->status);
+        $this->assertNull($manualPending->fresh()->assignment_queued_at);
+    }
+
+    public function test_pending_to_on_proses_queues_automatically_when_operator_busy_while_already_queued_stays_422(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:00:00'));
+
+        $active = $this->ticket('on_proses');
+        $this->tracking($active);
+        TicketWorkQueue::assign($active, $this->operatorA, $this->superAdmin);
+
+        $webPending = $this->ticket('pending');
+        $webPending->update(['assigned_admin_id' => $this->operatorA->id]);
+        $this->tracking($webPending, ['paused_at' => Carbon::now()]);
+
+        $this->actingAs($this->operatorA, 'admin')
+            ->patch(route('admin.tiket.status', $webPending), [
+                'status' => 'on_proses',
+                'catatan' => 'Siap lanjut setelah tugas aktif selesai',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Tiket dimasukkan ke antrean petugas dan akan otomatis diproses saat giliran tiba.');
+
+        $webPending->refresh();
+        $this->assertSame('pending', $webPending->status);
+        $this->assertNotNull($webPending->assignment_queued_at);
+        $this->assertSame('on_proses', $webPending->assignment_resume_status);
+
+        // Tiket yang sudah berada di antrean tetap ditolak 422 jika dipaksa on_proses.
+        Sanctum::actingAs($this->operatorA, ['*']);
+        $this->postJson("/api/tickets/{$webPending->id}/status", ['status' => 'on_proses'])
+            ->assertStatus(422);
+
+        // Pending manual lain via API juga otomatis masuk antrean saat operator sibuk.
+        $apiPending = $this->ticket('pending');
+        $apiPending->update(['assigned_admin_id' => $this->operatorA->id]);
+        $this->tracking($apiPending, ['paused_at' => Carbon::now()]);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-13 09:10:00'));
+        $this->postJson("/api/tickets/{$apiPending->id}/status", ['status' => 'on_proses'])
+            ->assertOk()
+            ->assertJsonPath('message', 'Tiket dimasukkan ke antrean petugas dan akan otomatis diproses saat giliran tiba.');
+
+        $apiPending->refresh();
+        $this->assertSame('pending', $apiPending->status);
+        $this->assertNotNull($apiPending->assignment_queued_at);
+        $this->assertSame('on_proses', $apiPending->assignment_resume_status);
+    }
+
+    public function test_out_of_hours_created_ticket_queues_on_assign_and_promotes_when_work_hours_open(): void
+    {
+        // Sabtu pukul 10:00 (di luar jam kerja)
+        Carbon::setTestNow(Carbon::parse('2026-07-18 10:00:00'));
+
+        $this->actingAs($this->user)
+            ->post(route('tiket.store'), [
+                'unit_id' => $this->unit->id,
+                'sub_unit_id' => $this->subUnit->id,
+                'form_data' => [(string) $this->startField->id => '2026-07-20'],
+            ])
+            ->assertRedirect();
+
+        $outOfHoursTicket = Ticket::latest('id')->firstOrFail();
+        $this->assertSame('pending', $outOfHoursTicket->status);
+        $this->assertSame('open', $outOfHoursTicket->assignment_resume_status);
+        $this->assertNull($outOfHoursTicket->assignment_queued_at);
+        $this->assertNull($outOfHoursTicket->work_hours_resume_status);
+        $this->assertTrue($outOfHoursTicket->isOpenForCancellation());
+
+        // Assign saat akhir pekan -> langsung masuk antrean petugas
+        TicketWorkQueue::assign($outOfHoursTicket, $this->operatorA, $this->superAdmin);
+        $outOfHoursTicket->refresh();
+        $this->assertSame('pending', $outOfHoursTicket->status);
+        $this->assertNotNull($outOfHoursTicket->assignment_queued_at);
+        $this->assertSame('open', $outOfHoursTicket->assignment_resume_status);
+
+        // Buat tiket kedua di luar jam kerja yang belum ditugaskan ke siapa pun
+        Carbon::setTestNow(Carbon::parse('2026-07-18 10:05:00'));
+        Sanctum::actingAs($this->user, ['*']);
+        $this->postJson('/api/tickets', [
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => [(string) $this->startField->id => '2026-07-20'],
+        ])->assertStatus(201);
+
+        $unassignedOutOfHours = Ticket::latest('id')->firstOrFail();
+        $this->assertSame('pending', $unassignedOutOfHours->status);
+        $this->assertSame('open', $unassignedOutOfHours->assignment_resume_status);
+
+        // Senin jam 08:30 (jam kerja buka): scheduler mengaktifkan keduanya
+        Carbon::setTestNow(Carbon::parse('2026-07-20 08:30:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+
+        $outOfHoursTicket->refresh();
+        $this->assertSame('open', $outOfHoursTicket->status);
+        $this->assertNull($outOfHoursTicket->assignment_queued_at);
+        $this->assertNull($outOfHoursTicket->assignment_resume_status);
+
+        $unassignedOutOfHours->refresh();
+        $this->assertSame('open', $unassignedOutOfHours->status);
+        $this->assertNull($unassignedOutOfHours->assignment_resume_status);
+        $this->assertNull($unassignedOutOfHours->slaTracking->paused_at);
+    }
 }

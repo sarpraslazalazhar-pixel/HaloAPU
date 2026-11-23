@@ -101,6 +101,7 @@ class TicketWizardController extends Controller
                 'sub_unit_id' => $request->sub_unit_id,
                 'form_data' => $request->form_data,
                 'status' => $initialStatus,
+                'assignment_resume_status' => $isWorkingHours ? null : 'open',
                 'source' => 'web',
             ]);
 

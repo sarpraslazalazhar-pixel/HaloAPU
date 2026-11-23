@@ -1,15 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { usePage } from '@inertiajs/react';
 import axios from 'axios';
-import { Bell, Check, Clock, ExternalLink, Volume2, VolumeX } from 'lucide-react';
+import { Bell, Check, ExternalLink, Volume2, VolumeX } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { Button } from '@/Components/ui/button';
-import {
- DropdownMenu,
- DropdownMenuContent,
- DropdownMenuItem,
- DropdownMenuTrigger,
-} from '@/Components/ui/dropdown-menu';
 import { motion, AnimatePresence } from 'framer-motion';
 import { popoverVariants } from '@/lib/animationConfig';
 import { NotificationItem } from '@/types';
@@ -30,6 +24,8 @@ export default function NotificationBell() {
     : '/sounds/ting-ting-ting.wav';
 
   const [isOpen, setIsOpen] = useState(false);
+  const [markingIds, setMarkingIds] = useState<Record<string, boolean>>({});
+  const markingIdsRef = useRef<Set<string>>(new Set());
   const { isMuted, toggleMute, play } = useNotificationSound({ soundUrl, enabled: notifySoundEnabled });
   const isMutedRef = useRef(isMuted);
   const previousCountRef = useRef<number | null>(null);
@@ -124,10 +120,12 @@ export default function NotificationBell() {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('notifications:updated', fetchUnreadCount);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('notifications:updated', fetchUnreadCount);
     };
   }, [fetchUnreadCount]);
 
@@ -157,25 +155,29 @@ export default function NotificationBell() {
   }, []);
 
   const handleMarkAsRead = async (id: string) => {
+    if (markingIdsRef.current.has(id)) {
+      return;
+    }
+
+    markingIdsRef.current.add(id);
+    setMarkingIds(prev => ({ ...prev, [id]: true }));
+
     try {
       await axios.patch(route(`${prefix}.read`, { id }));
       setNotifications(prev =>
-        prev.map(n => n.id === id ? { ...n, read_at: new Date().toISOString() } : n)
+        prev.map(n => n.id === id ? { ...n, read_at: n.read_at || new Date().toISOString() } : n)
       );
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Gagal mark as read:', error);
-    }
-  };
+    } finally {
+      markingIdsRef.current.delete(id);
+      setMarkingIds(prev => {
+        const next = { ...prev };
+        delete next[id];
 
-  const handleSnooze = async (id: string, minutes: number) => {
-    try {
-      await axios.patch(route(`${prefix}.snooze`, { id }), {
-        snooze_minutes: minutes,
+        return next;
       });
-      fetchRecentNotifications();
-    } catch (error) {
-      console.error('Gagal snooze:', error);
     }
   };
 
@@ -268,8 +270,10 @@ export default function NotificationBell() {
                           handleMarkAsRead(notification.id);
                         }
 
-                        if (notification.data.aksi_url) {
-                          window.location.href = notification.data.aksi_url;
+                        const targetUrl = notification.data.aksi_url || notification.data.url;
+
+                        if (targetUrl) {
+                          window.location.href = targetUrl;
                         }
                       }}
                     >
@@ -290,34 +294,23 @@ export default function NotificationBell() {
                           </p>
                         </div>
 
-                        <DropdownMenu>
-                          <DropdownMenuTrigger
-                            render={
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 flex-shrink-0"
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                            }
+                        {!notification.read_at && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 flex-shrink-0 text-sky-600 hover:text-sky-700 hover:bg-sky-50"
+                            title="Tandai dibaca"
+                            aria-label="Tandai dibaca"
+                            disabled={Boolean(markingIds[notification.id])}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleMarkAsRead(notification.id);
+                            }}
                           >
-                            <Clock className="h-4 w-4" />
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleSnooze(notification.id, 15); }}>
-                              Snooze 15 menit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleSnooze(notification.id, 30); }}>
-                              Snooze 30 menit
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleSnooze(notification.id, 60); }}>
-                              Snooze 1 jam
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleSnooze(notification.id, 1440); }}>
-                              Snooze 1 hari
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            <Check className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))

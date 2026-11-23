@@ -110,36 +110,26 @@ class NotificationController extends Controller
     }
 
     /**
-     * Snooze notifikasi.
+     * Hapus satu notifikasi milik pengguna terautentikasi.
      */
-    public function snooze(Request $request, string $id): JsonResponse
+    public function destroy(Request $request, string $id)
     {
-        $validated = $request->validate([
-            'snooze_minutes' => 'required|integer|in:15,30,60,120,1440',
-        ]);
-
         $user = $this->getNotifiableUser($request);
-        if ($user) {
-            $notification = $user->notifications()->findOrFail($id);
-
-            $data = $notification->data;
-            $data['snoozed_until'] = now()->addMinutes($validated['snooze_minutes'])->toISOString();
-            $data['snoozed'] = true;
-
-            $notification->update([
-                'data' => $data,
-                'read_at' => now(),
-            ]);
-
-            $this->clearUnreadCountCache($user);
-
-            return response()->json([
-                'success' => true,
-                'snoozed_until' => $data['snoozed_until'],
-            ]);
+        if (! $user) {
+            return $request->expectsJson()
+                ? response()->json(['success' => false], 401)
+                : redirect()->back();
         }
 
-        return response()->json(['success' => false], 401);
+        $notification = $user->notifications()->findOrFail($id);
+        $notification->delete();
+        $this->clearUnreadCountCache($user);
+
+        if ($request->expectsJson()) {
+            return response()->json(['status' => 'deleted', 'success' => true]);
+        }
+
+        return redirect()->back();
     }
 
     /**

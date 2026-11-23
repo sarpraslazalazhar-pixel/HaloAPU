@@ -165,8 +165,8 @@ Route::middleware('auth')->group(function () {
         Route::get('unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');
         Route::get('/', [NotificationController::class, 'index'])->name('index');
         Route::patch('{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
-        Route::patch('{id}/snooze', [NotificationController::class, 'snooze'])->name('snooze');
         Route::patch('{id}/done', [NotificationController::class, 'markAsDone'])->name('done');
+        Route::delete('{id}', [NotificationController::class, 'destroy'])->name('destroy');
         Route::post('mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
     });
 });
@@ -348,8 +348,8 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('unread-count', [NotificationController::class, 'unreadCount'])->name('unread-count');
             Route::get('/', [NotificationController::class, 'index'])->name('index');
             Route::patch('{id}/read', [NotificationController::class, 'markAsRead'])->name('read');
-            Route::patch('{id}/snooze', [NotificationController::class, 'snooze'])->name('snooze');
             Route::patch('{id}/done', [NotificationController::class, 'markAsDone'])->name('done');
+            Route::delete('{id}', [NotificationController::class, 'destroy'])->name('destroy');
             Route::post('mark-all-read', [NotificationController::class, 'markAllAsRead'])->name('mark-all-read');
         });
 

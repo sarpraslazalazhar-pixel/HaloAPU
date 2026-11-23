@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { Head, router } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent } from '@/Components/ui/card';
@@ -12,13 +12,7 @@ import {
 } from '@/Components/ui/select';
 import { NotificationItem, PaginatedData } from '@/types';
 import axios from 'axios';
-import { Clock, Check, CheckCircle2 } from 'lucide-react';
-import {
- DropdownMenu,
- DropdownMenuContent,
- DropdownMenuItem,
- DropdownMenuTrigger,
-} from '@/Components/ui/dropdown-menu';
+import { Check, CheckCircle2, Trash2 } from 'lucide-react';
 
 interface Props {
  notifications: PaginatedData<NotificationItem>;
@@ -29,7 +23,9 @@ interface Props {
 }
 
 export default function NotificationsIndex({ notifications, filters }: Props) {
- 
+ const [processingIds, setProcessingIds] = useState<Record<string, boolean>>({});
+ const processingIdsRef = useRef<Set<string>>(new Set());
+
  const handleFilterChange = (key: string, value: string | null) => {
  router.get(
  route('admin.notifications.index'),
@@ -41,25 +37,42 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
  const handleMarkAllRead = async () => {
  try {
  await axios.post(route('admin.notifications.mark-all-read'));
+ window.dispatchEvent(new Event('notifications:updated'));
  router.reload({ only: ['notifications'] });
  } catch (error) {
  console.error('Gagal memproses:', error);
  }
  };
 
- const handleAction = async (action: 'read' | 'snooze' | 'done', id: string, extra?: any) => {
+ const handleAction = async (action: 'read' | 'done' | 'delete', id: string) => {
+ if (processingIdsRef.current.has(id)) {
+ return;
+ }
+
+ processingIdsRef.current.add(id);
+ setProcessingIds(prev => ({ ...prev, [id]: true }));
+
  try {
  if (action === 'read') {
  await axios.patch(route('admin.notifications.read', { id }));
- } else if (action === 'snooze') {
- await axios.patch(route('admin.notifications.snooze', { id }), { snooze_minutes: extra });
  } else if (action === 'done') {
  await axios.patch(route('admin.notifications.done', { id }));
+ } else if (action === 'delete') {
+ await axios.delete(route('admin.notifications.destroy', { id }));
  }
 
+ window.dispatchEvent(new Event('notifications:updated'));
  router.reload({ only: ['notifications'] });
  } catch (error) {
  console.error('Gagal memproses:', error);
+ } finally {
+ processingIdsRef.current.delete(id);
+ setProcessingIds(prev => {
+ const next = { ...prev };
+ delete next[id];
+
+ return next;
+ });
  }
  };
 
@@ -158,7 +171,9 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
  <div className="flex-1 cursor-pointer" onClick={() => {
  if (!notification.read_at) handleAction('read', notification.id);
 
- if (notification.data.aksi_url) window.location.href = notification.data.aksi_url;
+ const targetUrl = notification.data.aksi_url || notification.data.url;
+
+ if (targetUrl) window.location.href = targetUrl;
  }}>
  <div className="flex items-center gap-2 mb-1">
  <h4 className="font-semibold">{notification.data.title || notification.data.judul}</h4>
@@ -169,38 +184,61 @@ export default function NotificationsIndex({ notifications, filters }: Props) {
  </div>
 
  <div className="flex items-center gap-2 sm:self-center">
- {!notification.data.done_at && (
- <>
- <Button 
- variant="ghost" 
- size="sm" 
+ {!notification.read_at && (
+ <Button
+ type="button"
+ variant="ghost"
+ size="sm"
+ className="text-sky-600 hover:text-sky-700 hover:bg-sky-50"
+ disabled={Boolean(processingIds[notification.id])}
+ onClick={(e) => {
+ e.stopPropagation();
+ handleAction('read', notification.id);
+ }}
+ title="Tandai dibaca"
+ aria-label="Tandai dibaca"
+ >
+ <Check className="h-4 w-4" />
+ </Button>
+ )}
+
+ {!notification.data.done_at ? (
+ <Button
+ type="button"
+ variant="ghost"
+ size="sm"
  className="text-green-600 hover:text-green-700 hover:bg-green-50"
- onClick={() => handleAction('done', notification.id)}
+ disabled={Boolean(processingIds[notification.id])}
+ onClick={(e) => {
+ e.stopPropagation();
+ handleAction('done', notification.id);
+ }}
  title="Tandai Selesai"
+ aria-label="Tandai Selesai"
  >
  <CheckCircle2 className="h-4 w-4" />
  </Button>
-
- <DropdownMenu>
- <DropdownMenuTrigger asChild>
- <Button variant="ghost" size="sm" title="Snooze">
- <Clock className="h-4 w-4" />
- </Button>
- </DropdownMenuTrigger>
- <DropdownMenuContent align="end">
- <DropdownMenuItem onClick={() => handleAction('snooze', notification.id, 15)}>Snooze 15 menit</DropdownMenuItem>
- <DropdownMenuItem onClick={() => handleAction('snooze', notification.id, 30)}>Snooze 30 menit</DropdownMenuItem>
- <DropdownMenuItem onClick={() => handleAction('snooze', notification.id, 60)}>Snooze 1 jam</DropdownMenuItem>
- <DropdownMenuItem onClick={() => handleAction('snooze', notification.id, 1440)}>Snooze 1 hari</DropdownMenuItem>
- </DropdownMenuContent>
- </DropdownMenu>
- </>
- )}
- {notification.data.done_at && (
+ ) : (
  <span className="text-xs text-green-600 font-medium bg-green-50 px-2 py-1 rounded border border-green-200 flex items-center gap-1">
  <CheckCircle2 className="h-3 w-3" /> Selesai
  </span>
  )}
+
+ <Button
+ type="button"
+ variant="ghost"
+ size="sm"
+ className="text-red-600 hover:text-red-700 hover:bg-red-50"
+ disabled={Boolean(processingIds[notification.id])}
+ onClick={(e) => {
+ e.stopPropagation();
+ handleAction('delete', notification.id);
+ }}
+ title="Hapus notifikasi"
+ aria-label="Hapus notifikasi"
+ >
+ <Trash2 className="h-4 w-4" />
+ </Button>
  </div>
  </div>
  ))}

@@ -109,10 +109,12 @@ export interface ReminderConfig {
 export interface NotificationData {
  judul: string;
  pesan: string;
+ title?: string;
+ message?: string;
  icon?: string;
  aksi_url?: string;
+ url?: string;
  prioritas?: string;
- snoozed?: boolean;
  done_at?: string;
  [key: string]: string | number | boolean | null | undefined;
 }

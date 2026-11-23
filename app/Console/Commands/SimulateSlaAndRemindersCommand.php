@@ -226,29 +226,6 @@ class SimulateSlaAndRemindersCommand extends Command
 
             $this->info("Case 5 Setup: Created solved ticket #{$csatTicket->id} without CSAT solved since 5 days ago.");
 
-            // 9. Case 6: Snoozed Notification Re-fire
-            $snoozedNotificationId = Str::uuid()->toString();
-            DB::table('notifications')->insert([
-                'id' => $snoozedNotificationId,
-                'type' => \App\Notifications\SlaEscalationNotification::class,
-                'notifiable_type' => Admin::class,
-                'notifiable_id' => $admin->id,
-                'data' => json_encode([
-                    'snoozed' => true,
-                    'snoozed_until' => Carbon::now()->subMinutes(10)->toISOString(), // Expired 10m ago
-                    'ticket_id' => $slaTicket->id,
-                    'jenis_breach' => 'respon',
-                    'prioritas' => 'Sedang',
-                    'judul' => 'Snoozed Notification',
-                    'pesan' => 'Mock snoozed message',
-                ]),
-                'read_at' => now(),
-                'created_at' => now()->subHour(),
-                'updated_at' => now()->subHour(),
-            ]);
-
-            $this->info("Case 6 Setup: Created snoozed notification ID: {$snoozedNotificationId} (expired snooze_until).");
-
             $this->info("\n=== Executing Artisan Commands ===\n");
 
             // Execute SLA Check Command
@@ -274,11 +251,6 @@ class SimulateSlaAndRemindersCommand extends Command
             // Execute CSAT Reminder Command
             $this->comment("Running command: reminder:csat");
             Artisan::call('reminder:csat');
-            $this->line(Artisan::output());
-
-            // Execute Snooze Check Command
-            $this->comment("Running command: reminder:snooze-check");
-            Artisan::call('reminder:snooze-check');
             $this->line(Artisan::output());
 
             $this->info("=== Verifying Outcomes ===\n");
@@ -377,27 +349,6 @@ class SimulateSlaAndRemindersCommand extends Command
                 $this->info("Csat reminder created: OK");
             } else {
                 $this->error("Csat reminder notification missing!");
-            }
-
-            // Verify Case 5: Snooze check refired and original notification updated
-            // We expect at least 2 SLA escalation notifications for the admin/ticket.
-            // One was sent when Case 1 SLA check ran.
-            // Another was sent when Case 5 Snooze check ran and re-fired the snoozed one.
-            $refiredNotificationCount = DB::table('notifications')
-                ->where('type', \App\Notifications\SlaEscalationNotification::class)
-                ->where('notifiable_id', $admin->id)
-                ->where('data->ticket_id', $slaTicket->id)
-                ->count();
-
-            $updatedSnoozedNotification = DB::table('notifications')->where('id', $snoozedNotificationId)->first();
-            $snoozedData = json_decode($updatedSnoozedNotification->data, true);
-            $snoozedFlagRemoved = isset($snoozedData['snoozed']) && $snoozedData['snoozed'] === false;
-            $hasReFiredAt = isset($snoozedData['re_fired_at']);
-
-            if ($refiredNotificationCount >= 2 && $snoozedFlagRemoved && $hasReFiredAt) {
-                $this->info("Snooze check refired: OK");
-            } else {
-                $this->error("Snooze check failed! Refired count: {$refiredNotificationCount}, flag removed: " . ($snoozedFlagRemoved ? 'Y' : 'N') . ", re_fired_at present: " . ($hasReFiredAt ? 'Y' : 'N'));
             }
 
             $this->info("\n=== Simulation Completed Successfully (All checks passed) ===");

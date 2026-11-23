@@ -184,7 +184,7 @@ class TicketHistoryController extends Controller
                 $admin->notify(new BrowserNotification(
                     'Peminjaman Dibatalkan',
                     'User '.(auth()->user()->name ?? auth()->user()->username)." membatalkan tiket/booking #{$ticket->formatted_id}",
-                    "/admin/tiketing/{$ticket->id}"
+                    "/admin/tiket/{$ticket->id}"
                 ));
             }
         } catch (\Exception $e) {

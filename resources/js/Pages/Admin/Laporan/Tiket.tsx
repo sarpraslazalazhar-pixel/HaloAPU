@@ -331,7 +331,7 @@ export default function LaporanTiket({
  return finished ? (
  <div className="space-y-1">
  <p className="text-xs text-muted-foreground">Belum dinilai</p>
- <Button variant="outline" size="sm" className="h-11" onClick={openDialog}>Nilai beban</Button>
+ <Button variant="outline" size="sm" className="h-11" onClick={openDialog}>Nilai Kinerja</Button>
  </div>
  ) : (
  <span className="text-muted-foreground">

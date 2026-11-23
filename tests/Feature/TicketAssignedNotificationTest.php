@@ -8,13 +8,22 @@ use App\Models\Ticket;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\TicketAssignedOperatorNotification;
+use Illuminate\Broadcasting\Broadcasters\NullBroadcaster;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;
 
 class TicketAssignedNotificationTest extends TestCase
 {
     use RefreshDatabase;
+
+    private function enableRealtimeWithoutSocket(): void
+    {
+        config(['broadcasting.default' => 'reverb']);
+        Broadcast::extend('reverb', fn () => new NullBroadcaster);
+        Broadcast::purge('reverb');
+    }
 
     private function makeTicket(): Ticket
     {
@@ -40,6 +49,7 @@ class TicketAssignedNotificationTest extends TestCase
 
     public function test_penugasan_web_mengirim_notifikasi_browser(): void
     {
+        $this->enableRealtimeWithoutSocket();
         Notification::fake();
 
         $superAdmin = Admin::factory()->create(['username' => 'superadmin']);
@@ -79,6 +89,8 @@ class TicketAssignedNotificationTest extends TestCase
 
     public function test_notify_browser_off_tidak_memblokir_channel_broadcast(): void
     {
+        $this->enableRealtimeWithoutSocket();
+
         $operator = Admin::factory()->create(['username' => 'operator1', 'notify_browser' => false]);
         $ticket = $this->makeTicket();
 
@@ -88,5 +100,18 @@ class TicketAssignedNotificationTest extends TestCase
         $this->assertContains('broadcast', $channels);
         $this->assertContains('database', $channels);
         $this->assertNotContains(\NotificationChannels\WebPush\WebPushChannel::class, $channels);
+    }
+
+    public function test_broadcast_driver_null_menjatuhkan_channel_broadcast(): void
+    {
+        config(['broadcasting.default' => 'null']);
+
+        $operator = Admin::factory()->create(['username' => 'operator1']);
+        $ticket = $this->makeTicket();
+
+        $channels = (new TicketAssignedOperatorNotification($ticket))->via($operator);
+
+        $this->assertNotContains('broadcast', $channels);
+        $this->assertContains('database', $channels);
     }
 }

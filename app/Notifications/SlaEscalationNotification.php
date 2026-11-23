@@ -64,7 +64,7 @@ class SlaEscalationNotification extends Notification
             'judul' => "⚠️ Breach SLA {$jenisBreachLabel}",
             'pesan' => "Tiket #{$this->ticket->id} \"{$this->ticket->judul}\" telah melewati batas SLA ({$jenisBreachLabel}). Segera tangani!",
             'icon' => 'alert-triangle',
-            'aksi_url' => "/admin/tiketing/{$this->ticket->id}",
+            'aksi_url' => "/admin/tiket/{$this->ticket->id}",
         ];
     }
 
@@ -82,7 +82,7 @@ class SlaEscalationNotification extends Notification
             ->line("**Prioritas:** {$this->priority}")
             ->line("**Jenis:** SLA {$jenisBreachLabel}")
             ->line("**Status:** {$this->ticket->status}")
-            ->action('Lihat Tiket', url("/admin/tiketing/{$this->ticket->id}"))
+            ->action('Lihat Tiket', url("/admin/tiket/{$this->ticket->id}"))
             ->line('**⛔ BREACH! Tiket ini sudah melewati batas SLA. Tindakan segera diperlukan.**');
     }
 

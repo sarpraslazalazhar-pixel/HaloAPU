@@ -8,8 +8,10 @@ use App\Models\Ticket;
 use App\Models\Unit;
 use App\Models\User;
 use App\Notifications\TicketAssignedOperatorNotification;
+use Illuminate\Broadcasting\Broadcasters\NullBroadcaster;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Notifications\Events\BroadcastNotificationCreated;
+use Illuminate\Support\Facades\Broadcast;
 use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
@@ -19,6 +21,10 @@ class TicketAssignedBroadcastPayloadTest extends TestCase
 
     public function test_payload_broadcast_membawa_id_dan_url_untuk_handler_echo(): void
     {
+        config(['broadcasting.default' => 'reverb']);
+        Broadcast::extend('reverb', fn () => new NullBroadcaster);
+        Broadcast::purge('reverb');
+
         $operator = Admin::factory()->create(['username' => 'operator1']);
         $user = User::factory()->create();
         $unit = Unit::create(['nama_unit' => 'Umum', 'deskripsi' => 'Unit', 'aktif' => true]);

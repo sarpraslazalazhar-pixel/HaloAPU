@@ -108,7 +108,7 @@ class BookingScheduleCheckCommand extends Command
             $admin->notify(new BrowserNotification(
                 $browserTitle,
                 "User " . ($user->name ?? $user->username ?? 'pemesan') . ": " . $browserBody,
-                $ticket ? "/admin/tiketing/{$ticket->id}" : "/admin/monitor"
+                $ticket ? "/admin/tiket/{$ticket->id}" : "/admin/monitor"
             ));
         }
 

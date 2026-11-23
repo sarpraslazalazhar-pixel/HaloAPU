@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Traits\FilterNotificationChannels;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Notifications\Messages\BroadcastMessage;
@@ -9,7 +10,7 @@ use Illuminate\Notifications\Notification;
 
 class BrowserNotification extends Notification implements ShouldBroadcast
 {
-    use Queueable;
+    use FilterNotificationChannels, Queueable;
 
     public $title;
     public $message;
@@ -32,11 +33,29 @@ class BrowserNotification extends Notification implements ShouldBroadcast
      */
     public function via(object $notifiable): array
     {
-        // Without a realtime driver (cPanel has no Reverb) there is nobody to
-        // receive this, and broadcasting would fail on every call.
-        return in_array(config('broadcasting.default'), [null, 'null', 'log'], true)
+        // Without a realtime driver (cPanel has no Reverb) persist to database
+        // so NotificationBell polling still delivers the alert.
+        $channels = in_array(config('broadcasting.default'), [null, 'null', 'log'], true)
             ? ['database']
             : ['broadcast'];
+
+        return $this->filterChannels($channels, $notifiable);
+    }
+
+    /**
+     * Get the array/database representation of the notification.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(object $notifiable): array
+    {
+        return [
+            'title' => $this->title,
+            'message' => $this->message,
+            'url' => $this->url,
+            'aksi_url' => $this->url,
+            'time' => now()->toDateTimeString(),
+        ];
     }
 
     /**

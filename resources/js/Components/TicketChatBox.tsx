@@ -260,7 +260,7 @@ export function TicketChatBox({
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200 text-xs font-semibold transition-colors"
           >
             <MessageSquare className="w-3.5 h-3.5" />
-            <span>Buka Room Chat Web</span>
+            <span>Buka Pesan Web</span>
             <ExternalLink className="w-3 h-3 text-sky-500" />
           </a>
         )}

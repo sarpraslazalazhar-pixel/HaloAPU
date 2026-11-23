@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import AdminLayout from '@/Layouts/AdminLayout';
-import { Link, router, useForm } from '@inertiajs/react';
+import { router, useForm } from '@inertiajs/react';
 import { Button } from '@/Components/ui/button';
 import Swal from 'sweetalert2';
 import { GripVertical, Edit, Trash, Plus, ArrowLeft } from 'lucide-react';
@@ -201,6 +201,7 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  preserveScroll: true,
  onSuccess: (page: any) => {
  if (page?.props?.fields) {
+ // SAFETY: FormFieldController returns Inertia prop `fields` as FormField[].
  setFields(page.props.fields as FormField[]);
  } else {
  setFields(prev => prev.filter(f => f.id !== id).map(f => ({
@@ -237,7 +238,9 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  onSuccess: (page: any) => {
  setIsFormOpen(false);
  reset();
+
  if (page?.props?.fields) {
+ // SAFETY: FormFieldController returns Inertia prop `fields` as FormField[].
  setFields(page.props.fields as FormField[]);
  }
  },
@@ -248,7 +251,9 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  onSuccess: (page: any) => {
  setIsFormOpen(false);
  reset();
+
  if (page?.props?.fields) {
+ // SAFETY: FormFieldController returns Inertia prop `fields` as FormField[].
  setFields(page.props.fields as FormField[]);
  }
  },
@@ -295,14 +300,27 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  );
  };
 
+ const handleBack = () => {
+ if (typeof window !== 'undefined' && window.history.length > 1) {
+ window.history.back();
+ } else {
+ router.visit(route('admin.peraturan-form.index'));
+ }
+ };
+
  return (
  <AdminLayout title={`Form Builder - ${subUnit.nama_layanan}`}>
  <div className="flex items-center justify-between mb-6">
  <div>
  <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
- <Link href={route('admin.peraturan-form.index')} className="hover:text-blue-600 flex items-center gap-1">
+ <Button
+ type="button"
+ variant="ghost"
+ onClick={handleBack}
+ className="h-auto p-0 text-sm font-normal text-gray-500 hover:bg-transparent hover:text-blue-600 flex items-center gap-1"
+ >
  <ArrowLeft size={16} /> Kembali
- </Link>
+ </Button>
  <span>/</span>
  <span>{subUnit.unit?.nama_unit}</span>
  </div>
@@ -416,6 +434,7 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  
                 {data.parent_field_id && (() => {
                   const parentOpsi = allFields.find(f => String(f.id) === String(data.parent_field_id))?.opsi ?? [];
+
                   return (
                     <div>
                       <label className="block text-xs font-medium mb-1 text-gray-500">Nilai Parent Sama Dengan:</label>

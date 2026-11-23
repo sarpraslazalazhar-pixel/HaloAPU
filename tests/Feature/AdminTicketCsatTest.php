@@ -10,7 +10,10 @@ use App\Models\Unit;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
 use Tests\TestCase;
 
 class AdminTicketCsatTest extends TestCase
@@ -168,5 +171,177 @@ class AdminTicketCsatTest extends TestCase
             'admin_id' => $this->requesterAdmin->id,
             'rating' => 5,
         ]);
+    }
+
+    public function test_admin_creator_can_submit_and_update_csat_via_web_route(): void
+    {
+        $ticket = Ticket::create([
+            'user_id' => null,
+            'created_by_admin_id' => $this->requesterAdmin->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => ['Keluhan' => 'Jaringan lambat'],
+            'status' => 'solve',
+        ]);
+
+        // Submit rating pertama kali
+        $this->actingAs($this->requesterAdmin, 'admin')
+            ->post(route('admin.tiket.csat.store', $ticket->id), [
+                'rating' => 5,
+                'komentar' => 'Sangat cepat',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Terima kasih atas rating kamu!');
+
+        $this->assertDatabaseHas('csats', [
+            'ticket_id' => $ticket->id,
+            'user_id' => null,
+            'admin_id' => $this->requesterAdmin->id,
+            'rating' => 5,
+            'komentar' => 'Sangat cepat',
+        ]);
+        $this->assertSame('Selesai', $ticket->fresh()->status);
+
+        // Edit rating ulang: update row yang sama (tanpa duplikasi)
+        $this->actingAs($this->requesterAdmin, 'admin')
+            ->post(route('admin.tiket.csat.store', $ticket->id), [
+                'rating' => 4,
+                'komentar' => 'Diperbarui setelah cek ulang',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Terima kasih atas rating kamu!');
+
+        $this->assertSame(1, Csat::count());
+        $this->assertDatabaseHas('csats', [
+            'ticket_id' => $ticket->id,
+            'admin_id' => $this->requesterAdmin->id,
+            'rating' => 4,
+            'komentar' => 'Diperbarui setelah cek ulang',
+        ]);
+    }
+
+    public function test_non_creator_admin_cannot_submit_csat_via_web_route(): void
+    {
+        $this->otherAdmin->units()->attach($this->unit->id);
+
+        $ticket = Ticket::create([
+            'user_id' => null,
+            'created_by_admin_id' => $this->requesterAdmin->id,
+            'assigned_admin_id' => $this->otherAdmin->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => ['Keluhan' => 'Printer macet'],
+            'status' => 'solve',
+        ]);
+
+        $this->actingAs($this->otherAdmin, 'admin')
+            ->post(route('admin.tiket.csat.store', $ticket->id), [
+                'rating' => 5,
+            ])
+            ->assertStatus(403);
+
+        $this->assertSame(0, Csat::count());
+    }
+
+    public function test_admin_cannot_submit_csat_for_unsolved_ticket_via_web_route(): void
+    {
+        $ticket = Ticket::create([
+            'user_id' => null,
+            'created_by_admin_id' => $this->requesterAdmin->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => ['Keluhan' => 'Lampu ruang rapat'],
+            'status' => 'on_proses',
+        ]);
+
+        $this->actingAs($this->requesterAdmin, 'admin')
+            ->post(route('admin.tiket.csat.store', $ticket->id), [
+                'rating' => 5,
+            ])
+            ->assertRedirect()
+            ->assertSessionHasErrors('rating');
+
+        $this->assertSame(0, Csat::count());
+    }
+
+    public function test_admin_ticket_detail_loads_csat_and_is_accessible_across_units_for_creator(): void
+    {
+        $itUnit = Unit::create([
+            'nama_unit' => 'Unit IT Pemohon',
+            'deskripsi' => 'IT',
+            'aktif' => true,
+        ]);
+        $this->requesterAdmin->units()->attach($itUnit->id);
+
+        // Tiket ditujukan ke unit lain (Sarpras / $this->unit)
+        $ticket = Ticket::create([
+            'user_id' => null,
+            'created_by_admin_id' => $this->requesterAdmin->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => ['Keluhan' => 'AC ruang server'],
+            'status' => 'solve',
+        ]);
+
+        Csat::create([
+            'ticket_id' => $ticket->id,
+            'user_id' => null,
+            'admin_id' => $this->requesterAdmin->id,
+            'rating' => 5,
+            'komentar' => 'Mantap',
+        ]);
+
+        $this->actingAs($this->requesterAdmin, 'admin')
+            ->get(route('admin.tiket.show', $ticket->id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Tiketing/Detail')
+                ->where('isSubmittedByMe', true)
+                ->where('ticket.csat.rating', 5)
+                ->where('ticket.csat.komentar', 'Mantap')
+            );
+
+        // Pastikan halaman index tab Tiket Saya Ajukan juga memuat csat
+        $this->actingAs($this->requesterAdmin, 'admin')
+            ->get(route('admin.tiket.index', ['tab' => 'saya_ajukan']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Tiketing/Index')
+                ->where('tickets.data.0.csat.rating', 5)
+            );
+    }
+
+    public function test_admin_csat_report_loads_admin_rater_identity(): void
+    {
+        Role::firstOrCreate(['name' => 'superadmin', 'guard_name' => 'admin']);
+        Permission::firstOrCreate(['name' => 'akses-laporan', 'guard_name' => 'admin']);
+        $this->otherAdmin->assignRole('superadmin');
+        $this->otherAdmin->givePermissionTo('akses-laporan');
+
+        $ticket = Ticket::create([
+            'user_id' => null,
+            'created_by_admin_id' => $this->requesterAdmin->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => ['Keluhan' => 'Proyektor'],
+            'status' => 'Selesai',
+        ]);
+
+        Csat::create([
+            'ticket_id' => $ticket->id,
+            'user_id' => null,
+            'admin_id' => $this->requesterAdmin->id,
+            'rating' => 5,
+            'komentar' => 'Bagus',
+        ]);
+
+        $this->actingAs($this->otherAdmin, 'admin')
+            ->get(route('admin.csat.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('Admin/Csat/Index')
+                ->where('csats.data.0.admin.id', $this->requesterAdmin->id)
+                ->where('csats.data.0.admin.name', 'Admin Pemohon')
+            );
     }
 }

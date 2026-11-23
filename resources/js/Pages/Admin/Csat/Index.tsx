@@ -149,7 +149,12 @@ export default function CsatIndex({ csats, stats, csatPerUnit, filters, units, s
  {csats?.data?.map((csat: any) => (
  <tr key={csat.id} className="border-b last:border-0">
  <td className="py-2">#TKT-{formatTicketId(csat.ticket_id)}</td>
- <td className="py-2">{csat.user?.username || '-'}</td>
+ <td className="py-2">
+ {csat.user?.username ||
+ csat.user?.name ||
+ (csat.admin ? `${csat.admin.name || csat.admin.username} (Admin)` : null) ||
+ (csat.ticket?.created_by_admin ? `${csat.ticket.created_by_admin.name || csat.ticket.created_by_admin.username} (Admin)` : '-')}
+ </td>
  <td className="py-2">{csat.ticket?.sub_unit?.unit?.nama_unit || '-'}</td>
  <td className="py-2">
  <div className="flex items-center gap-0.5">

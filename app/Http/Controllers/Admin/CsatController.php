@@ -13,8 +13,9 @@ class CsatController extends Controller
     public function index(Request $request)
     {
         $query = Csat::with([
-            'ticket' => fn ($q) => $q->with('subUnit.unit'),
-            'user:id,username,email',
+            'ticket' => fn ($q) => $q->with(['subUnit.unit', 'createdByAdmin:id,name,username']),
+            'user:id,name,username,email',
+            'admin:id,name,username',
         ]);
 
         if ($unitId = $request->get('unit_id')) {

@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Laporan Kinerja individu</title>
+    <title>Laporan Kinerja Individu</title>
     <style>
         * {
             margin: 0;
@@ -261,7 +261,7 @@
     <div class="summary-container">
         <div class="summary-box">
             <div class="summary-value">{{ $summary['totalOperators'] }}</div>
-            <div class="summary-label">Total Operator</div>
+            <div class="summary-label">Total Individu</div>
         </div>
         <div class="summary-box">
             <div class="summary-value">{{ $summary['totalTickets'] }}</div>
@@ -276,11 +276,11 @@
             <div class="summary-label">Tiket Aktif</div>
         </div>
         <div class="summary-box teal">
-            <div class="summary-value teal">{{ $summary['avgCompliance'] }}%</div>
+            <div class="summary-value teal">{{ $summary['avgCompliance'] !== null ? $summary['avgCompliance'] . '%' : '-' }}</div>
             <div class="summary-label">Rata-rata Kepatuhan SLA</div>
         </div>
         <div class="summary-box purple">
-            <div class="summary-value purple">{{ $summary['avgRating'] > 0 ? $summary['avgRating'] : '-' }}</div>
+            <div class="summary-value purple">{{ $summary['avgRating'] > 0 ? number_format($summary['avgRating'], 2) : '-' }}</div>
             <div class="summary-label">Rata-rata Rating CSAT</div>
         </div>
     </div>
@@ -290,7 +290,7 @@
         <thead>
             <tr>
                 <th style="width: 3%;">No</th>
-                <th style="width: 12%;">Operator</th>
+                <th style="width: 12%;">Individu</th>
                 <th style="width: 10%;">Unit Layanan</th>
                 <th style="width: 7%;">Aktif</th>
                 <th style="width: 7%;">Selesai</th>
@@ -335,7 +335,9 @@
                     <td class="text-center text-bold">{{ $op['total_tickets'] }}</td>
                     <td class="text-center">
                         @php $sla = $op['resolution_compliance']; @endphp
-                        @if($sla >= 90)
+                        @if($sla === null)
+                            <span style="color:#aaa;">-</span>
+                        @elseif($sla >= 90)
                             <span class="badge badge-green">{{ $sla }}%</span>
                         @elseif($sla >= 70)
                             <span class="badge badge-amber">{{ $sla }}%</span>
@@ -380,7 +382,7 @@
                 <td class="text-center">{{ $totals['solved'] }}</td>
                 <td class="text-center">{{ $totals['rejected'] }}</td>
                 <td class="text-center">{{ $totals['total'] }}</td>
-                <td class="text-center">{{ $totals['avgCompliance'] }}%</td>
+                <td class="text-center">{{ $totals['avgCompliance'] !== null ? $totals['avgCompliance'] . '%' : '-' }}</td>
                 <td class="text-center">{{ $totals['breaches'] }}</td>
                 <td class="text-center">{{ $totals['avgRating'] > 0 ? number_format($totals['avgRating'], 2) : '-' }}</td>
                 <td class="text-center">{{ $totals['reviews'] }}</td>

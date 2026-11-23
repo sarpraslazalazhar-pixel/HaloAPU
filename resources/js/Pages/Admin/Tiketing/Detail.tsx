@@ -16,6 +16,7 @@ import EditTicketFormDialog from '@/Components/EditTicketFormDialog';
 import { TicketEditHistory, type EditHistoryEntry } from '@/Components/TicketEditHistory';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
 import { TicketChatBox } from '@/Components/TicketChatBox';
+import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import Swal from 'sweetalert2';
@@ -48,6 +49,7 @@ interface TicketDetailData {
   user?: { id?: number; username?: string; name?: string; email?: string; no_wa?: string } | null;
   created_by_admin?: { id?: number; username?: string; name?: string; email?: string; no_wa?: string } | null;
   assigned_admin?: { id?: number; username?: string; name?: string } | null;
+  csat?: { id?: number; rating: number; komentar?: string | null } | null;
   unit?: { id?: number; nama_unit?: string } | null;
   sub_unit?: { id?: number; nama_layanan?: string; wajib_kembali?: boolean } | null;
   org_divisi?: { nama_divisi?: string } | null;
@@ -110,6 +112,9 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const isCreator = isSubmittedByMe !== undefined
     ? isSubmittedByMe
     : (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id);
+
+  const showCsat = Boolean(isCreator)
+    && ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
 
   const canCancelTicket = canManage && (ticket.status === 'open'
     || (ticket.status === 'pending' && work_hours?.reason === 'paused' && work_hours.resume_status === 'open'))
@@ -398,11 +403,21 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Diedit Admin</span>
          )}
        </div>
-       {canEditForm && (
-         <div className="sm:ml-auto">
-           <Button variant="outline" size="sm" onClick={() => setEditFormOpen(true)}>
-             <Edit2 className="w-4 h-4 mr-1" /> Edit Formulir
-           </Button>
+       {(showCsat || canEditForm) && (
+         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
+           {showCsat && (
+             <CsatDialog
+               ticketId={ticket.id}
+               storeUrl={route('admin.tiket.csat.store', ticket.id)}
+               existingRating={ticket.csat?.rating}
+               existingKomentar={ticket.csat?.komentar}
+             />
+           )}
+           {canEditForm && (
+             <Button variant="outline" size="sm" onClick={() => setEditFormOpen(true)}>
+               <Edit2 className="w-4 h-4 mr-1" /> Edit Formulir
+             </Button>
+           )}
          </div>
        )}
      </div>

@@ -16,26 +16,40 @@ import { motion } from 'framer-motion';
 
 interface CsatDialogProps {
  ticketId: number;
+ storeUrl?: string;
  disabled?: boolean;
  existingRating?: number | null;
  existingKomentar?: string | null;
 }
 
-export function CsatDialog({ ticketId, disabled = false, existingRating, existingKomentar }: CsatDialogProps) {
+export function CsatDialog({ ticketId, storeUrl, disabled = false, existingRating, existingKomentar }: CsatDialogProps) {
  const [open, setOpen] = useState(false);
  const [hoverRating, setHoverRating] = useState(0);
 
- const { data, setData, post, processing, errors, reset } = useForm({
+ const { data, setData, post, processing, errors } = useForm({
  rating: existingRating || 0,
  komentar: existingKomentar || '',
  });
 
+ const handleOpenChange = (nextOpen: boolean) => {
+ if (nextOpen) {
+ setData({
+ rating: existingRating || 0,
+ komentar: existingKomentar || '',
+ });
+ }
+
+ setOpen(nextOpen);
+ };
+
  const handleSubmit = (e: React.FormEvent) => {
  e.preventDefault();
- post(route('csat.store', { ticket: ticketId }), {
+ const targetUrl = storeUrl || route('csat.store', { ticket: ticketId });
+
+ post(targetUrl, {
+ preserveScroll: true,
  onSuccess: () => {
  setOpen(false);
- reset();
  },
  });
  };
@@ -56,10 +70,7 @@ export function CsatDialog({ ticketId, disabled = false, existingRating, existin
  />
  ))}
  </div>
- <Button variant="outline" size="sm" disabled={disabled} onClick={() => {
- setData({ rating: existingRating, komentar: existingKomentar || '' });
- setOpen(true);
- }}>
+ <Button variant="outline" size="sm" disabled={disabled} onClick={() => handleOpenChange(true)}>
  Edit Rating
  </Button>
  </div>
@@ -67,7 +78,7 @@ export function CsatDialog({ ticketId, disabled = false, existingRating, existin
  }
 
  return (
- <Dialog open={open} onOpenChange={setOpen}>
+ <Dialog open={open} onOpenChange={handleOpenChange}>
  <DialogTrigger asChild>
  {!existingRating && (
  <Button variant="outline" disabled={disabled}>

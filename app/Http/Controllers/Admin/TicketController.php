@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Events\ActiveAssignedTicketChanged;
 use App\Models\Admin;
+use App\Models\Csat;
 use App\Models\FormField;
 use App\Models\OrgDivisi;
 use App\Models\OrgUnit;
@@ -14,6 +15,7 @@ use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\Unit;
 use App\Notifications\BrowserNotification;
+use App\Notifications\TicketRatedAdminNotification;
 use App\Notifications\TicketStatusUpdatedNotification;
 use App\Services\AdminTicketCreator;
 use App\Services\SlaCalculator;
@@ -36,7 +38,7 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Ticket::with(['user.divisi', 'createdByAdmin', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin']);
+        $query = Ticket::with(['user.divisi', 'createdByAdmin', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin', 'csat:id,ticket_id,rating,komentar']);
 
         $admin = auth('admin')->user();
         $tab = $request->input('tab') === 'saya_ajukan' ? 'saya_ajukan' : 'masuk';
@@ -278,7 +280,7 @@ class TicketController extends Controller
             'user', 'user.divisi', 'user.orgUnit', 'user.jabatan', 'createdByAdmin',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
             'attachments.field', 'attachments.log', 'attachments.log.admin', 'slaTracking',
-            'booking',
+            'booking', 'csat',
             'logs' => fn ($q) => $q->latest('timestamp'),
             'logs.admin',
             'logs.attachments',
@@ -340,6 +342,71 @@ class TicketController extends Controller
                 ? 'Tiket dimasukkan ke antrean petugas dan akan otomatis diproses saat giliran tiba.'
                 : 'Status tiket berhasil diubah.'
         );
+    }
+
+    public function storeCsat(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (! $admin || ! $ticket->isSubmittedBy($admin)) {
+            abort(403, 'Hanya pengaju tiket yang dapat memberikan rating.');
+        }
+
+        if (! in_array(strtolower((string) $ticket->status), ['solve', 'selesai'], true)) {
+            return back()->withErrors([
+                'rating' => 'Rating hanya bisa diberikan untuk tiket yang sudah diselesaikan.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'rating' => 'required|integer|min:1|max:5',
+            'komentar' => 'nullable|string|max:1000',
+        ]);
+
+        Csat::updateOrCreate(
+            ['ticket_id' => $ticket->id],
+            [
+                'user_id' => $ticket->user_id,
+                'admin_id' => $admin->id,
+                'rating' => (int) $validated['rating'],
+                'komentar' => $validated['komentar'] ?? null,
+            ]
+        );
+
+        if ($ticket->status !== 'Selesai' && Ticket::whereKey($ticket->id)
+            ->whereRaw('LOWER(status) IN (?, ?)', ['solve', 'selesai'])
+            ->update(['status' => 'Selesai'])) {
+            $ticket->status = 'Selesai';
+        }
+
+        try {
+            $ticket->loadMissing('subUnit');
+            $unitId = $ticket->subUnit?->unit_id ?? $ticket->unit_id;
+            $assignedAdminId = $ticket->assigned_admin_id;
+
+            $notifiedAdmins = Admin::query()
+                ->where('id', '!=', $admin->id)
+                ->where(function ($q) use ($unitId, $assignedAdminId) {
+                    if ($unitId !== null) {
+                        $q->whereHas('units', fn ($u) => $u->where('units.id', $unitId));
+                    }
+                    if ($assignedAdminId !== null) {
+                        $q->orWhere('id', $assignedAdminId);
+                    }
+                    $q->orWhereHas('roles', fn ($r) => $r->whereIn('name', ['superadmin', 'Super Admin', 'super_admin', 'Superadmin']));
+                })
+                ->get();
+
+            if ($notifiedAdmins->isNotEmpty()) {
+                \Illuminate\Support\Facades\Notification::send(
+                    $notifiedAdmins,
+                    new TicketRatedAdminNotification($ticket, (int) $validated['rating'], $validated['komentar'] ?? '')
+                );
+            }
+        } catch (\Throwable $e) {
+            \Log::warning('Gagal mengirim notifikasi rating tiket admin: '.$e->getMessage());
+        }
+
+        return back()->with('success', 'Terima kasih atas rating kamu!');
     }
 
     public function enqueuePending(Ticket $ticket)

@@ -29,6 +29,7 @@ interface Ticket {
  status: string;
  created_at: string;
  assignment_queued_at?: string | null;
+ csat?: { id?: number; rating: number; komentar?: string | null } | null;
 }
 
 interface OperatorLoadTicket {
@@ -217,14 +218,29 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  {
  key: 'status',
  header: 'Status',
- render: (t: Ticket) => (
+ render: (t: Ticket) => {
+ const isFinished = ['solve', 'selesai'].includes(String(t.status || '').toLowerCase());
+
+ return (
  <div className="flex flex-col items-start gap-1">
  <StatusBadge status={t.status} />
  {t.assignment_queued_at && (
  <span className="text-[11px] font-medium text-amber-700">Antrean petugas</span>
  )}
+ {currentTab === 'saya_ajukan' && isFinished && (
+ t.csat?.rating ? (
+ <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 border border-emerald-200">
+ ★ {t.csat.rating}/5
+ </span>
+ ) : (
+ <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800 border border-amber-200">
+ Perlu Rating
+ </span>
+ )
+ )}
  </div>
- ),
+ );
+ },
  },
  {
  key: 'aksi',

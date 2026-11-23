@@ -23,11 +23,8 @@ import {
   MessageSquare,
   AlertTriangle,
   Flame,
-  ShieldCheck,
-  Building,
   UserCheck,
 } from 'lucide-react';
-import { formatTicketId } from '@/lib/utils';
 
 interface OperatorStat {
   id: number;
@@ -47,7 +44,7 @@ interface OperatorStat {
   resolution_breaches: number;
   response_breaches: number;
   total_breaches: number;
-  resolution_compliance: number;
+  resolution_compliance: number | null;
   avg_rating: number | null;
   total_reviews: number;
 }
@@ -81,14 +78,76 @@ interface Props {
   operators: OperatorStat[];
   summary: {
     totalOperators: number;
+    activeOperators?: number;
     totalAssigned: number;
     totalActive: number;
     totalSolved: number;
+    totalRejected?: number;
+    totalReviews?: number;
     avgActivePerOperator: number;
     overallAvgRating: number;
+    avgCompliance?: number | null;
   };
   workloadChartData: { name: string; active: number; solved: number }[];
-  performanceChartData: { name: string; sla: number; rating: number }[];
+  performanceChartData: { name: string; sla: number | null; rating: number | null }[];
+}
+
+interface EChartsTooltipParam {
+  axisValueLabel?: string;
+  name?: string;
+  marker?: string;
+  seriesName?: string;
+  value?: number | string | null;
+  seriesType?: string;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function getTopBadgeLabel(count: number): string {
+  if (count === 0) return '0 Individu';
+
+  return count < 10 ? `${count} Individu Aktif` : 'Top 10 Individu';
+}
+
+function formatPerformanceTooltip(
+  params: EChartsTooltipParam | EChartsTooltipParam[]
+): string {
+  const items = Array.isArray(params) ? params : [params];
+
+  if (items.length === 0) return '';
+
+  const first = items[0];
+  const title = escapeHtml(String(first.axisValueLabel ?? first.name ?? ''));
+
+  const rows = items.map((item) => {
+    const val = item.value;
+
+    const isNumeric =
+      val !== null &&
+      val !== undefined &&
+      val !== '' &&
+      val !== '-' &&
+      Number.isFinite(Number(val));
+
+    const formatted = isNumeric
+      ? item.seriesType === 'bar'
+        ? `${val}%`
+        : `${val} / 5.0`
+      : '-';
+
+    const seriesName = escapeHtml(String(item.seriesName ?? ''));
+
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;"><span>${item.marker ?? ''}${seriesName}</span><strong>${formatted}</strong></div>`;
+  });
+
+  return `<div style="font-weight:600;margin-bottom:4px;">${title}</div>${rows.join('')}`;
 }
 
 export default function KinerjaOperator({
@@ -100,6 +159,14 @@ export default function KinerjaOperator({
   workloadChartData,
   performanceChartData,
 }: Props) {
+  const filteredWorkloadData = (workloadChartData ?? []).filter(
+    (d) => d.active > 0 || d.solved > 0
+  );
+
+  const filteredPerformanceData = (performanceChartData ?? []).filter(
+    (d) => d.sla !== null || d.rating !== null
+  );
+
   const [year, setYear] = useState(filters?.year || new Date().getFullYear().toString());
   const [month, setMonth] = useState(filters?.month || '');
   const [dateFrom, setDateFrom] = useState(filters?.date_from || '');
@@ -124,17 +191,25 @@ export default function KinerjaOperator({
     }
   }, []);
 
-  const applyFilter = () => {
-    const params: Record<string, string> = {};
-    if (year) params.year = year;
-    if (month) params.month = month;
-    if (dateFrom) params.date_from = dateFrom;
-    if (dateTo) params.date_to = dateTo;
-    if (unitId) params.unit_id = unitId;
-    if (subUnitId) params.sub_unit_id = subUnitId;
-    if (search) params.search = search;
+  const buildFilterParams = (includeSearch: boolean): Record<string, string> => {
+    const entries: Array<[string, string]> = [
+      ['year', year],
+      ['month', month],
+      ['date_from', dateFrom],
+      ['date_to', dateTo],
+      ['unit_id', unitId],
+      ['sub_unit_id', subUnitId],
+    ];
 
-    router.get(route('admin.laporan.operator'), params, { preserveState: true });
+    if (includeSearch) {
+      entries.push(['search', search]);
+    }
+
+    return Object.fromEntries(entries.filter(([, value]) => value !== ''));
+  };
+
+  const applyFilter = () => {
+    router.get(route('admin.laporan.operator'), buildFilterParams(true), { preserveState: true });
   };
 
   const handleReset = () => {
@@ -143,15 +218,7 @@ export default function KinerjaOperator({
 
   const handleExportExcel = () => {
     setExporting(true);
-    const params = new URLSearchParams();
-    if (year) params.set('year', year);
-    if (month) params.set('month', month);
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
-    if (unitId) params.set('unit_id', unitId);
-    if (subUnitId) params.set('sub_unit_id', subUnitId);
-    if (search) params.set('search', search);
-    const qs = params.toString();
+    const qs = new URLSearchParams(buildFilterParams(true)).toString();
     const url = `/admin/laporan/kinerja-operator/export` + (qs ? '?' + qs : '');
     window.location.href = url;
     setTimeout(() => {
@@ -161,27 +228,23 @@ export default function KinerjaOperator({
 
   const handleExportPdf = async () => {
     setExporting(true);
+
     try {
-      const params = new URLSearchParams();
-      if (year) params.set('year', year);
-      if (month) params.set('month', month);
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (unitId) params.set('unit_id', unitId);
-      if (subUnitId) params.set('sub_unit_id', subUnitId);
-      if (search) params.set('search', search);
-      const qs = params.toString();
+      const qs = new URLSearchParams(buildFilterParams(true)).toString();
       const url = `/admin/laporan/kinerja-operator/export-pdf` + (qs ? '?' + qs : '');
       const response = await fetch(url);
 
       if (!response.ok) {
         const data = await response.json();
+
         if (data.error) {
           alert(data.error);
         } else {
           alert('Terjadi kesalahan saat membuat PDF');
         }
+
         setExporting(false);
+
         return;
       }
 
@@ -189,7 +252,7 @@ export default function KinerjaOperator({
       const downloadUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = `laporan-kinerja-operator-${new Date().getTime()}.pdf`;
+      link.download = `laporan-kinerja-individu-${new Date().getTime()}.pdf`;
       document.body.appendChild(link);
       link.click();
       window.URL.revokeObjectURL(downloadUrl);
@@ -207,18 +270,14 @@ export default function KinerjaOperator({
     setLoadingReviews(true);
 
     try {
-      const params = new URLSearchParams();
-      if (year) params.set('year', year);
-      if (month) params.set('month', month);
-      if (dateFrom) params.set('date_from', dateFrom);
-      if (dateTo) params.set('date_to', dateTo);
-      if (unitId) params.set('unit_id', unitId);
-      if (subUnitId) params.set('sub_unit_id', subUnitId);
+      const qs = new URLSearchParams(buildFilterParams(false)).toString();
 
       const res = await fetch(
-        route('admin.laporan.operator.ulasan', operator.id) + '?' + params.toString()
+        route('admin.laporan.operator.ulasan', operator.id) + (qs ? '?' + qs : '')
       );
+
       const data = await res.json();
+
       setReviews(data.reviews || []);
     } catch {
       setReviews([]);
@@ -252,10 +311,10 @@ export default function KinerjaOperator({
               <span className="p-2 bg-sky-500/10 text-sky-600 rounded-lg">
                 <UserCheck className="w-5 h-5" />
               </span>
-              <h1 className="text-2xl font-bold tracking-tight">Laporan Beban & Kinerja Individu</h1>
+              <h1 className="text-2xl font-bold tracking-tight">Laporan Kinerja Individu</h1>
             </div>
             <p className="text-sm text-muted-foreground mt-1">
-              Pemantauan beban tiket berjalan, tingkat penyelesaian, kepatuhan SLA, serta kepuasan pengguna (CSAT) per operator.
+              Pemantauan beban tiket berjalan, tingkat penyelesaian, kepatuhan SLA, serta kepuasan pengguna (CSAT) per individu.
             </p>
           </div>
 
@@ -342,6 +401,7 @@ export default function KinerjaOperator({
                     setUnitId(val);
                     setSubUnitId('');
                     setSubUnits([]);
+
                     if (val) {
                       fetch(`/api/sub-units/${val}`)
                         .then((r) => r.json())
@@ -376,10 +436,10 @@ export default function KinerjaOperator({
               </div>
 
               <div className="space-y-1.5 md:col-span-2">
-                <label className="text-xs font-semibold text-slate-700">Cari Operator</label>
+                <label className="text-xs font-semibold text-slate-700">Cari Individu</label>
                 <input
                   type="text"
-                  placeholder="Nama, username, atau email operator..."
+                  placeholder="Nama, username, atau email individu..."
                   className="w-full rounded-md border-input bg-background text-sm h-9 px-3"
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
@@ -403,11 +463,13 @@ export default function KinerjaOperator({
         <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 to-indigo-700 p-5 text-white shadow-md">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium text-white/80">Total Operator</span>
+              <span className="text-sm font-medium text-white/80">Total Individu</span>
               <Users className="w-6 h-6 text-white/70" />
             </div>
             <p className="mt-3 text-3xl font-bold">{summary.totalOperators}</p>
-            <p className="text-xs text-white/70 mt-1">Operator menangani tiket</p>
+            <p className="text-xs text-white/70 mt-1">
+              {summary.activeOperators ?? 0} individu menangani tiket
+            </p>
           </div>
 
           <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 p-5 text-white shadow-md">
@@ -417,7 +479,7 @@ export default function KinerjaOperator({
             </div>
             <p className="mt-3 text-3xl font-bold">{summary.totalActive}</p>
             <p className="text-xs text-white/70 mt-1">
-              Rata-rata {summary.avgActivePerOperator} tiket / operator
+              Rata-rata {summary.avgActivePerOperator} tiket / individu
             </p>
           </div>
 
@@ -427,7 +489,9 @@ export default function KinerjaOperator({
               <CheckCircle2 className="w-6 h-6 text-white/70" />
             </div>
             <p className="mt-3 text-3xl font-bold">{summary.totalSolved}</p>
-            <p className="text-xs text-white/70 mt-1">Dari {summary.totalAssigned} total tiket ditugaskan</p>
+            <p className="text-xs text-white/70 mt-1">
+              Dari {summary.totalAssigned} total tiket tertangani
+            </p>
           </div>
 
           <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-600 to-violet-700 p-5 text-white shadow-md">
@@ -439,7 +503,11 @@ export default function KinerjaOperator({
               {summary.overallAvgRating > 0 ? summary.overallAvgRating : '-'}{' '}
               <span className="text-base font-normal text-white/80">/ 5.0</span>
             </p>
-            <p className="text-xs text-white/70 mt-1">Kepuasan seluruh operator</p>
+            <p className="text-xs text-white/70 mt-1">
+              {(summary.totalReviews ?? 0) > 0
+                ? `Dari ${summary.totalReviews} ulasan`
+                : 'Belum ada ulasan'}
+            </p>
           </div>
         </div>
 
@@ -448,39 +516,56 @@ export default function KinerjaOperator({
           {/* Chart 1: Beban Kerja (Aktif vs Selesai) */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold flex items-center justify-between">
-                <span>Perbandingan Beban Tiket Operator</span>
-                <span className="text-xs font-normal text-muted-foreground">Top 10 Operator</span>
+              <CardTitle className="text-base font-semibold flex items-center justify-between gap-2">
+                <span>Perbandingan Beban Tiket Individu</span>
+                <span className="text-xs font-normal text-muted-foreground shrink-0">
+                  {getTopBadgeLabel(filteredWorkloadData.length)}
+                </span>
               </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Aktif: petugas terakhir ditugaskan • Selesai: penyelesai terakhir
+              </p>
             </CardHeader>
             <CardContent>
-              {workloadChartData && workloadChartData.length > 0 ? (
+              {filteredWorkloadData.length > 0 ? (
                 <LazyECharts
                   height={280}
                   option={{
                     tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-                    legend: { data: ['Tiket Aktif (Menumpuk)', 'Tiket Selesai'], bottom: 0 },
-                    grid: { left: '3%', right: '4%', bottom: '12%', top: '5%', containLabel: true },
+                    legend: { data: ['Tiket Aktif', 'Tiket Selesai'], bottom: 0 },
+                    grid: { left: '3%', right: '4%', bottom: '14%', top: '14%', containLabel: true },
                     xAxis: {
                       type: 'category',
-                      data: workloadChartData.map((d) => d.name),
+                      data: filteredWorkloadData.map((d) => d.name),
                       axisLabel: { interval: 0, rotate: 20, width: 90, overflow: 'truncate' },
                     },
-                    yAxis: { type: 'value', name: 'Tiket' },
+                    yAxis: { type: 'value', name: 'Tiket', minInterval: 1 },
                     series: [
                       {
-                        name: 'Tiket Aktif (Menumpuk)',
+                        name: 'Tiket Aktif',
                         type: 'bar',
                         stack: 'total',
+                        barMaxWidth: 44,
                         itemStyle: { color: '#f59e0b' },
-                        data: workloadChartData.map((d) => d.active),
+                        data: filteredWorkloadData.map((d) => ({
+                          value: d.active,
+                          itemStyle: {
+                            borderRadius: d.solved === 0 && d.active > 0 ? [4, 4, 0, 0] : [0, 0, 0, 0],
+                          },
+                        })),
                       },
                       {
                         name: 'Tiket Selesai',
                         type: 'bar',
                         stack: 'total',
-                        itemStyle: { color: '#10b981', borderRadius: [4, 4, 0, 0] },
-                        data: workloadChartData.map((d) => d.solved),
+                        barMaxWidth: 44,
+                        itemStyle: { color: '#10b981' },
+                        data: filteredWorkloadData.map((d) => ({
+                          value: d.solved,
+                          itemStyle: {
+                            borderRadius: d.solved > 0 ? [4, 4, 0, 0] : [0, 0, 0, 0],
+                          },
+                        })),
                       },
                     ],
                   }}
@@ -496,42 +581,53 @@ export default function KinerjaOperator({
           {/* Chart 2: Kepatuhan SLA & Rating CSAT */}
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
-              <CardTitle className="text-base font-semibold flex items-center justify-between">
-                <span>Kepatuhan SLA & Skor CSAT Operator</span>
-                <span className="text-xs font-normal text-muted-foreground">Top 10 Operator</span>
+              <CardTitle className="text-base font-semibold flex items-center justify-between gap-2">
+                <span>Kepatuhan SLA & Skor CSAT Individu</span>
+                <span className="text-xs font-normal text-muted-foreground shrink-0">
+                  {getTopBadgeLabel(filteredPerformanceData.length)}
+                </span>
               </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Kepatuhan SLA dari tiket selesai • CSAT dari ulasan pengguna
+              </p>
             </CardHeader>
             <CardContent>
-              {performanceChartData && performanceChartData.length > 0 ? (
+              {filteredPerformanceData.length > 0 ? (
                 <LazyECharts
                   height={280}
                   option={{
-                    tooltip: { trigger: 'axis' },
+                    tooltip: {
+                      trigger: 'axis',
+                      formatter: formatPerformanceTooltip,
+                    },
                     legend: { data: ['Kepatuhan SLA (%)', 'Skor CSAT (1-5)'], bottom: 0 },
-                    grid: { left: '3%', right: '4%', bottom: '12%', top: '5%', containLabel: true },
+                    grid: { left: '3%', right: '4%', bottom: '14%', top: '14%', containLabel: true },
                     xAxis: {
                       type: 'category',
-                      data: performanceChartData.map((d) => d.name),
+                      data: filteredPerformanceData.map((d) => d.name),
                       axisLabel: { interval: 0, rotate: 20, width: 90, overflow: 'truncate' },
                     },
                     yAxis: [
                       { type: 'value', name: 'SLA (%)', max: 100, min: 0 },
-                      { type: 'value', name: 'Rating', max: 5, min: 0 },
+                      { type: 'value', name: 'Rating', max: 5, min: 0, minInterval: 1 },
                     ],
                     series: [
                       {
                         name: 'Kepatuhan SLA (%)',
                         type: 'bar',
+                        barMaxWidth: 44,
                         itemStyle: { color: '#3b82f6', borderRadius: [4, 4, 0, 0] },
-                        data: performanceChartData.map((d) => d.sla),
+                        data: filteredPerformanceData.map((d) => d.sla),
                       },
                       {
                         name: 'Skor CSAT (1-5)',
                         type: 'line',
                         yAxisIndex: 1,
                         smooth: true,
+                        connectNulls: false,
+                        symbolSize: 8,
                         itemStyle: { color: '#eab308' },
-                        data: performanceChartData.map((d) => d.rating),
+                        data: filteredPerformanceData.map((d) => d.rating),
                       },
                     ],
                   }}
@@ -551,14 +647,14 @@ export default function KinerjaOperator({
             <div>
               <CardTitle className="text-lg font-bold flex items-center gap-2">
                 <span className="h-4 w-1 rounded-full bg-sky-500"></span>
-                Rincian Kinerja & Beban Kerja per Operator
+                Rincian Kinerja & Beban Kerja per Individu
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Urutan teratas menampilkan operator dengan jumlah tiket aktif tertinggi.
+                Urutan berdasarkan tiket aktif terbanyak, lalu tiket selesai. Tiket aktif dihitung pada petugas terakhir ditugaskan; tiket selesai pada penyelesai terakhir.
               </p>
             </div>
             <div className="text-xs text-slate-500">
-              Total <strong>{operators.length}</strong> operator ditemukan
+              Total <strong>{operators.length}</strong> individu ditemukan
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -566,10 +662,11 @@ export default function KinerjaOperator({
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-700 font-semibold text-xs border-b">
                   <tr>
-                    <th className="py-3 px-4">Operator</th>
+                    <th className="py-3 px-4">Individu</th>
                     <th className="py-3 px-4">Unit Layanan</th>
                     <th className="py-3 px-3 text-center">Tiket Aktif</th>
                     <th className="py-3 px-3 text-center">Selesai</th>
+                    <th className="py-3 px-3 text-center">Ditolak/Batal</th>
                     <th className="py-3 px-3 text-center">Total Tiket</th>
                     <th className="py-3 px-4 text-center">Kepatuhan SLA</th>
                     <th className="py-3 px-4 text-center">CSAT (Rating)</th>
@@ -636,8 +733,27 @@ export default function KinerjaOperator({
 
                         {/* Solved Tickets */}
                         <td className="py-3.5 px-3 text-center">
-                          <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                          <span
+                            className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              op.solved_tickets > 0
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
                             {op.solved_tickets}
+                          </span>
+                        </td>
+
+                        {/* Rejected/Cancelled Tickets */}
+                        <td className="py-3.5 px-3 text-center">
+                          <span
+                            className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+                              op.rejected_tickets > 0
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-slate-100 text-slate-600'
+                            }`}
+                          >
+                            {op.rejected_tickets}
                           </span>
                         </td>
 
@@ -648,26 +764,33 @@ export default function KinerjaOperator({
 
                         {/* SLA Compliance */}
                         <td className="py-3.5 px-4 text-center">
-                          <div className="flex flex-col items-center">
-                            <span
-                              className={`text-xs font-bold ${
-                                op.resolution_compliance >= 90
-                                  ? 'text-emerald-600'
-                                  : op.resolution_compliance >= 70
-                                  ? 'text-amber-600'
-                                  : 'text-rose-600'
-                              }`}
-                            >
-                              {op.resolution_compliance}%
-                            </span>
-                            {op.total_breaches > 0 ? (
-                              <span className="text-[11px] text-rose-500 font-medium flex items-center gap-0.5 mt-0.5">
-                                <AlertTriangle className="w-3 h-3" /> {op.total_breaches} telat
+                          {op.resolution_compliance !== null ? (
+                            <div className="flex flex-col items-center">
+                              <span
+                                className={`text-xs font-bold ${
+                                  op.resolution_compliance >= 90
+                                    ? 'text-emerald-600'
+                                    : op.resolution_compliance >= 70
+                                    ? 'text-amber-600'
+                                    : 'text-rose-600'
+                                }`}
+                              >
+                                {op.resolution_compliance}%
                               </span>
-                            ) : (
-                              <span className="text-[11px] text-emerald-500 font-medium">0 pelanggaran</span>
-                            )}
-                          </div>
+                              {op.resolution_breaches > 0 ? (
+                                <span className="text-[11px] text-rose-500 font-medium flex items-center gap-0.5 mt-0.5">
+                                  <AlertTriangle className="w-3 h-3" /> {op.resolution_breaches} pelanggaran SLA
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-emerald-500 font-medium">0 pelanggaran</span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center">
+                              <span className="text-xs font-semibold text-slate-400">-</span>
+                              <span className="text-[11px] text-slate-400">Belum ada tiket selesai</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* CSAT Rating */}
@@ -703,8 +826,8 @@ export default function KinerjaOperator({
 
                   {operators.length === 0 && (
                     <tr>
-                      <td colSpan={8} className="py-10 text-center text-muted-foreground">
-                        Tidak ada operator yang cocok dengan filter yang dipilih.
+                      <td colSpan={9} className="py-10 text-center text-muted-foreground">
+                        Tidak ada individu yang cocok dengan filter yang dipilih.
                       </td>
                     </tr>
                   )}
@@ -715,7 +838,7 @@ export default function KinerjaOperator({
         </Card>
       </div>
 
-      {/* Modal Dialog Ulasan CSAT Operator */}
+      {/* Modal Dialog Ulasan CSAT Individu */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col p-6">
           <DialogHeader className="border-b pb-4">
@@ -724,7 +847,7 @@ export default function KinerjaOperator({
                 <span className="text-lg font-bold">Ulasan & Komentar Pengguna</span>
                 {selectedOperator && (
                   <p className="text-xs text-muted-foreground font-normal mt-0.5">
-                    Operator: <strong>{selectedOperator.name}</strong> (@{selectedOperator.username})
+                    Individu: <strong>{selectedOperator.name}</strong> (@{selectedOperator.username})
                   </p>
                 )}
               </div>
@@ -786,7 +909,7 @@ export default function KinerjaOperator({
               ))
             ) : (
               <div className="py-12 text-center text-sm text-slate-500">
-                Belum ada komentar atau ulasan untuk operator ini pada periode yang dipilih.
+                Belum ada komentar atau ulasan untuk individu ini pada periode yang dipilih.
               </div>
             )}
           </div>

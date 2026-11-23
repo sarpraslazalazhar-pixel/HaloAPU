@@ -116,6 +116,14 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const showCsat = Boolean(isCreator)
     && ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
 
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else {
+      router.visit(route('admin.tiket.index'));
+    }
+  };
+
   const canCancelTicket = canManage && (ticket.status === 'open'
     || (ticket.status === 'pending' && work_hours?.reason === 'paused' && work_hours.resume_status === 'open'))
     && (auth?.is_super_admin || isCreator);
@@ -393,7 +401,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
      <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
      <div className="flex flex-wrap items-center gap-3 mb-6">
-       <Button variant="outline" size="sm" onClick={() => router.get(route('admin.tiket.index'))}>
+       <Button type="button" variant="outline" size="sm" onClick={handleBack}>
          <ArrowLeft className="w-4 h-4 mr-1" /> Kembali
        </Button>
        <div className="flex min-w-0 flex-wrap items-center gap-2">

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, router, useForm } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
@@ -11,7 +11,7 @@ import { TicketAttachmentList } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
 import { LocalAttachmentImage, MAX_ATTACHMENT_BYTES, fitEditedAttachment } from '@/lib/localAttachment';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { XCircle, Eye, CheckCircle2, Clock, Paperclip, Info, MessageSquare } from 'lucide-react';
+import { ArrowLeft, XCircle, Eye, CheckCircle2, Clock, Paperclip, Info, MessageSquare } from 'lucide-react';
 import { TicketChatBox } from '@/Components/TicketChatBox';
 import { CsatDialog } from '@/Components/CsatDialog';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
@@ -88,25 +88,33 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
      chatPanelRef.current?.focus({ preventScroll: true });
    }, 0);
  };
+
  const isBooking = Boolean(ticket.booking);
+
  const bookingServiceTitle = (() => {
    const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
+
    if (/^peminjaman\s+/i.test(rawName)) {
      return rawName;
    }
+
    if (/^penggunaan\s+/i.test(rawName)) {
      return rawName.replace(/^penggunaan\s+/i, 'Peminjaman ');
    }
+
    return `Peminjaman ${rawName}`;
  })();
+
  const isBookingPast = Boolean(
    isBooking &&
    ticket.booking?.tanggal_selesai &&
    new Date(ticket.booking.tanggal_selesai) <= new Date()
  );
+
  const bookingNotStarted = isBooking && ticket.booking?.tanggal_mulai && new Date(ticket.booking.tanggal_mulai) > new Date();
  const bookingActive = isBooking && !['dibatalkan', 'reject', 'selesai'].includes(ticket.booking?.status) && !isBookingPast;
  const canCancelAfterHours = isWorkHoursPaused && work_hours?.resume_status === 'open';
+
  const canCancel = !isBookingPast
    && (ticket.status === 'open' || canCancelAfterHours || (bookingNotStarted && bookingActive))
    && ticket.status !== 'dibatalkan' && ticket.status !== 'reject';
@@ -126,6 +134,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
  const openAttachment = (attachment: AttachmentSelection, isImage: boolean) => {
    if (isImage) {
      setPreviewFile(attachment);
+
      return;
    }
 
@@ -138,9 +147,11 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
 
  const saveEditedAttachment = async (editedFile: File) => {
    const session = editSessionRef.current;
+
    if (!fileToEdit || !session) return;
 
    let file: File | null = null;
+
    try {
      file = await fitEditedAttachment(editedFile);
    } catch {
@@ -151,6 +162,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
 
    const isReply = fileToEdit.form === 'reply';
    const setWarning = isReply ? setReplyAttachmentWarning : setRevAttachmentWarning;
+
    if (file) {
      const attachments = isReply ? replyData.general_attachments : revData.general_attachments;
      const setData = isReply ? setReplyData : setRevData;
@@ -224,6 +236,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
      preserveScroll: true,
      onSuccess: (page: any) => {
        setIsSubmittingKembali(false);
+
        if (page?.props?.flash?.error) {
          setIsReturned(false);
          Swal.fire({
@@ -316,6 +329,14 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
     return stringValue;
   };
 
+  const handleBack = () => {
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      window.history.back();
+    } else {
+      router.visit(route('tiket.riwayat'));
+    }
+  };
+
   return (
    <UserLayout title={`Tiket #TKT-${formatTicketId(ticket.id)}`}>
      <div className="max-w-4xl mx-auto py-8 px-4">
@@ -343,9 +364,9 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
                <XCircle className="h-4 w-4 mr-1" /> Batalkan
              </Button>
            )}
-           <Link href={route('tiket.riwayat')}>
-             <Button variant="outline">Kembali ke Riwayat</Button>
-           </Link>
+           <Button type="button" variant="outline" onClick={handleBack}>
+             <ArrowLeft className="h-4 w-4 mr-1" /> Kembali
+           </Button>
          </div>
        </div>
 
@@ -426,6 +447,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
  return true; });
 
                            setRevData('general_attachments', [...revData.general_attachments, ...validFiles]);
+
                            if (validFiles.length > 0) setRevAttachmentWarning('');
                            e.target.value = '';
                          }}
@@ -737,6 +759,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
                                });
 
                                setReplyData('general_attachments', [...replyData.general_attachments, ...validFiles]);
+
                                if (validFiles.length > 0) setReplyAttachmentWarning('');
                                e.target.value = '';
                              }}

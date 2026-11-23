@@ -7,7 +7,8 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Plus, Search, Send, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Plus, Search, Send, X, XCircle } from 'lucide-react';
+import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { formatTicketId } from '@/lib/utils';
 
 const STATUS_LIST = [
@@ -29,6 +30,8 @@ interface Ticket {
  status: string;
  created_at: string;
  assignment_queued_at?: string | null;
+ booking?: { id?: number; status: string } | null;
+ can_cancel?: boolean;
  csat?: { id?: number; rating: number; komentar?: string | null } | null;
 }
 
@@ -94,6 +97,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [search, setSearch] = useState(filters?.search || '');
  const [openOperator, setOpenOperator] = useState<number | null>(null);
  const [enqueuingTicketId, setEnqueuingTicketId] = useState<number | null>(null);
+ const [cancelTargetTicket, setCancelTargetTicket] = useState<Ticket | null>(null);
 
  const enqueueTicket = (ticketId: number) => {
   if (enqueuingTicketId !== null) return;
@@ -245,11 +249,24 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  {
  key: 'aksi',
  header: 'Aksi',
- className: 'w-[100px]',
+ className: currentTab === 'saya_ajukan' ? 'w-[190px]' : 'w-[100px]',
  render: (t: Ticket) => (
+ <div className="flex items-center gap-1.5">
  <Button variant="outline" size="sm" onClick={() => router.get(route('admin.tiket.show', t.id))}>
  <Eye className="w-4 h-4 mr-1" /> Detail
  </Button>
+ {currentTab === 'saya_ajukan' && t.can_cancel && (
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+ onClick={() => setCancelTargetTicket(t)}
+ >
+ <XCircle className="w-4 h-4 mr-1" /> Batalkan
+ </Button>
+ )}
+ </div>
  ),
  },
  ].filter(c => !(currentTab === 'saya_ajukan' && c.key === 'user'));
@@ -461,6 +478,31 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
 
  <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: Ticket) => t.id} />
  <Pagination links={tickets.links} />
+
+ <ConfirmDialog
+ open={cancelTargetTicket !== null}
+ onOpenChange={(open) => {
+ if (!open) setCancelTargetTicket(null);
+ }}
+ title="Batalkan Tiket?"
+ message={
+ cancelTargetTicket
+ ? (cancelTargetTicket.booking
+ ? `Tiket #TKT-${formatTicketId(cancelTargetTicket.id)} beserta jadwal peminjamannya akan dibatalkan dan aset kembali tersedia. Yakin ingin membatalkan?`
+ : `Tiket #TKT-${formatTicketId(cancelTargetTicket.id)} yang dibatalkan tidak dapat diproses lagi oleh tim penangan. Yakin ingin membatalkan?`)
+ : ''
+ }
+ confirmText="Ya, Batalkan Tiket"
+ cancelText="Tutup"
+ onConfirm={() => {
+ if (!cancelTargetTicket) return;
+
+ router.patch(route('admin.tiket.cancel', cancelTargetTicket.id), {}, {
+ preserveScroll: true,
+ onSuccess: () => setCancelTargetTicket(null),
+ });
+ }}
+ />
  </AdminLayout>
  );
 }

@@ -38,7 +38,7 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Ticket::with(['user.divisi', 'createdByAdmin', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin', 'csat:id,ticket_id,rating,komentar']);
+        $query = Ticket::with(['user.divisi', 'createdByAdmin', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin', 'booking:id,ticket_id,status,tanggal_mulai,tanggal_selesai', 'csat:id,ticket_id,rating,komentar']);
 
         $admin = auth('admin')->user();
         $tab = $request->input('tab') === 'saya_ajukan' ? 'saya_ajukan' : 'masuk';
@@ -86,6 +86,12 @@ class TicketController extends Controller
         }
 
         $tickets = $query->latest()->paginate(10)->withQueryString();
+
+        if ($tab === 'saya_ajukan') {
+            $tickets->getCollection()->each(function (Ticket $t) use ($admin): void {
+                $t->setAttribute('can_cancel', $t->canBeCancelledByAdmin($admin, isCreatorOverride: true));
+            });
+        }
 
         $units = Unit::aktif()->select('id', 'nama_unit')->orderBy('nama_unit')->get();
         $divisiList = OrgDivisi::select('id', 'nama_divisi')->orderBy('nama_divisi')->get();
@@ -239,6 +245,7 @@ class TicketController extends Controller
         $subUnit = SubUnit::findOrFail($request->sub_unit_id);
         $subUnit->load('formFields');
         $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $formFields, $request->form_data));
+        $formDeadline = TicketSlaSchedule::extensionDeadline(TicketSlaSchedule::extensionInput($subUnit, $formFields, $request->form_data));
 
         $admin = auth('admin')->user();
 
@@ -252,6 +259,7 @@ class TicketController extends Controller
             ],
             'subUnit' => $subUnit,
             'window' => $window,
+            'formDeadline' => $formDeadline,
         ]])[0];
 
         $creator->notifyAdmins($ticket, $admin->id);
@@ -301,6 +309,7 @@ class TicketController extends Controller
             'operators' => $operators,
             'isSubmittedByMe' => $ticket->isSubmittedBy($admin),
             'canManage' => $canManage,
+            'canCancelTicket' => $ticket->canBeCancelledByAdmin($admin),
             'canEditForm' => $canManage && in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true),
             'work_hours' => TicketWorkQueue::workHoursFor($ticket, $admin),
         ]);
@@ -645,8 +654,18 @@ class TicketController extends Controller
             : 'Tiket ditolak/dibatalkan oleh Admin '.($admin->name ?? $admin->username);
 
         try {
-            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($admin, $targetStatus, $catatan) {
-                if (! $locked->isOpenForCancellation()) {
+            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($admin, $isCreator, $targetStatus, $catatan) {
+                $locked->loadMissing('booking');
+
+                if (in_array(strtolower((string) $locked->status), ['selesai', 'solve', 'dibatalkan', 'reject'], true)) {
+                    throw new \InvalidArgumentException('Tiket yang sudah selesai, ditolak, atau dibatalkan tidak dapat dibatalkan.');
+                }
+
+                if ($locked->booking?->tanggal_selesai && $at->gte($locked->booking->tanggal_selesai)) {
+                    throw new \InvalidArgumentException('Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+                }
+
+                if (! $isCreator && ! $locked->isOpenForCancellation()) {
                     throw new \InvalidArgumentException('Tiket hanya dapat dibatalkan saat berstatus open.');
                 }
 
@@ -665,7 +684,34 @@ class TicketController extends Controller
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        if (! $isCreator) {
+        if ($isCreator) {
+            try {
+                $ticket->load('subUnit.unit.admins', 'assignedAdmin');
+                $actorName = $admin->name ?? $admin->username ?? 'Admin';
+                $recipients = collect();
+
+                if ($ticket->assignedAdmin) {
+                    $recipients->push($ticket->assignedAdmin);
+                }
+
+                if ($ticket->subUnit?->unit?->admins) {
+                    $recipients = $recipients->merge($ticket->subUnit->unit->admins);
+                }
+
+                $recipients
+                    ->unique('id')
+                    ->reject(fn (Admin $recipient) => (int) $recipient->id === (int) $admin->id)
+                    ->each(function (Admin $recipient) use ($actorName, $ticket): void {
+                        $recipient->notify(new BrowserNotification(
+                            'Tiket Dibatalkan',
+                            "{$actorName} membatalkan tiket #{$ticket->formatted_id}",
+                            "/admin/tiket/{$ticket->id}"
+                        ));
+                    });
+            } catch (\Throwable $e) {
+                \Log::error('Gagal kirim notif batal creator admin: '.$e->getMessage());
+            }
+        } else {
             try {
                 $ticket->load('user');
                 if ($ticket->user) {

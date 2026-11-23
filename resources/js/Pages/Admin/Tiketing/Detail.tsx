@@ -85,6 +85,7 @@ interface TicketDetailProps {
   operators?: Array<{ id: number; name?: string; username?: string }>;
   isSubmittedByMe?: boolean;
   canManage?: boolean;
+  canCancelTicket?: boolean;
   canEditForm?: boolean;
   work_hours?: WorkHoursInfo | null;
 }
@@ -94,7 +95,7 @@ interface AdminDetailPageProps {
   errors?: Record<string, string>;
 }
 
-export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canEditForm, work_hours }: TicketDetailProps) {
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, work_hours }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as AdminDetailPageProps;
 
@@ -123,10 +124,6 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
       router.visit(route('admin.tiket.index'));
     }
   };
-
-  const canCancelTicket = canManage && (ticket.status === 'open'
-    || (ticket.status === 'pending' && work_hours?.reason === 'paused' && work_hours.resume_status === 'open'))
-    && (auth?.is_super_admin || isCreator);
 
   const [showKembaliModal, setShowKembaliModal] = useState(false);
   const [kondisiKembali, setKondisiKembali] = useState<'baik' | 'rusak' | 'tidak_lengkap'>('baik');
@@ -179,6 +176,19 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const isBookingPast = Boolean(
     ticket.booking?.tanggal_selesai && new Date(ticket.booking.tanggal_selesai) <= new Date()
   );
+
+  const isTerminalStatus = ['selesai', 'solve', 'dibatalkan', 'reject'].includes(
+    String(ticket.status || '').toLowerCase()
+  );
+
+  const canCancelTicket = canCancelTicketProp !== undefined
+    ? Boolean(canCancelTicketProp)
+    : (!isTerminalStatus
+      && !isBookingPast
+      && (isCreator || (Boolean(auth?.is_super_admin) && (
+        ticket.status === 'open'
+        || (ticket.status === 'pending' && work_hours?.reason === 'paused' && work_hours.resume_status === 'open')
+      ))));
 
   const canCancelBooking = Boolean(
     canManage && ticket.booking &&
@@ -411,7 +421,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Diedit Admin</span>
          )}
        </div>
-       {(showCsat || canEditForm) && (
+       {(showCsat || canEditForm || (canCancelTicket && isCreator)) && (
          <div className="sm:ml-auto flex flex-wrap items-center gap-2">
            {showCsat && (
              <CsatDialog
@@ -424,6 +434,11 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
            {canEditForm && (
              <Button variant="outline" size="sm" onClick={() => setEditFormOpen(true)}>
                <Edit2 className="w-4 h-4 mr-1" /> Edit Formulir
+             </Button>
+           )}
+           {canCancelTicket && isCreator && (
+             <Button type="button" variant="destructive" size="sm" onClick={() => setShowCancelTicketConfirm(true)}>
+               <XCircle className="w-4 h-4 mr-1" /> Batalkan Tiket
              </Button>
            )}
          </div>
@@ -669,30 +684,33 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                 onConfirm={handleCancelBooking}
               />
 
+              {canCancelTicket && !isCreator && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  className="w-full flex items-center justify-center gap-1.5"
+                  onClick={() => setShowCancelTicketConfirm(true)}
+                >
+                  <XCircle className="w-4 h-4" /> Tolak / Batalkan Tiket
+                </Button>
+              )}
+
               {canCancelTicket && (
-                <>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    className="w-full flex items-center justify-center gap-1.5"
-                    onClick={() => setShowCancelTicketConfirm(true)}
-                  >
-                    <XCircle className="w-4 h-4" /> {isCreator ? 'Batalkan Tiket' : 'Tolak / Batalkan Tiket'}
-                  </Button>
-                  <ConfirmDialog
-                    open={showCancelTicketConfirm}
-                    onOpenChange={setShowCancelTicketConfirm}
-                    title={isCreator ? 'Batalkan Tiket?' : 'Tolak Tiket?'}
-                    message={
-                      isCreator
-                        ? 'Tiket yang dibatalkan tidak dapat diproses lagi oleh tim penangan. Yakin ingin membatalkan?'
-                        : 'Karena Anda bukan pembuat tiket ini, membatalkan akan mengubah status tiket menjadi Ditolak. Yakin ingin melanjutkan?'
-                    }
-                    confirmText={isCreator ? 'Ya, Batalkan Tiket' : 'Ya, Tolak Tiket'}
-                    cancelText="Tutup"
-                    onConfirm={handleCancelTicket}
-                  />
-                </>
+                <ConfirmDialog
+                  open={showCancelTicketConfirm}
+                  onOpenChange={setShowCancelTicketConfirm}
+                  title={isCreator ? 'Batalkan Tiket?' : 'Tolak Tiket?'}
+                  message={
+                    isCreator
+                      ? (ticket.booking
+                        ? `Tiket beserta jadwal ${bookingServiceTitle} akan dibatalkan dan aset akan kembali tersedia di Live Monitor. Yakin ingin membatalkan?`
+                        : 'Tiket yang dibatalkan tidak dapat diproses lagi oleh tim penangan. Yakin ingin membatalkan?')
+                      : 'Karena Anda bukan pembuat tiket ini, membatalkan akan mengubah status tiket menjadi Ditolak. Yakin ingin melanjutkan?'
+                  }
+                  confirmText={isCreator ? 'Ya, Batalkan Tiket' : 'Ya, Tolak Tiket'}
+                  cancelText="Tutup"
+                  onConfirm={handleCancelTicket}
+                />
               )}
 
               {ticket.sub_unit?.wajib_kembali && (

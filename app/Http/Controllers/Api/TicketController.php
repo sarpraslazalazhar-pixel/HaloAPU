@@ -190,7 +190,9 @@ class TicketController extends Controller
             )->validate();
         }
 
-        $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $subUnit->formFields()->get(), $formData));
+        $apiFields = $subUnit->formFields()->get();
+        $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $apiFields, $formData));
+        $formDeadline = TicketSlaSchedule::extensionDeadline(TicketSlaSchedule::extensionInput($subUnit, $apiFields, $formData));
 
         // Check asset schedule conflict BEFORE creating ticket if monitored
         $startDT = null;
@@ -276,7 +278,7 @@ class TicketController extends Controller
             $isWorkingHours,
             $initialStatus,
             $slaCalculator,
-            $window,
+            $window, $formDeadline,
             $startDT,
             $endDT,
             $assetName
@@ -337,7 +339,7 @@ class TicketController extends Controller
                 'timestamp' => now(),
             ]);
 
-            $slaCalculator->createTracking($ticket, $window);
+            $slaCalculator->createTracking($ticket, $window, $formDeadline);
 
             // Integrasi Live Monitor (Booking Aset Generik)
             if ($subUnit && $subUnit->is_monitored && $startDT && $endDT) {
@@ -696,9 +698,27 @@ class TicketController extends Controller
             : 'Tiket ditolak/dibatalkan oleh Admin '.($user->name ?? $user->username);
 
         try {
-            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($user, $isAdmin, $targetStatus, $catatan) {
-                if (! $locked->isOpenForCancellation()) {
-                    throw new \InvalidArgumentException('Hanya tiket dengan status Open yang bisa dibatalkan');
+            $ticket = TicketWorkQueue::mutate($ticket, null, function (Ticket $locked, Carbon $at) use ($user, $isAdmin, $isCreator, $targetStatus, $catatan) {
+                $locked->loadMissing('booking');
+
+                if (in_array(strtolower((string) $locked->status), ['selesai', 'solve', 'dibatalkan', 'reject'], true)) {
+                    throw new \InvalidArgumentException('Tiket yang sudah selesai, ditolak, atau dibatalkan tidak dapat dibatalkan.');
+                }
+
+                if ($locked->booking?->tanggal_selesai && $at->gte($locked->booking->tanggal_selesai)) {
+                    throw new \InvalidArgumentException('Masa peminjaman telah berakhir, tidak dapat dibatalkan.');
+                }
+
+                if (! ($isAdmin && $isCreator)) {
+                    $booking = $locked->booking;
+                    $canCancelBooking = ! $isAdmin
+                        && $booking
+                        && $at->lt($booking->tanggal_mulai)
+                        && ! in_array($booking->status, ['dibatalkan', 'reject', 'selesai'], true);
+
+                    if (! $locked->isOpenForCancellation() && ! $canCancelBooking) {
+                        throw new \InvalidArgumentException('Hanya tiket dengan status Open yang bisa dibatalkan');
+                    }
                 }
 
                 $locked->update(['status' => $targetStatus]);

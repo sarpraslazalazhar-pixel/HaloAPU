@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -145,6 +146,35 @@ class Ticket extends Model
                 $this->work_hours_resume_status === 'open'
                 || ($this->assignment_queued_at === null && $this->assignment_resume_status === 'open')
             ));
+    }
+
+    /**
+     * Cek apakah tiket dapat dibatalkan (creator) atau ditolak/dibatalkan (superadmin) via portal Admin.
+     */
+    public function canBeCancelledByAdmin(Admin $admin, ?Carbon $at = null, ?bool $isCreatorOverride = null): bool
+    {
+        $at ??= Carbon::now();
+        $isCreator = $isCreatorOverride ?? $this->isSubmittedBy($admin);
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+
+        if (! $isCreator && ! $isSuperAdmin) {
+            return false;
+        }
+
+        if (in_array(strtolower((string) $this->status), ['selesai', 'solve', 'dibatalkan', 'reject'], true)) {
+            return false;
+        }
+
+        if ($this->booking?->tanggal_selesai && $at->gte($this->booking->tanggal_selesai)) {
+            return false;
+        }
+
+        if ($isCreator) {
+            return true;
+        }
+
+        return $this->isOpenForCancellation();
     }
 
     public function createdByAdmin()

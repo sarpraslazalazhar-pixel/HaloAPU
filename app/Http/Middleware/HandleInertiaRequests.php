@@ -7,6 +7,7 @@ use Inertia\Middleware;
 use App\Models\User;
 use App\Models\Admin;
 use App\Services\TicketWorkQueue;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 
 class HandleInertiaRequests extends Middleware
@@ -53,6 +54,10 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $webUser,
                 'admin' => $adminUser,
+                'remembered' => [
+                    'web' => $webUser !== null && (($request->hasSession() && (bool) $request->session()->get('auth.remember.web', false)) || Auth::guard('web')->viaRemember()),
+                    'admin' => $adminUser !== null && (($request->hasSession() && (bool) $request->session()->get('auth.remember.admin', false)) || Auth::guard('admin')->viaRemember()),
+                ],
                 'is_super_admin' => fn () => $adminUser ? $adminUser->hasRole(['superadmin', 'Super Admin']) : false,
                 'can_assess_ticket_workload' => fn () => $adminUser ? $adminUser->can('assess-ticket-workload') : false,
                 'permissions' => fn () => $adminUser

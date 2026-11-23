@@ -4,7 +4,13 @@ namespace App\Providers;
 
 use App\Models\Admin;
 use App\Models\SystemConfig;
+use App\Models\User;
+use Illuminate\Auth\Events\Login;
+use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\SessionGuard;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Cache\RateLimiting\Limit;
@@ -98,6 +104,31 @@ class AppServiceProvider extends ServiceProvider
                 $userType = get_class($event->notifiable);
                 $userId = $event->notifiable->id;
                 Cache::forget("unread_notif_{$userType}_{$userId}");
+            }
+        });
+
+        Event::listen(Login::class, function (Login $event): void {
+            if (! in_array($event->guard, ['web', 'admin'], true) || ! request()->hasSession()) {
+                return;
+            }
+
+            request()->session()->put("auth.remember.{$event->guard}", (bool) $event->remember);
+
+            if (! $event->remember) {
+                $guard = Auth::guard($event->guard);
+                if ($guard instanceof SessionGuard) {
+                    Cookie::queue(Cookie::forget($guard->getRecallerName()));
+                }
+            }
+
+            if ($event->guard === 'web' && $event->user instanceof User && $event->user->is_active) {
+                request()->session()->put('user_session_version', (int) $event->user->session_version);
+            }
+        });
+
+        Event::listen(Logout::class, function (Logout $event): void {
+            if (in_array($event->guard, ['web', 'admin'], true) && request()->hasSession()) {
+                request()->session()->forget("auth.remember.{$event->guard}");
             }
         });
 

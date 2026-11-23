@@ -8,11 +8,15 @@ import {
 const IDLE_EXPIRED_MESSAGE =
   'Sesi kamu telah berakhir karena batas waktu tidak aktif. Silakan login kembali.';
 
-export function useIdleTimer(logoutUrl: string, timeout = 30 * 60 * 1000) {
+export function useIdleTimer(logoutUrl: string, timeout = 30 * 60 * 1000, enabled = true) {
   const lastActiveRef = useRef<number>(Date.now());
   const hasLoggedOutRef = useRef<boolean>(false);
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     lastActiveRef.current = Date.now();
     hasLoggedOutRef.current = false;
 
@@ -91,5 +95,5 @@ export function useIdleTimer(logoutUrl: string, timeout = 30 * 60 * 1000) {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('focus', checkAndLogoutIfIdle);
     };
-  }, [logoutUrl, timeout]);
+  }, [logoutUrl, timeout, enabled]);
 }

@@ -51,13 +51,14 @@ import { subscribe as subscribeChannel, type NotificationEvents } from '@/lib/re
 import PageTransition from '@/Components/PageTransition';
 import ActiveAssignedTicket from '@/Components/ActiveAssignedTicket';
 import NotificationBell from '@/Components/NotificationBell';
-const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
 import { useNotificationSound } from '@/hooks/useNotificationSound';
 import { useChatUnread } from '@/hooks/useChatUnread';
+
+const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 
 interface AdminLayoutProps {
  children: React.ReactNode;
@@ -210,6 +211,7 @@ function NavLink({ item, active, isCollapsed, badge, badgeLabel, href = item.rou
 function NavDropdown({ item, isCollapsed, url, permissions, isSuperAdmin }: { item: NavItem; isCollapsed: boolean; url: string; permissions?: string[]; isSuperAdmin?: boolean }) {
   const visibleChildren = item.children?.filter(child => {
     if (child.superAdminOnly && !isSuperAdmin) return false;
+
     return isSuperAdmin || !child.permissionGroup || (permissions && permissions.includes(child.permissionGroup));
   }) || [];
 
@@ -435,7 +437,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     });
   };
 
-  useIdleTimer('/admin/logout');
+  useIdleTimer('/admin/logout', undefined, !(auth?.remembered?.admin ?? false));
 
   useEffect(() => {
     if (flash?.success) toast.success(flash.success, { id: 'flash-success' });
@@ -446,8 +448,9 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
 
     // Validation errors (back()->withErrors(...)) were previously swallowed outside forms.
     const firstError = Object.values(pageErrors ?? {}).flat()[0];
-    if (typeof firstError === 'string' && firstError !== flash?.error) {
-      toast.error(firstError, { id: 'page-error' });
+
+    if (firstError && firstError !== flash?.error) {
+      toast.error(String(firstError), { id: 'page-error' });
     }
 
     // Listen for Echo notifications
@@ -546,6 +549,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     if (!canAssessWorkload) return;
 
     let request: AbortController | undefined;
+
     const refresh = async () => {
       if (document.hidden) return;
       request?.abort();
@@ -557,8 +561,10 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
           headers: { Accept: 'application/json' },
           signal: controller.signal,
         });
+
         if (response.ok) {
           const { count } = await response.json();
+
           if (!controller.signal.aborted) setWorkloadCount(count);
         } else if (!controller.signal.aborted && (response.status === 401 || response.status === 403)) {
           setWorkloadCount(0);
@@ -572,6 +578,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
     const interval = window.setInterval(refresh, 30000);
     const stopListening = router.on('success', refresh);
     document.addEventListener('visibilitychange', refresh);
+
     return () => {
       request?.abort();
       window.clearInterval(interval);
@@ -622,6 +629,7 @@ export default function AdminLayout({ children, title, hideBottomNav }: AdminLay
 
             // Check permissions
             const allowedAsAssessor = item.allowWorkloadAssessors && !!auth?.can_assess_ticket_workload;
+
             if (!allowedAsAssessor && !auth?.is_super_admin && item.permissionGroup && auth.permissions && !auth.permissions.includes(item.permissionGroup)) {
               return null;
             }

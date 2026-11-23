@@ -42,19 +42,21 @@ class EnsureUserAccountActive
             return $next($request);
         }
 
-        $hasVersion = $request->session()->has('user_session_version');
-        $expectedVersion = (int) $request->session()->get('user_session_version', 0);
+        if ($user->is_active) {
+            $hasVersion = $request->session()->has('user_session_version');
+            $expectedVersion = (int) $request->session()->get('user_session_version', 0);
 
-        // Sessions created before this column existed are version 0: adopt the
-        // current version so active accounts are not logged out by the deploy.
-        if ($user->is_active && ! $hasVersion && (int) $user->session_version === 0) {
-            $request->session()->put('user_session_version', 0);
+            // Sessions created before this column existed (version 0) or restored
+            // via a valid remember-me cookie adopt the user's current version.
+            if (! $hasVersion && ((int) $user->session_version === 0 || $guard->viaRemember())) {
+                $request->session()->put('user_session_version', (int) $user->session_version);
 
-            return $next($request);
-        }
+                return $next($request);
+            }
 
-        if ($user->is_active && $hasVersion && (int) $user->session_version === $expectedVersion) {
-            return $next($request);
+            if ($hasVersion && (int) $user->session_version === $expectedVersion) {
+                return $next($request);
+            }
         }
 
         $guard->logoutCurrentDevice();

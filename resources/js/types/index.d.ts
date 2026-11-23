@@ -172,6 +172,10 @@ declare module '@inertiajs/react' {
  username: string;
  email: string;
  };
+ remembered?: {
+ web: boolean;
+ admin: boolean;
+ };
  };
  flash: {
  message?: string;

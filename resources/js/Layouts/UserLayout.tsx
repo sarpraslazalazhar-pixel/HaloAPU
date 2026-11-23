@@ -21,7 +21,6 @@ import {
  DropdownMenuTrigger,
 } from "@/Components/ui/dropdown-menu";
 
-const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 import NotificationBell from '@/Components/NotificationBell';
 import { BottomNav } from '@/Components/BottomNav';
 import type { BottomNavItem } from '@/Components/BottomNav';
@@ -32,6 +31,8 @@ import PageTransition from '@/Components/PageTransition';
 import { useIdleTimer } from '@/hooks/useIdleTimer';
 import { useWebPush } from '@/hooks/useWebPush';
 import { useChatUnread } from '@/hooks/useChatUnread';
+
+const ProfileModal = React.lazy(() => import('@/Components/ProfileModal'));
 
 interface UserLayoutProps {
   children: React.ReactNode;
@@ -86,7 +87,7 @@ export default function UserLayout({ children, title, hideBottomNav }: UserLayou
  const [logoError, setLogoError] = useState(false);
  const { subscribe } = useWebPush(user);
 
- useIdleTimer('/logout');
+ useIdleTimer('/logout', undefined, !(auth?.remembered?.web ?? false));
 
  const systemName = appConfig?.nama_sistem || 'HALO APU';
  const faviconUrl = appConfig?.favicon_path ? `/storage/${appConfig.favicon_path}` : '/favicon.ico';

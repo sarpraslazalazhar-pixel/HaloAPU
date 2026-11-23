@@ -120,12 +120,21 @@ class TicketFormEditor
 
         $scheduleChanged = false;
         $window = null;
+        $formDateChanged = false;
+        $formDeadline = null;
         if ($old !== $new && ($subUnit = $ticket->subUnit)) {
             $oldInputs = TicketSlaSchedule::inputs($subUnit, $fields, $old);
             $newInputs = TicketSlaSchedule::inputs($subUnit, $fields, $new);
             $scheduleChanged = $oldInputs !== $newInputs;
             if ($scheduleChanged) {
                 $window = TicketSlaSchedule::window($newInputs);
+            }
+
+            $oldExtension = TicketSlaSchedule::extensionInput($subUnit, $fields, $old);
+            $newExtension = TicketSlaSchedule::extensionInput($subUnit, $fields, $new);
+            $formDateChanged = $oldExtension !== $newExtension;
+            if ($formDateChanged) {
+                $formDeadline = TicketSlaSchedule::extensionDeadline($newExtension);
             }
         }
 
@@ -134,13 +143,16 @@ class TicketFormEditor
         $ticket->save();
 
         $priorityChanged = $newPriority !== $oldPriority;
-        if ($scheduleChanged || $priorityChanged) {
+        if ($scheduleChanged || $formDateChanged || $priorityChanged) {
             $sla = $ticket->slaTracking()->lockForUpdate()->first();
             if ($sla) {
                 $sla->setRelation('ticket', $ticket);
                 $calculator = new SlaCalculator;
                 if ($scheduleChanged && $sla->resolved_at === null) {
                     $calculator->updateScheduledResolution($sla, $window);
+                }
+                if ($formDateChanged && $sla->resolved_at === null) {
+                    $calculator->applyFormDeadline($sla, $formDeadline);
                 }
                 if ($priorityChanged) {
                     $calculator->updatePriorityDeadlines($sla);

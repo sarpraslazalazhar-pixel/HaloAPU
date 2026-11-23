@@ -178,6 +178,9 @@ class BulkStoreTicketRequest extends FormRequest
                 $window = TicketSlaSchedule::window(
                     TicketSlaSchedule::inputs($subUnit, $subUnit->formFields, $normalized)
                 );
+                $formDeadline = TicketSlaSchedule::extensionDeadline(
+                    TicketSlaSchedule::extensionInput($subUnit, $subUnit->formFields, $normalized)
+                );
             } catch (ValidationException $e) {
                 foreach ($e->errors() as $key => $messages) {
                     $errors->add($prefix.$key, $messages[0]);
@@ -196,6 +199,7 @@ class BulkStoreTicketRequest extends FormRequest
                 ],
                 'subUnit' => $subUnit,
                 'window' => $window,
+                'formDeadline' => $formDeadline,
             ];
         }
     }

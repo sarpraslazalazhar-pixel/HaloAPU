@@ -40,7 +40,8 @@ interface FormField {
  label: string;
  tipe_field: string;
  wajib: boolean;
- opsi: string[] | null;
+  extends_resolution_sla?: boolean | null;
+  opsi: string[] | null;
  parent_field_id: number | null;
  trigger_value: string | null;
  urutan: number;
@@ -121,12 +122,15 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  const [isFormOpen, setIsFormOpen] = useState(false);
  const [editMode, setEditMode] = useState(false);
  const [currentFieldId, setCurrentFieldId] = useState<number | null>(null);
+  const [slaError, setSlaError] = useState<string | null>(null);
+  const otherSlaField = allFields.find(f => f.extends_resolution_sla && f.id !== currentFieldId);
 
  const { data, setData, processing, errors, reset } = useForm({
  label: '',
  tipe_field: 'teks_pendek',
  wajib: false,
- // SAFETY: opsi represents string array options for select/radio/checkbox fields.
+    extends_resolution_sla: false,
+    // SAFETY: opsi represents string array options for select/radio/checkbox fields.
  opsi: [] as string[],
  // SAFETY: parent_field_id can be empty string initially before numeric selection or empty form state.
  parent_field_id: '' as string | number,
@@ -168,7 +172,8 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  setCurrentFieldId(null);
  reset();
  setData('tipe_field', 'teks_pendek');
- setIsFormOpen(true);
+    setSlaError(null);
+    setIsFormOpen(true);
  };
 
  const openEditForm = (field: FormField) => {
@@ -178,12 +183,14 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  label: field.label,
  tipe_field: field.tipe_field,
  wajib: field.wajib,
- opsi: field.opsi || [],
+      extends_resolution_sla: !!field.extends_resolution_sla,
+      opsi: field.opsi || [],
  parent_field_id: field.parent_field_id || '',
  trigger_value: field.trigger_value || '',
  opsiString: (field.opsi || []).join('\n')
  });
- setIsFormOpen(true);
+ setSlaError(null);
+    setIsFormOpen(true);
  };
 
  const handleDelete = (id: number) => {
@@ -230,7 +237,8 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  // Parent parsing
  const payload = {
  ...currentData,
- parent_field_id: currentData.parent_field_id ? Number(currentData.parent_field_id) : null
+ parent_field_id: currentData.parent_field_id ? Number(currentData.parent_field_id) : null,
+      extends_resolution_sla: currentData.tipe_field === 'tanggal' && !!currentData.extends_resolution_sla
  };
 
  if (editMode && currentFieldId) {
@@ -244,8 +252,9 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  setFields(page.props.fields as FormField[]);
  }
  },
- preserveScroll: true
- });
+        onError: (errs: any) => setSlaError(errs?.extends_resolution_sla ?? null),
+        preserveScroll: true
+      });
  } else {
  router.post(route('admin.peraturan-form.store', subUnit.id), payload, {
  onSuccess: (page: any) => {
@@ -257,8 +266,9 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  setFields(page.props.fields as FormField[]);
  }
  },
- preserveScroll: true
- });
+        onError: (errs: any) => setSlaError(errs?.extends_resolution_sla ?? null),
+        preserveScroll: true
+      });
  }
  };
 
@@ -378,7 +388,7 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  <select 
  className="w-full border rounded-md p-2"
  value={data.tipe_field}
- onChange={e => setData('tipe_field', e.target.value)}
+ onChange={e => { const v = e.target.value; setData(d => ({ ...d, tipe_field: v, extends_resolution_sla: v === 'tanggal' ? d.extends_resolution_sla : false })); }}
  >
  {tipeFields.map(tipe => (
  <option key={tipe} value={tipe}>{tipe.replace('_', ' ').toUpperCase()}</option>
@@ -397,6 +407,27 @@ export default function Builder({ subUnit, fields: initialFields, allFields, tip
  />
  <label htmlFor="wajib" className="text-sm font-medium cursor-pointer">Wajib Diisi (Required)</label>
  </div>
+
+              {data.tipe_field === 'tanggal' && (
+                <div className="rounded-md border p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="extends_resolution_sla"
+                      checked={!!data.extends_resolution_sla}
+                      disabled={!!otherSlaField && !data.extends_resolution_sla}
+                      onChange={e => { setSlaError(null); setData('extends_resolution_sla', e.target.checked); }}
+                      className="rounded"
+                    />
+                    <label htmlFor="extends_resolution_sla" className="text-sm font-medium cursor-pointer">Gunakan untuk memperpanjang SLA penyelesaian</label>
+                  </div>
+                  <p className="text-xs text-gray-500">Jika tanggal ini lebih akhir dari deadline SLA, tiket dapat diselesaikan sampai pukul 23:59 pada tanggal tersebut.</p>
+                  {otherSlaField && !data.extends_resolution_sla && (
+                    <p className="text-xs text-amber-600">Field "{otherSlaField.label}" sudah digunakan. Nonaktifkan field tersebut terlebih dahulu.</p>
+                  )}
+                  {slaError && <div className="text-red-500 text-xs">{slaError}</div>}
+                </div>
+              )}
 
  {tipeDenganOpsi.includes(data.tipe_field) && (
  <div>

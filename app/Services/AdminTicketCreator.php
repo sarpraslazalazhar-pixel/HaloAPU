@@ -27,7 +27,7 @@ class AdminTicketCreator
     public function __construct(private SlaCalculator $slaCalculator) {}
 
     /**
-     * @param  array<int, array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null}>  $rows
+     * @param  array<int, array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null, formDeadline?: \Carbon\Carbon|null}>  $rows
      * @return array<int, Ticket>
      */
     public function create(Admin $admin, array $rows, bool $bulk = false): array
@@ -72,7 +72,7 @@ class AdminTicketCreator
     }
 
     /**
-     * @param  array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null}  $row
+     * @param  array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null, formDeadline?: \Carbon\Carbon|null}  $row
      * @param  array<int, string>  $storedPaths
      */
     private function createTicket(Admin $admin, array $row, array &$storedPaths): Ticket
@@ -147,7 +147,7 @@ class AdminTicketCreator
             }
         }
 
-        $this->slaCalculator->createTracking($ticket, $row['window']);
+        $this->slaCalculator->createTracking($ticket, $row['window'], $row['formDeadline'] ?? null);
 
         TicketLog::create([
             'ticket_id' => $ticket->id,

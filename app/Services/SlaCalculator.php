@@ -197,18 +197,58 @@ class SlaCalculator
     }
 
     /** @param array{start: Carbon, end: Carbon}|null $window */
-    public function createTracking(Ticket $ticket, ?array $window): TicketSlaTracking
+    public function createTracking(Ticket $ticket, ?array $window, ?Carbon $formDeadline = null): TicketSlaTracking
     {
         $pending = $ticket->status === 'pending';
+        $policy = $window['end'] ?? ($pending ? null : $this->calculateResolutionDeadline($ticket));
 
         return $ticket->slaTracking()->create([
             'sla_response_deadline' => $pending ? null : $this->calculateResponseDeadline($ticket),
             'sla_resolution_starts_at' => $window['start'] ?? null,
             'sla_resolution_base_deadline' => $window['end'] ?? null,
-            'sla_resolution_deadline' => $window['end'] ?? ($pending ? null : $this->calculateResolutionDeadline($ticket)),
+            ...$this->resolutionColumns($policy, $formDeadline),
             'paused_at' => $pending ? now() : null,
             'current_tier' => 0,
         ]);
+    }
+
+    /**
+     * Set/ganti/hapus tanggal form tanpa menghitung ulang durasi policy.
+     */
+    public function applyFormDeadline(TicketSlaTracking $sla, ?Carbon $formDeadline): void
+    {
+        if ($sla->resolved_at !== null) {
+            return;
+        }
+
+        $sla->update($this->resolutionColumns($this->resolutionPolicy($sla), $formDeadline));
+    }
+
+    /** Deadline penyelesaian yang berlaku tanpa tanggal form. */
+    private function resolutionPolicy(TicketSlaTracking $sla): ?Carbon
+    {
+        return $sla->sla_resolution_form_deadline !== null
+            ? $sla->sla_resolution_policy_deadline
+            : $sla->sla_resolution_deadline;
+    }
+
+    /** Petakan (policy, tanggal form) ke kolom efektif/policy/form. */
+    private function resolutionColumns(?Carbon $policy, ?Carbon $formDeadline): array
+    {
+        if ($formDeadline === null) {
+            return [
+                'sla_resolution_deadline' => $policy,
+                'sla_resolution_policy_deadline' => null,
+                'sla_resolution_form_deadline' => null,
+            ];
+        }
+
+        return [
+            'sla_resolution_deadline' => $policy === null ? null
+                : ($formDeadline->greaterThan($policy) ? $formDeadline->copy() : $policy),
+            'sla_resolution_policy_deadline' => $policy,
+            'sla_resolution_form_deadline' => $formDeadline,
+        ];
     }
 
     public function updatePriorityDeadlines(TicketSlaTracking $sla): void
@@ -221,12 +261,18 @@ class SlaCalculator
         $updates = [];
         foreach (self::PHASES as $phase => [$kind, $finishedAt]) {
             $key = "sla_{$phase}_deadline";
-            if ($sla->$finishedAt !== null || $sla->$key === null
+            $current = $phase === 'resolution' ? $this->resolutionPolicy($sla) : $sla->$key;
+            if ($sla->$finishedAt !== null || $current === null
                 || ($phase === 'resolution' && $sla->sla_resolution_base_deadline !== null)) {
                 continue;
             }
 
-            $updates[$key] = $this->deadlineWithPauseCredit($sla, $kind);
+            $deadline = $this->deadlineWithPauseCredit($sla, $kind);
+            if ($phase === 'resolution') {
+                $updates += $this->resolutionColumns($deadline, $sla->sla_resolution_form_deadline);
+            } else {
+                $updates[$key] = $deadline;
+            }
         }
 
         if ($updates !== []) {
@@ -243,7 +289,7 @@ class SlaCalculator
         }
 
         if ($window !== null) {
-            $oldDeadline = $sla->sla_resolution_deadline;
+            $oldDeadline = $this->resolutionPolicy($sla);
             $seconds = $baseEnd && $oldDeadline ? max(0, $oldDeadline->timestamp - $baseEnd->timestamp) : 0;
             $deadline = $window['end']->copy()->setTimestamp($window['end']->timestamp + $seconds);
         } else {
@@ -255,7 +301,7 @@ class SlaCalculator
         $sla->update([
             'sla_resolution_starts_at' => $window['start'] ?? null,
             'sla_resolution_base_deadline' => $window['end'] ?? null,
-            'sla_resolution_deadline' => $deadline,
+            ...$this->resolutionColumns($deadline, $sla->sla_resolution_form_deadline),
         ]);
     }
 
@@ -305,7 +351,7 @@ class SlaCalculator
             }
 
             $key = "sla_{$phase}_deadline";
-            $deadline = $sla->$key;
+            $deadline = $phase === 'resolution' ? $this->resolutionPolicy($sla) : $sla->$key;
             if ($phase === 'resolution' && $sla->sla_resolution_starts_at && $sla->sla_resolution_base_deadline) {
                 if ($preserveScheduledResolution && $deadline !== null) {
                     continue;
@@ -313,13 +359,19 @@ class SlaCalculator
 
                 $deadline ??= $sla->sla_resolution_base_deadline;
                 $seconds = max(0, $resumeAt->timestamp - max($pausedAt->timestamp, $sla->sla_resolution_starts_at->timestamp));
-                $updates[$key] = $deadline->copy()->setTimestamp($deadline->timestamp + $seconds);
+                $next = $deadline->copy()->setTimestamp($deadline->timestamp + $seconds);
             } elseif ($deadline !== null) {
-                $updates[$key] = $this->addWorkingMinutes($deadline, $pausedMinutes);
+                $next = $this->addWorkingMinutes($deadline, $pausedMinutes);
             } else {
                 $ticket = $sla->ticket;
                 $threshold = SlaConfig::getThreshold($ticket->sub_unit_id, $ticket->priority ?? 'Sedang', $kind);
-                $updates[$key] = $this->addWorkingMinutes($resumeAt, $threshold);
+                $next = $this->addWorkingMinutes($resumeAt, $threshold);
+            }
+
+            if ($phase === 'resolution') {
+                $updates += $this->resolutionColumns($next, $sla->sla_resolution_form_deadline);
+            } else {
+                $updates[$key] = $next;
             }
         }
 
@@ -357,7 +409,13 @@ class SlaCalculator
 
             $halfWarning = "is_{$phase}_half_warned";
             if (! $sla->$halfWarning) {
-                if ($baseEnd) {
+                $formWins = $phase === 'resolution' && $sla->sla_resolution_form_deadline !== null
+                    && $sla->sla_resolution_policy_deadline !== null
+                    && $sla->sla_resolution_form_deadline->greaterThan($sla->sla_resolution_policy_deadline);
+                if ($formWins) {
+                    $from = ($sla->sla_resolution_starts_at ?? $ticket->created_at)->timestamp;
+                    $halfReached = $now->timestamp >= $from + intdiv($deadline->timestamp - $from, 2);
+                } elseif ($baseEnd) {
                     $halfReached = $now->timestamp >= $deadline->timestamp - intdiv($baseEnd->timestamp - $start->timestamp, 2);
                 } else {
                     $threshold = SlaConfig::getThreshold($ticket->sub_unit_id, $ticket->priority ?? 'Sedang', $kind);

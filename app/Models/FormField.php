@@ -16,7 +16,7 @@ class FormField extends Model
 
     protected $fillable = [
         'sub_unit_id', 'label', 'tipe_field', 'wajib', 'opsi',
-        'parent_field_id', 'trigger_value', 'urutan'
+        'parent_field_id', 'trigger_value', 'urutan', 'extends_resolution_sla'
     ];
 
     protected $casts = [
@@ -26,6 +26,7 @@ class FormField extends Model
         'urutan'         => 'integer',
         'opsi'           => 'array',
         'wajib'          => 'boolean',
+        'extends_resolution_sla' => 'boolean',
     ];
 
     protected static function booted()

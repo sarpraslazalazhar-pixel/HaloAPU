@@ -84,8 +84,9 @@ class TicketWizardController extends Controller
 
         $subUnit = SubUnit::findOrFail($request->sub_unit_id);
         $window = TicketSlaSchedule::window(TicketSlaSchedule::inputs($subUnit, $formFields, $request->form_data));
+        $formDeadline = TicketSlaSchedule::extensionDeadline(TicketSlaSchedule::extensionInput($subUnit, $formFields, $request->form_data));
 
-        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $subUnit, $window) {
+        $ticket = DB::transaction(function () use ($request, $formFields, $slaCalculator, $subUnit, $window, $formDeadline) {
             $isWorkingHours = $slaCalculator->isWithinWorkingHours(now());
             $initialStatus = $isWorkingHours ? 'open' : 'pending';
 
@@ -171,7 +172,7 @@ class TicketWizardController extends Controller
                 }
             }
 
-            $slaCalculator->createTracking($ticket, $window);
+            $slaCalculator->createTracking($ticket, $window, $formDeadline);
 
             // 4. Log awal
             TicketLog::create([

@@ -13,33 +13,9 @@ class TicketSlaSchedule
 {
     public static function inputs(SubUnit $subUnit, iterable $fields, array $formData): ?array
     {
-        $byId = [];
-        foreach ($fields as $field) {
-            if ($field->sub_unit_id === (int) $subUnit->id) {
-                $byId[$field->id] = $field;
-            }
-        }
+        $byId = self::fieldsOf($subUnit, $fields);
 
-        $normalize = fn ($value) => rtrim(strtolower(trim((string) $value)), ': ');
-        $input = static function (FormField $field) use ($formData, $normalize): array {
-            $value = $formData[$field->id] ?? null;
-            if ($field->parent_field_id) {
-                $parent = $formData[$field->parent_field_id] ?? null;
-                $trigger = $normalize($field->trigger_value);
-                $visible = false;
-                foreach ((array) $parent as $option) {
-                    if (is_scalar($option) && $normalize($option) === $trigger) {
-                        $visible = true;
-                        break;
-                    }
-                }
-                if (! $visible) {
-                    $value = null;
-                }
-            }
-
-            return ['id' => $field->id, 'type' => $field->tipe_field, 'value' => $value];
-        };
+        $input = static fn (FormField $field): array => self::fieldInput($field, $formData);
         $mapped = static function ($id, string $type) use ($byId, $input): ?array {
             $field = $byId[$id] ?? null;
 
@@ -76,7 +52,7 @@ class TicketSlaSchedule
                 continue;
             }
 
-            $label = $normalize($field->label);
+            $label = self::normalize($field->label);
             if (in_array($label, ['tanggal awal', 'tanggal mulai'], true)) {
                 $starts[] = $field;
             } elseif (in_array($label, ['tanggal akhir', 'tanggal selesai'], true)) {
@@ -89,6 +65,32 @@ class TicketSlaSchedule
         }
 
         return ['start' => $input($starts[0]), 'end' => $input($ends[0]), 'startTime' => null, 'endTime' => null];
+    }
+
+    /**
+     * Input tanggal yang memperpanjang SLA penyelesaian (field bertanda, milik subunit, bertipe tanggal).
+     */
+    public static function extensionInput(SubUnit $subUnit, iterable $fields, array $formData): ?array
+    {
+        foreach (self::fieldsOf($subUnit, $fields) as $field) {
+            if ($field->extends_resolution_sla && $field->tipe_field === 'tanggal') {
+                return self::fieldInput($field, $formData);
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Tanggal perpanjangan sampai 23:59:59 zona aplikasi; kosong/tersembunyi → null.
+     */
+    public static function extensionDeadline(?array $input): ?Carbon
+    {
+        if (! self::filled($input)) {
+            return null;
+        }
+
+        return self::bound($input, null, '23:59:59', new DateTimeZone(config('app.timezone')));
     }
 
     /** @return array{start: Carbon, end: Carbon}|null */
@@ -114,6 +116,46 @@ class TicketSlaSchedule
         }
 
         return compact('start', 'end');
+    }
+
+    /** @return array<int, FormField> */
+    private static function fieldsOf(SubUnit $subUnit, iterable $fields): array
+    {
+        $byId = [];
+        foreach ($fields as $field) {
+            if ($field->sub_unit_id === (int) $subUnit->id) {
+                $byId[$field->id] = $field;
+            }
+        }
+
+        return $byId;
+    }
+
+    private static function normalize($value): string
+    {
+        return rtrim(strtolower(trim((string) $value)), ': ');
+    }
+
+    /** Baca {id,type,value}; nilai dikosongkan bila field anak tidak terlihat (pemicu tak cocok). */
+    private static function fieldInput(FormField $field, array $formData): array
+    {
+        $value = $formData[$field->id] ?? null;
+        if ($field->parent_field_id) {
+            $parent = $formData[$field->parent_field_id] ?? null;
+            $trigger = self::normalize($field->trigger_value);
+            $visible = false;
+            foreach ((array) $parent as $option) {
+                if (is_scalar($option) && self::normalize($option) === $trigger) {
+                    $visible = true;
+                    break;
+                }
+            }
+            if (! $visible) {
+                $value = null;
+            }
+        }
+
+        return ['id' => $field->id, 'type' => $field->tipe_field, 'value' => $value];
     }
 
     private static function filled(?array $input): bool

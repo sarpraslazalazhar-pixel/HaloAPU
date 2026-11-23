@@ -6,11 +6,16 @@ use App\Http\Controllers\Controller;
 use App\Models\FormField;
 use App\Models\SubUnit;
 use App\Models\Unit;
+use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 
 class FormFieldController extends Controller
 {
+    private const SLA_FLAG_CONFLICT = 'Sudah ada field deadline SLA di layanan ini. Nonaktifkan field tersebut terlebih dahulu.';
+
     /**
      * Halaman utama Peraturan Form — daftar sub unit dengan link ke builder
      */
@@ -64,14 +69,16 @@ class FormFieldController extends Controller
             'opsi.*' => 'string|max:255',
             'parent_field_id' => 'nullable|exists:form_fields,id',
             'trigger_value' => 'nullable|string|max:255',
+            'extends_resolution_sla' => 'nullable|boolean',
         ]);
 
         // Set urutan otomatis (terakhir)
         $maxUrutan = $subUnit->formFields()->max('urutan') ?? 0;
         $validated['urutan'] = $maxUrutan + 1;
         $validated['sub_unit_id'] = $subUnit->id;
+        $validated = $this->normalizeSlaFlag($request, $validated, $subUnit->id);
 
-        FormField::create($validated);
+        $this->saveWithSlaGuard(fn () => FormField::create($validated));
 
         return redirect()->back()->with('success', 'Field berhasil ditambahkan.');
     }
@@ -91,9 +98,12 @@ class FormFieldController extends Controller
             'opsi.*' => 'string|max:255',
             'parent_field_id' => 'nullable|exists:form_fields,id',
             'trigger_value' => 'nullable|string|max:255',
+            'extends_resolution_sla' => 'nullable|boolean',
         ]);
 
-        $formField->update($validated);
+        $validated = $this->normalizeSlaFlag($request, $validated, $formField->sub_unit_id, $formField);
+
+        $this->saveWithSlaGuard(fn () => $formField->update($validated));
 
         return redirect()->back()->with('success', 'Field berhasil diperbarui.');
     }
@@ -128,5 +138,62 @@ class FormFieldController extends Controller
         \Illuminate\Support\Facades\Cache::forget("form_fields_{$subUnit->id}");
 
         return redirect()->back()->with('success', 'Urutan field berhasil diperbarui.');
+    }
+
+    /**
+     * Normalisasi penanda perpanjangan SLA: true untuk field terpilih, NULL untuk lainnya.
+     */
+    private function normalizeSlaFlag(Request $request, array $validated, int $subUnitId, ?FormField $existing = null): array
+    {
+        $isDate = ($validated['tipe_field'] ?? null) === 'tanggal';
+
+        if ($request->has('extends_resolution_sla')) {
+            $flag = $request->boolean('extends_resolution_sla');
+        } else {
+            // Tidak dikirim: pertahankan pilihan lama (hanya bila tetap bertipe tanggal)
+            $flag = (bool) ($existing?->extends_resolution_sla);
+        }
+
+        if ($flag && ! $isDate) {
+            if ($request->boolean('extends_resolution_sla')) {
+                throw ValidationException::withMessages([
+                    'extends_resolution_sla' => 'Hanya field bertipe tanggal yang dapat memperpanjang SLA penyelesaian.',
+                ]);
+            }
+            $flag = false; // tipe diganti dari tanggal: kosongkan
+        }
+
+        if ($flag) {
+            $conflict = FormField::where('sub_unit_id', $subUnitId)
+                ->where('extends_resolution_sla', true)
+                ->when($existing, fn ($q) => $q->where('id', '!=', $existing->id))
+                ->exists();
+
+            if ($conflict) {
+                throw ValidationException::withMessages(['extends_resolution_sla' => self::SLA_FLAG_CONFLICT]);
+            }
+        }
+
+        $validated['extends_resolution_sla'] = $flag ? true : null;
+
+        return $validated;
+    }
+
+    /**
+     * Terjemahkan bentrok indeks unique (simpan bersamaan) menjadi error validasi.
+     */
+    private function saveWithSlaGuard(callable $save): void
+    {
+        try {
+            $save();
+        } catch (UniqueConstraintViolationException $e) {
+            throw ValidationException::withMessages(['extends_resolution_sla' => self::SLA_FLAG_CONFLICT]);
+        } catch (QueryException $e) {
+            if (str_contains($e->getMessage(), 'form_fields_subunit_extends_sla_unique')
+                || str_contains(strtolower($e->getMessage()), 'unique')) {
+                throw ValidationException::withMessages(['extends_resolution_sla' => self::SLA_FLAG_CONFLICT]);
+            }
+            throw $e;
+        }
     }
 }

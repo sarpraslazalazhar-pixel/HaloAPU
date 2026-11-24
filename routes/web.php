@@ -35,6 +35,7 @@ use App\Http\Controllers\TvDashboardController;
 use App\Http\Controllers\User\DashboardController;
 use App\Http\Controllers\User\ProfileController;
 use App\Http\Controllers\User\TicketHistoryController;
+use App\Http\Controllers\User\BulkTicketController as UserBulkTicketController;
 use App\Http\Controllers\User\TicketWizardController;
 use App\Http\Controllers\WebPushController;
 use Illuminate\Support\Facades\Artisan;
@@ -122,6 +123,8 @@ Route::middleware('auth')->group(function () {
     });
     Route::get('/tiket/buat', [TicketWizardController::class, 'create'])->name('tiket.create');
     Route::post('/tiket', [TicketWizardController::class, 'store'])->name('tiket.store');
+    Route::get('/tiket/buat-banyak', [UserBulkTicketController::class, 'create'])->name('tiket.bulk.create');
+    Route::post('/tiket/buat-banyak', [UserBulkTicketController::class, 'store'])->name('tiket.bulk.store');
 
     // Ticket History
     Route::get('/tiket/riwayat', [TicketHistoryController::class, 'index'])->name('tiket.riwayat');

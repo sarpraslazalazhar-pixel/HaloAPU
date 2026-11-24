@@ -9,7 +9,7 @@ import { Label } from '@/Components/ui/label';
 import { DataTable } from '@/Components/DataTable';
 import { Pagination } from '@/Components/Pagination';
 import { StatusBadge } from '@/Components/StatusBadge';
-import { Search, X, ExternalLink } from 'lucide-react';
+import { Search, X, ExternalLink, Layers } from 'lucide-react';
 import { formatTicketId } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -99,6 +99,14 @@ export default function Riwayat({ tickets, filters, statuses }: RiwayatProps) {
                 Filter
               </Button>
             </motion.div>
+            <Link href={route('tiket.bulk.create')}>
+              <motion.div whileTap={{ scale: 0.95 }}>
+                <Button variant="outline">
+                  <Layers className="h-4 w-4 mr-2" />
+                  Ajukan Banyak
+                </Button>
+              </motion.div>
+            </Link>
             <Link href={route('tiket.create')}>
               <motion.div whileTap={{ scale: 0.95 }}>
                 <Button>Buat Tiket Baru</Button>

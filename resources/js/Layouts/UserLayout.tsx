@@ -3,6 +3,7 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import toast, { Toaster } from 'react-hot-toast';
 import { 
  LayoutDashboard, 
+ Layers,
  PlusCircle, 
  History, 
  Star, 
@@ -50,6 +51,7 @@ const userNavItems: NavItem[] = [
  { label: 'Dasbor', icon: LayoutDashboard, route: '/dashboard' },
  { label: 'Pesan', icon: MessageSquare, route: '/chat' },
  { label: 'Ajukan Tiket', icon: PlusCircle, route: '/tiket/buat' },
+ { label: 'Ajukan Banyak', icon: Layers, route: '/tiket/buat-banyak' },
  { label: 'Riwayat Tiket', icon: History, route: '/tiket/riwayat' },
   { label: 'Riwayat Penilaian', icon: Star, route: '/csat/riwayat' },
   { label: 'Pusat Bantuan', icon: HelpCircle, route: '/faq' },

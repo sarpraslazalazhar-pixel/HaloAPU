@@ -19,17 +19,26 @@ use Illuminate\Validation\Validator as LaravelValidator;
  */
 class BulkStoreTicketRequest extends FormRequest
 {
-    public const MAX_TICKETS = 20;
+    public const MAX_TICKETS = 5;
 
-    protected $redirectRoute = 'admin.tickets.bulk.create';
-
-    /** @var array<int, array{data: array<string, mixed>, subUnit: SubUnit, window: array|null}> */
+    /** @var array<int, array{data: array<string, mixed>, subUnit: SubUnit, window: array|null, formDeadline?: \Carbon\Carbon|null}> */
     private array $rows = [];
+
+    public function isAdminBulk(): bool
+    {
+        return $this->routeIs('admin.*');
+    }
+
+    protected function getRedirectUrl(): string
+    {
+        return $this->isAdminBulk()
+            ? route('admin.tickets.bulk.create')
+            : route('tiket.bulk.create');
+    }
 
     public function authorize(): bool
     {
-        // Route middleware (auth:admin,web + role Admin/superadmin) is the access gate.
-        return true;
+        return $this->isAdminBulk() ? auth('admin')->check() : auth('web')->check();
     }
 
     /**
@@ -37,12 +46,16 @@ class BulkStoreTicketRequest extends FormRequest
      */
     public function rules(): array
     {
+        $priorityRules = $this->isAdminBulk()
+            ? ['required', 'string', new In(TicketFormEditor::PRIORITIES)]
+            : ['nullable', 'string'];
+
         return [
             'tickets' => ['required', 'array', 'list', 'min:1', 'max:'.self::MAX_TICKETS],
             'tickets.*' => ['required', 'array:unit_id,sub_unit_id,priority,form_data,attachment,attachment_target'],
             'tickets.*.unit_id' => ['required', 'integer', 'min:1'],
             'tickets.*.sub_unit_id' => ['required', 'integer', 'min:1'],
-            'tickets.*.priority' => ['required', 'string', new In(TicketFormEditor::PRIORITIES)],
+            'tickets.*.priority' => $priorityRules,
             'tickets.*.form_data' => ['present', 'array'],
             'tickets.*.attachment' => ['nullable', 'file', 'max:2048'],
             'tickets.*.attachment_target' => ['nullable', 'string', 'max:20'],
@@ -59,7 +72,7 @@ class BulkStoreTicketRequest extends FormRequest
             'tickets.array' => 'Ajukan minimal 1 tiket.',
             'tickets.list' => 'Ajukan minimal 1 tiket.',
             'tickets.min' => 'Ajukan minimal 1 tiket.',
-            'tickets.max' => 'Maksimal 20 tiket dalam satu kali pengajuan.',
+            'tickets.max' => 'Maksimal '.self::MAX_TICKETS.' tiket dalam satu kali pengajuan.',
             'tickets.*.required' => 'Baris tiket tidak valid.',
             'tickets.*.array' => 'Baris tiket tidak valid.',
             'tickets.*.unit_id.required' => 'Kanal layanan wajib dipilih.',
@@ -140,7 +153,11 @@ class BulkStoreTicketRequest extends FormRequest
                 continue;
             }
 
-            foreach (['unit_id', 'sub_unit_id', 'priority', 'form_data'] as $key) {
+            $requiredKeys = $this->isAdminBulk()
+                ? ['unit_id', 'sub_unit_id', 'priority', 'form_data']
+                : ['unit_id', 'sub_unit_id', 'form_data'];
+
+            foreach ($requiredKeys as $key) {
                 if ($errors->has($prefix.$key)) {
                     continue 2;
                 }
@@ -192,7 +209,7 @@ class BulkStoreTicketRequest extends FormRequest
                 'data' => [
                     'unit_id' => $unitId,
                     'sub_unit_id' => $subUnitId,
-                    'priority' => $row['priority'],
+                    'priority' => $this->isAdminBulk() ? $row['priority'] : null,
                     'form_data' => $normalized,
                     'attachments' => $attachments['attachments'],
                     'general_attachments' => $attachments['general_attachments'],

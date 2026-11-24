@@ -7,9 +7,12 @@ use App\Models\RoomVehicleBooking;
 use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
+use App\Models\User;
 use App\Notifications\TicketCreatedAdminNotification;
+use App\Notifications\TicketCreatedUserNotification;
 use Carbon\Carbon;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Notification;
@@ -19,8 +22,8 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Creates admin-submitted tickets. A bulk request is one transaction so a
- * failed row leaves neither partial tickets nor uploaded files behind.
+ * Creates tickets atomically for admins and end users. A bulk request is one
+ * transaction so a failed row leaves neither partial tickets nor uploaded files behind.
  */
 class AdminTicketCreator
 {
@@ -32,15 +35,84 @@ class AdminTicketCreator
      */
     public function create(Admin $admin, array $rows, bool $bulk = false): array
     {
+        return $this->executeCreate($rows, $bulk, function (array $row, array &$storedPaths) use ($admin): Ticket {
+            $data = $row['data'];
+            $isWorkingHours = $this->slaCalculator->isWithinWorkingHours(now());
+            $attributes = [
+                'user_id' => null,
+                'created_by_admin_id' => $admin->id,
+                'unit_id' => $data['unit_id'],
+                'sub_unit_id' => $data['sub_unit_id'],
+                'form_data' => $data['form_data'],
+                'status' => $isWorkingHours ? 'open' : 'pending',
+                'assignment_resume_status' => $isWorkingHours ? null : 'open',
+                'source' => 'web',
+            ];
+
+            if (($data['priority'] ?? null) !== null) {
+                $attributes['priority'] = $data['priority'];
+            }
+
+            return $this->persistTicket(
+                $attributes,
+                $row,
+                $admin->id,
+                'Tiket diajukan oleh admin '.($admin->name ?? $admin->username),
+                $storedPaths,
+            );
+        });
+    }
+
+    /**
+     * @param  array<int, array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null, formDeadline?: \Carbon\Carbon|null}>  $rows
+     * @return array<int, Ticket>
+     */
+    public function createForUser(User $user, array $rows, bool $bulk = true): array
+    {
+        return $this->executeCreate($rows, $bulk, function (array $row, array &$storedPaths) use ($user): Ticket {
+            $data = $row['data'];
+            $isWorkingHours = $this->slaCalculator->isWithinWorkingHours(now());
+            $attributes = [
+                'user_id' => $user->id,
+                'created_by_admin_id' => null,
+                'divisi_id' => $user->divisi_id,
+                'org_unit_id' => $user->org_unit_id,
+                'jabatan_id' => $user->jabatan_id,
+                'unit_id' => $data['unit_id'],
+                'sub_unit_id' => $data['sub_unit_id'],
+                'form_data' => $data['form_data'],
+                'status' => $isWorkingHours ? 'open' : 'pending',
+                'assignment_resume_status' => $isWorkingHours ? null : 'open',
+                'priority' => null,
+                'source' => 'web',
+            ];
+
+            return $this->persistTicket(
+                $attributes,
+                $row,
+                null,
+                'Tiket dibuat oleh '.($user->username ?? $user->name),
+                $storedPaths,
+            );
+        });
+    }
+
+    /**
+     * @param  array<int, array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null, formDeadline?: \Carbon\Carbon|null}>  $rows
+     * @param  callable(array, array<int, string>&): Ticket  $perRow
+     * @return array<int, Ticket>
+     */
+    private function executeCreate(array $rows, bool $bulk, callable $perRow): array
+    {
         $storedPaths = [];
 
         try {
-            return DB::transaction(function () use ($admin, $rows, $bulk, &$storedPaths) {
+            return DB::transaction(function () use ($rows, $bulk, $perRow, &$storedPaths) {
                 $tickets = [];
 
                 foreach ($rows as $index => $row) {
                     try {
-                        $tickets[] = $this->createTicket($admin, $row, $storedPaths);
+                        $tickets[] = $perRow($row, $storedPaths);
                     } catch (ValidationException $e) {
                         if (! $bulk) {
                             throw $e;
@@ -72,38 +144,19 @@ class AdminTicketCreator
     }
 
     /**
+     * @param  array<string, mixed>  $attributes
      * @param  array{data: array<string, mixed>, subUnit: \App\Models\SubUnit, window: array|null, formDeadline?: \Carbon\Carbon|null}  $row
      * @param  array<int, string>  $storedPaths
      */
-    private function createTicket(Admin $admin, array $row, array &$storedPaths): Ticket
+    private function persistTicket(array $attributes, array $row, ?int $logAdminId, string $logNote, array &$storedPaths): Ticket
     {
         $data = $row['data'];
         $subUnit = $row['subUnit'];
         $formData = $data['form_data'];
-        $isWorkingHours = $this->slaCalculator->isWithinWorkingHours(now());
-        $initialStatus = $isWorkingHours ? 'open' : 'pending';
-
-        $attributes = [
-            'user_id' => null,
-            'created_by_admin_id' => $admin->id,
-            'unit_id' => $data['unit_id'],
-            'sub_unit_id' => $data['sub_unit_id'],
-            'form_data' => $formData,
-            'status' => $initialStatus,
-            'assignment_resume_status' => $isWorkingHours ? null : 'open',
-            'source' => 'web',
-        ];
-
-        if (($data['priority'] ?? null) !== null) {
-            $attributes['priority'] = $data['priority'];
-        }
-
         $ticket = Ticket::create($attributes);
 
         $saveFile = function (UploadedFile $file, ?int $fieldId, bool $wajib) use ($ticket, &$storedPaths): void {
             $path = "ticket-attachments/{$ticket->id}/{$file->hashName()}";
-
-            // Register before writing so a partially written file is cleaned up too.
             $storedPaths[] = $path;
 
             $stored = Storage::disk('public')->putFileAs(
@@ -151,9 +204,9 @@ class AdminTicketCreator
 
         TicketLog::create([
             'ticket_id' => $ticket->id,
-            'admin_id' => $admin->id,
+            'admin_id' => $logAdminId,
             'aksi' => 'dibuat',
-            'catatan' => 'Tiket diajukan oleh admin '.($admin->name ?? $admin->username),
+            'catatan' => $logNote,
         ]);
 
         if ($subUnit->is_monitored) {
@@ -246,6 +299,28 @@ class AdminTicketCreator
 
             if ($recipients->isNotEmpty()) {
                 Notification::send($recipients, new TicketCreatedAdminNotification($ticket));
+            }
+        } catch (Throwable $e) {
+            Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: ".$e->getMessage());
+        }
+    }
+
+    public function notifyForUserTicket(Ticket $ticket): void
+    {
+        try {
+            $ticket->loadMissing(['user', 'subUnit']);
+            $ticket->user?->notify(new TicketCreatedUserNotification($ticket));
+
+            $notifiedAdmins = Admin::where(function ($q) use ($ticket) {
+                $q->whereHas('units', fn ($query) => $query->where('units.id', $ticket->unit_id))
+                    ->orWhereHas('roles', fn ($roleQuery) => $roleQuery->whereIn('name', ['Super Admin', 'superadmin']));
+            })->whereDoesntHave('roles', fn ($q) => $q->where('name', 'Operator'))
+                ->get();
+
+            if ($notifiedAdmins->isNotEmpty()) {
+                Notification::send($notifiedAdmins, new TicketCreatedAdminNotification($ticket));
+            } else {
+                Notification::send(new AnonymousNotifiable, new TicketCreatedAdminNotification($ticket));
             }
         } catch (Throwable $e) {
             Log::error("Gagal mengirim notifikasi untuk tiket #{$ticket->id}: ".$e->getMessage());

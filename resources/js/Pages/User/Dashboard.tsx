@@ -3,7 +3,7 @@ import { Link, usePage } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
-import { FolderOpen, Clock, CheckCircle2, XCircle, PlusCircle, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
+import { FolderOpen, Clock, CheckCircle2, XCircle, PlusCircle, Layers, History, Star, Monitor, ArrowRight, Ticket } from 'lucide-react';
 import { motion, type Variants } from 'framer-motion';
 import { formatTicketId } from '@/lib/utils';
 import { StatusBadge } from '@/Components/StatusBadge';
@@ -40,6 +40,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
 
   const QUICK_ACTIONS = [
     { label: 'Ajukan Tiket', desc: 'Buat permohonan layanan baru', icon: PlusCircle, href: '/tiket/buat', color: 'text-primary bg-primary/10' },
+    { label: 'Ajukan Banyak Tiket', desc: 'Kirim hingga 5 permohonan sekaligus', icon: Layers, href: '/tiket/buat-banyak', color: 'text-sky-600 bg-sky-50' },
     { label: 'Riwayat Tiket', desc: 'Lihat semua pengajuan Kamu', icon: History, href: '/tiket/riwayat', color: 'text-emerald-600 bg-emerald-50' },
     { label: 'Riwayat Penilaian', desc: 'Riwayat penilaian kepuasan', icon: Star, href: '/csat/riwayat', color: 'text-amber-600 bg-amber-50' },
     { label: 'Monitor', desc: 'Pantau ruangan, kendaraan & alat', icon: Monitor, href: '/monitor', color: 'text-purple-600 bg-purple-50' },
@@ -106,7 +107,7 @@ export default function Dashboard({ recentTickets = [], stats }: { recentTickets
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Aksi Cepat</h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {QUICK_ACTIONS.map((action) => {
               const Icon = action.icon;
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Stepper } from '@/Components/Stepper';
 import { Button } from '@/Components/ui/button';
@@ -11,7 +11,7 @@ import DynamicField, { normalizeOption } from '@/Components/DynamicForm/DynamicF
 import axios from 'axios';
 import { FormField as FormFieldType } from '@/types';
 import { FileDropzone } from '@/Components/FileDropzone';
-import { Trash2, FileText, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { Trash2, FileText, CheckCircle2, AlertCircle, Info, Layers } from 'lucide-react';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -82,14 +82,18 @@ export default function Wizard({ unitList }: WizardProps) {
           list.forEach(f => {
             if (f.parent_field_id) {
               const pid = Number(f.parent_field_id);
+
               if (!childMap.has(pid)) childMap.set(pid, []);
+
               childMap.get(pid)!.push(f);
             }
           });
+
           const append = (item: FormFieldType) => {
             ordered.push(item);
             (childMap.get(Number(item.id)) ?? []).forEach(append);
           };
+
           roots.forEach(append);
           const added = new Set(ordered.map(f => Number(f.id)));
           list.forEach(f => { if (!added.has(Number(f.id))) ordered.push(f); });
@@ -175,12 +179,17 @@ export default function Wizard({ unitList }: WizardProps) {
 
   const isFieldVisible = (field: FormFieldType) => {
     if (!field.parent_field_id) return true;
+
     const parentVal = data.form_data[String(field.parent_field_id)];
+
     if (parentVal === undefined || parentVal === null) return false;
+
     const trigger = normalizeOption(field.trigger_value);
+
     if (Array.isArray(parentVal)) {
-      return (parentVal as string[]).some(v => normalizeOption(v) === trigger);
+      return parentVal.some(v => normalizeOption(v) === trigger);
     }
+
     return normalizeOption(parentVal) === trigger;
   };
 
@@ -340,7 +349,15 @@ export default function Wizard({ unitList }: WizardProps) {
     <UserLayout title="Buat Tiket Baru">
       <div className="max-w-4xl mx-auto py-8 px-4">
         <Head title="Buat Tiket Baru" />
-        <h1 className="text-2xl font-bold mb-6">Buat Tiket Baru</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1 className="text-2xl font-bold">Buat Tiket Baru</h1>
+          <Link href={route('tiket.bulk.create')}>
+            <Button type="button" variant="outline" size="sm" className="gap-1.5">
+              <Layers className="h-4 w-4" />
+              Ajukan Banyak Tiket
+            </Button>
+          </Link>
+        </div>
 
         <Stepper steps={STEPS} activeStep={activeStep} className="mb-8" />
 

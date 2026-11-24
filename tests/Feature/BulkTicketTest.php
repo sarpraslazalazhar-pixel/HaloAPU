@@ -12,6 +12,8 @@ use App\Models\TicketLog;
 use App\Models\TicketSlaTracking;
 use App\Models\Unit;
 use App\Models\User;
+use App\Notifications\TicketCreatedAdminNotification;
+use App\Notifications\TicketCreatedUserNotification;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -118,7 +120,7 @@ class BulkTicketTest extends TestCase
             ->assertOk()
             ->assertInertia(fn (Assert $page) => $page
                 ->component('Admin/Tiketing/BulkCreate')
-                ->where('maxTickets', 20)
+                ->where('maxTickets', 5)
                 ->has('unitList')
                 ->has('priorities', 4));
 
@@ -170,7 +172,7 @@ class BulkTicketTest extends TestCase
             ->post(route('admin.tickets.bulk.store'), ['tickets' => []])
             ->assertSessionHasErrors('tickets');
 
-        $rows = array_fill(0, 21, $this->row());
+        $rows = array_fill(0, 6, $this->row());
 
         $this->actingAs($this->admin, 'admin')
             ->post(route('admin.tickets.bulk.store'), ['tickets' => $rows])
@@ -463,5 +465,198 @@ class BulkTicketTest extends TestCase
 
         $this->assertSame(0, Ticket::count());
         $this->assertSame(0, RoomVehicleBooking::count());
+    }
+
+    private function userRow(array $overrides = []): array
+    {
+        return array_merge([
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => json_encode([(string) $this->requiredField->id => 'Butuh bantuan']),
+        ], $overrides);
+    }
+
+    public function test_user_dapat_membuka_halaman_bulk_create_dan_guest_ditolak(): void
+    {
+        $this->get(route('tiket.bulk.create'))
+            ->assertRedirect(route('login'));
+
+        $this->actingAs($this->user, 'web')
+            ->get(route('tiket.bulk.create'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('User/Tiket/BulkCreate')
+                ->where('maxTickets', 5)
+                ->has('unitList'));
+    }
+
+    public function test_user_dapat_mengajukan_lima_tiket_beserta_profil_sla_dan_notifikasi(): void
+    {
+        $divisiId = DB::table('org_divisi')->insertGetId(['nama_divisi' => 'Operasional', 'created_at' => now(), 'updated_at' => now()]);
+        $orgUnitId = DB::table('org_unit')->insertGetId(['divisi_id' => $divisiId, 'nama_unit_organisasi' => 'Layanan Internal', 'created_at' => now(), 'updated_at' => now()]);
+        $jabatanId = DB::table('org_jabatan')->insertGetId(['nama_jabatan' => 'Staf', 'urutan' => 1, 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->user->update([
+            'divisi_id' => $divisiId,
+            'org_unit_id' => $orgUnitId,
+            'jabatan_id' => $jabatanId,
+        ]);
+        $this->admin->units()->attach($this->unit->id);
+
+        $this->actingAs($this->user, 'web')
+            ->post(route('tiket.bulk.store'), ['tickets' => [
+                $this->userRow(),
+                array_merge($this->userRow(), [
+                    'attachment' => UploadedFile::fake()->image('user-umum.png', 10, 10),
+                    'attachment_target' => 'general',
+                ]),
+                $this->userRow(),
+                $this->userRow([
+                    'sub_unit_id' => $this->emptySubUnit->id,
+                    'form_data' => json_encode([]),
+                ]),
+                $this->userRow(),
+            ]])
+            ->assertRedirect(route('tiket.riwayat'))
+            ->assertSessionHas('success', '5 tiket berhasil diajukan.');
+
+        $tickets = Ticket::with('slaTracking')->get();
+        $this->assertCount(5, $tickets);
+        $this->assertCount(5, TicketLog::where('aksi', 'dibuat')->get());
+        $this->assertCount(5, TicketSlaTracking::all());
+
+        foreach ($tickets as $ticket) {
+            $this->assertSame($this->user->id, $ticket->user_id);
+            $this->assertNull($ticket->created_by_admin_id);
+            $this->assertSame($divisiId, $ticket->divisi_id);
+            $this->assertSame($orgUnitId, $ticket->org_unit_id);
+            $this->assertSame($jabatanId, $ticket->jabatan_id);
+            $this->assertNull($ticket->priority);
+            $this->assertSame('open', $ticket->status);
+            $this->assertNotNull($ticket->slaTracking);
+        }
+
+        Notification::assertSentToTimes($this->user, TicketCreatedUserNotification::class, 5);
+        Notification::assertSentToTimes($this->admin, TicketCreatedAdminNotification::class, 5);
+    }
+
+    public function test_user_mengirim_enam_tiket_ditolak_ke_route_user(): void
+    {
+        $rows = array_fill(0, 6, $this->userRow());
+
+        $this->actingAs($this->user, 'web')
+            ->post(route('tiket.bulk.store'), ['tickets' => $rows])
+            ->assertRedirect(route('tiket.bulk.create'))
+            ->assertSessionHasErrors('tickets');
+
+        $this->assertSame(0, Ticket::count());
+    }
+
+    public function test_user_tidak_bisa_menyuntikkan_prioritas_urgen_pada_bulk_store(): void
+    {
+        $this->actingAs($this->user, 'web')
+            ->post(route('tiket.bulk.store'), ['tickets' => [
+                $this->userRow(['priority' => 'Urgen']),
+            ]])
+            ->assertRedirect(route('tiket.riwayat'));
+
+        $ticket = Ticket::firstOrFail();
+        $this->assertSame($this->user->id, $ticket->user_id);
+        $this->assertNull($ticket->priority);
+    }
+
+    public function test_user_bulk_rollback_atomik_saat_booking_bentrok_dan_hapus_file(): void
+    {
+        $vehicle = SubUnit::create([
+            'unit_id' => $this->unit->id,
+            'nama_layanan' => 'Peminjaman Mobil User',
+            'deskripsi' => 'Kendaraan',
+            'aktif' => true,
+            'is_monitored' => true,
+            'monitor_kategori' => 'Kendaraan',
+        ]);
+
+        $asset = FormField::create([
+            'sub_unit_id' => $vehicle->id,
+            'label' => 'Kendaraan',
+            'tipe_field' => 'dropdown',
+            'opsi' => ['APV'],
+            'wajib' => true,
+            'urutan' => 1,
+        ]);
+        $date = FormField::create([
+            'sub_unit_id' => $vehicle->id,
+            'label' => 'Tanggal Pinjam',
+            'tipe_field' => 'tanggal',
+            'wajib' => true,
+            'urutan' => 2,
+        ]);
+        $start = FormField::create([
+            'sub_unit_id' => $vehicle->id,
+            'label' => 'Jam Mulai',
+            'tipe_field' => 'waktu',
+            'wajib' => true,
+            'urutan' => 3,
+        ]);
+        $end = FormField::create([
+            'sub_unit_id' => $vehicle->id,
+            'label' => 'Jam Selesai',
+            'tipe_field' => 'waktu',
+            'wajib' => true,
+            'urutan' => 4,
+        ]);
+
+        $vehicle->update([
+            'monitor_asset_field_id' => $asset->id,
+            'monitor_date_field_id' => $date->id,
+            'monitor_start_field_id' => $start->id,
+            'monitor_end_field_id' => $end->id,
+        ]);
+
+        $formData = json_encode([
+            (string) $asset->id => 'APV',
+            (string) $date->id => '2026-07-20',
+            (string) $start->id => '10:00',
+            (string) $end->id => '11:00',
+        ]);
+
+        $this->actingAs($this->user, 'web')
+            ->post(route('tiket.bulk.store'), ['tickets' => [
+                [
+                    'unit_id' => $this->unit->id,
+                    'sub_unit_id' => $vehicle->id,
+                    'form_data' => $formData,
+                    'attachment' => UploadedFile::fake()->image('user-booking.png', 10, 10),
+                    'attachment_target' => 'general',
+                ],
+                [
+                    'unit_id' => $this->unit->id,
+                    'sub_unit_id' => $vehicle->id,
+                    'form_data' => $formData,
+                ],
+            ]])
+            ->assertRedirect(route('tiket.bulk.create'))
+            ->assertSessionHasErrors([
+                'tickets.1.form_data.'.$asset->id => 'Aset ini sudah dipesan pada jam tersebut.',
+            ]);
+
+        $this->assertSame(0, Ticket::count());
+        $this->assertSame(0, RoomVehicleBooking::count());
+        $this->assertSame([], Storage::disk('public')->allFiles());
+    }
+
+    public function test_user_nonaktif_ditolak_mengakses_bulk_create_dan_store(): void
+    {
+        $inactive = User::factory()->create(['is_active' => false]);
+
+        $this->actingAs($inactive, 'web')
+            ->get(route('tiket.bulk.create'))
+            ->assertRedirect(route('login'));
+
+        $this->actingAs($inactive, 'web')
+            ->post(route('tiket.bulk.store'), ['tickets' => [$this->userRow()]])
+            ->assertRedirect(route('login'));
+
+        $this->assertSame(0, Ticket::count());
     }
 }

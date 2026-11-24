@@ -213,6 +213,7 @@ export function TicketChatBox({
     if (act === 'work_hours_paused') return 'Tiket ditunda karena jam kerja berakhir';
     if (act === 'work_hours_queued') return 'Tiket tetap antre di luar jam kerja';
     if (act === 'work_hours_resumed') return 'Tiket dilanjutkan setelah jam kerja buka';
+    if (act === 'work_hours_overtime_resumed') return 'Tiket dilanjutkan di luar jam kerja';
 
     return log.catatan || act;
   };

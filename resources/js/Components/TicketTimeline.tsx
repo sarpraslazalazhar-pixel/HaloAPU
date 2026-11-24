@@ -65,6 +65,12 @@ const actionConfigMap = {
     badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
     nodeBg: 'bg-amber-500',
   },
+  work_hours_overtime_resumed: {
+    label: 'Tiket dilanjutkan di luar jam kerja',
+    icon: PlayCircle,
+    badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
+    nodeBg: 'bg-sky-500',
+  },
   work_hours_resumed: {
     label: 'Tiket dilanjutkan',
     icon: PlayCircle,

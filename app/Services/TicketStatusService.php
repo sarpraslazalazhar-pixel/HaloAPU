@@ -54,7 +54,7 @@ class TicketStatusService
             if ($lockedTicket->work_hours_resume_status !== null) {
                 $calendar = new SlaCalculator;
                 if (! $calendar->isWithinWorkingHours($at)) {
-                    throw new InvalidArgumentException('Gunakan Lanjutkan Tiket setelah jam kerja buka.');
+                    throw new InvalidArgumentException('Petugas yang ditugaskan perlu memilih Lanjutkan di luar jam kerja terlebih dahulu.');
                 }
 
                 $adminId = $lockedTicket->assigned_admin_id !== null ? (int) $lockedTicket->assigned_admin_id : null;
@@ -98,7 +98,8 @@ class TicketStatusService
                     throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
                 }
 
-                $withinWorkHours = (new SlaCalculator)->isWithinWorkingHours($at);
+                $hours = (new SlaCalculator)->workingHoursState($at);
+                $withinWorkHours = $hours['is_open'];
                 $operatorBusy = $lockedTicket->assigned_admin_id !== null
                     && TicketWorkQueue::hasOtherActive($lockedTicket, (int) $lockedTicket->assigned_admin_id);
 
@@ -121,7 +122,14 @@ class TicketStatusService
                 }
 
                 if (! $withinWorkHours) {
-                    throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
+                    $overtime = $oldStatus === 'open' && $actor !== null
+                        && (int) $lockedTicket->assigned_admin_id === (int) $actor->id
+                        && $hours['closed_since'] !== null
+                        && $lockedTicket->logs()->where('aksi', 'work_hours_overtime_resumed')
+                            ->where('admin_id', $actor->id)->where('timestamp', '>=', $hours['closed_since'])->exists();
+                    if (! $overtime) {
+                        throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
+                    }
                 }
 
                 if ($operatorBusy) {

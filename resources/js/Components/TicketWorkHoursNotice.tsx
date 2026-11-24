@@ -37,7 +37,9 @@ export function TicketWorkHoursNotice({ workHours, isAdmin, onContact, onResume,
       : 'Jam kerja sedang berlangsung. Tiket ini sedang dalam antrean dan akan otomatis diproses saat petugas menyelesaikan tiket sebelumnya.';
 
   const guidance = !open
-    ? isAdmin
+    ? workHours.can_resume
+      ? 'Pilih tombol ini jika Anda akan mengerjakan tiket sekarang. SLA akan dilanjutkan. Ikuti prosedur lembur kantor.'
+      : isAdmin
       ? 'Jika harus ditangani hari ini, koordinasikan lewat chat tiket dan ajukan lembur sesuai prosedur kantor.'
       : workHours.operator_name
         ? 'Perlu ditangani hari ini? Hubungi petugas lewat chat tiket untuk meminta lembur.'
@@ -72,7 +74,7 @@ export function TicketWorkHoursNotice({ workHours, isAdmin, onContact, onResume,
         {showResume && onResume && (
           <Button size="sm" onClick={onResume} disabled={resumeProcessing} className="min-h-11">
             <PlayCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            {resumeProcessing ? 'Memproses...' : 'Lanjutkan Tiket'}
+            {resumeProcessing ? 'Memproses...' : open ? 'Lanjutkan Tiket' : 'Lanjutkan di luar jam kerja'}
           </Button>
         )}
         {!workHours.is_assignee && (

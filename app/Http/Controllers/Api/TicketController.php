@@ -1231,7 +1231,7 @@ class TicketController extends Controller
         }
 
         return response()->json([
-            'message' => 'Tiket dilanjutkan setelah jam kerja buka.',
+            'message' => 'Tiket dilanjutkan.',
             'data' => $this->formatTicket($ticket->fresh()),
         ]);
     }

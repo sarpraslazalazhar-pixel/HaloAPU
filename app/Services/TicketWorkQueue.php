@@ -967,8 +967,10 @@ class TicketWorkQueue
                 throw new InvalidArgumentException('Tiket masih menunggu giliran petugas.');
             }
 
-            if (! $calendar->isWithinWorkingHours($at)) {
-                throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
+            $hours = $calendar->workingHoursState($at);
+            $overtime = ! $hours['is_open'];
+            if ($overtime && $hours['closed_since'] === null) {
+                throw new InvalidArgumentException('Jadwal jam kerja belum tersedia.');
             }
 
             if (self::hasOtherActive($locked, (int) $actor->id)) {
@@ -989,18 +991,21 @@ class TicketWorkQueue
                 'work_hours_sla_paused_at' => null,
             ]);
 
-            self::writeLog($locked, $actor->id, 'work_hours_resumed', 'Petugas melanjutkan tiket setelah jam kerja buka.', $at);
+            self::writeLog($locked, $actor->id, $overtime ? 'work_hours_overtime_resumed' : 'work_hours_resumed',
+                $overtime ? 'Petugas melanjutkan tiket di luar jam kerja.' : 'Petugas melanjutkan tiket setelah jam kerja buka.', $at);
             self::notifyStatusChange($locked);
 
             $fresh = $locked->fresh();
-            DB::afterCommit(function () use ($fresh, $actor): void {
+            DB::afterCommit(function () use ($fresh, $actor, $overtime): void {
                 if (! $fresh) {
                     return;
                 }
 
                 $fresh->loadMissing(['user', 'createdByAdmin', 'assignedAdmin', 'subUnit']);
                 $operatorName = $fresh->assignedAdmin?->name ?? $fresh->assignedAdmin?->username ?? 'Petugas';
-                $requesterMessage = "Jam kerja sudah dimulai. Tiket Anda kembali aktif dan dilanjutkan oleh petugas {$operatorName}.";
+                $requesterMessage = $overtime
+                    ? "Tiket Anda dilanjutkan oleh petugas {$operatorName} di luar jam kerja."
+                    : "Jam kerja sudah dimulai. Tiket Anda kembali aktif dan dilanjutkan oleh petugas {$operatorName}.";
                 $notifiedKeys = ['admin:'.$actor->id => true];
 
                 foreach ([
@@ -1016,7 +1021,8 @@ class TicketWorkQueue
                     }
                     $notifiedKeys[$key] = true;
                     try {
-                        $notifiable->notify(new TicketWorkHoursNotification($fresh, $requesterMessage, true));
+                        $notifiable->notify(new TicketWorkHoursNotification($fresh, $requesterMessage, true,
+                            $overtime ? "Tiket dilanjutkan di luar jam kerja: #TKT-{$fresh->formatted_id}" : null));
                     } catch (\Throwable $e) {
                         Log::error("Gagal mengirim notifikasi lanjut kerja tiket #{$fresh->id}: ".$e->getMessage());
                     }
@@ -1053,7 +1059,7 @@ class TicketWorkQueue
             'next_open_label' => $state['next_open_at']?->locale('id')->translatedFormat('l, d M Y H:i'),
             'operator_name' => $operator?->name ?? $operator?->username,
             'is_assignee' => $isAssignee,
-            'can_resume' => $paused && $isAssignee && $state['is_open'],
+            'can_resume' => $paused && $isAssignee && ($state['is_open'] || $state['closed_since'] !== null),
         ];
     }
 
@@ -1071,7 +1077,7 @@ class TicketWorkQueue
     private static function hasWorkHoursLog(Ticket $ticket, ?Carbon $closedSince): bool
     {
         return TicketLog::where('ticket_id', $ticket->id)
-            ->whereIn('aksi', ['work_hours_paused', 'work_hours_queued'])
+            ->whereIn('aksi', ['work_hours_paused', 'work_hours_queued', 'work_hours_overtime_resumed'])
             ->when($closedSince !== null, fn ($q) => $q->where('timestamp', '>=', $closedSince))
             ->exists();
     }

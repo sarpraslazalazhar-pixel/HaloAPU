@@ -494,7 +494,7 @@ class TicketController extends Controller
             return redirect()->back()->with('error', $e->getMessage());
         }
 
-        return redirect()->back()->with('success', 'Tiket dilanjutkan setelah jam kerja buka.');
+        return redirect()->back()->with('success', 'Tiket dilanjutkan.');
     }
 
     public function updateForm(Request $request, Ticket $ticket)

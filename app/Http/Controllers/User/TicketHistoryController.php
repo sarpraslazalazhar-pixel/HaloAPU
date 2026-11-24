@@ -108,6 +108,8 @@ class TicketHistoryController extends Controller
             abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
         }
 
+        $ticket = TicketWorkQueue::syncTicketIfWorkHoursOpen($ticket);
+
         $ticket->load([
             'unit',
             'subUnit',

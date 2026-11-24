@@ -367,6 +367,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/status', [TicketController::class, 'updateStatus'])->name('status');
             Route::post('/{ticket}/csat', [TicketController::class, 'storeCsat'])->name('csat.store');
             Route::post('/{ticket}/enqueue', [TicketController::class, 'enqueuePending'])->name('enqueue');
+            Route::post('/{ticket}/kerjakan-sekarang', [TicketController::class, 'activateFromQueue'])->name('activate-from-queue');
             Route::post('/{ticket}/resume-work', [TicketController::class, 'resumeWork'])->name('resume-work');
             Route::patch('/{ticket}/priority', [TicketController::class, 'updatePriority'])->name('priority');
             Route::patch('/{ticket}/antrean', [TicketController::class, 'moveInQueue'])->name('queue-move');

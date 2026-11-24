@@ -189,7 +189,7 @@ class TicketWorkHoursTest extends TestCase
         $this->assertSame(1, $queued->fresh()->logs()->where('aksi', 'work_hours_queued')->count());
     }
 
-    public function test_paused_ticket_keeps_slot_and_cannot_resume_before_open(): void
+    public function test_paused_ticket_keeps_slot_before_open_and_auto_resumes_on_open(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-07-17 15:00:00'));
 
@@ -219,15 +219,11 @@ class TicketWorkHoursTest extends TestCase
             ->post(route('admin.tiket.resume-work', $paused->id))
             ->assertStatus(403);
 
-        // Senin 08:00: lanjut manual memulihkan status asli.
+        // Senin 08:00: scheduler otomatis melanjutkan tiket jeda & memberi tahu petugas + pengaju sekali.
         Carbon::setTestNow(Carbon::parse('2026-07-20 08:00:00'));
-        $payload = TicketWorkQueue::payload((int) $this->operatorA->id);
-        $this->assertTrue($payload['work_hours_open']);
-        $this->assertNull($payload['next_open_at']);
-        $this->assertTrue($payload['active']['is_work_hours_paused']);
-        $this->actingAs($this->operatorA, 'admin')
-            ->post(route('admin.tiket.resume-work', $paused->id))
-            ->assertSessionHas('success');
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        Carbon::setTestNow(Carbon::parse('2026-07-20 08:01:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
 
         $paused->refresh();
         $this->assertSame('on_proses', $paused->status);
@@ -235,11 +231,20 @@ class TicketWorkHoursTest extends TestCase
         $this->assertNull($paused->slaTracking->paused_at);
         $this->assertSame(1, $paused->logs()->where('aksi', 'work_hours_resumed')->count());
 
-        // Scheduler tidak melanjutkan otomatis; antrean tetap menunggu.
+        // Antrean tetap menunggu giliran di belakang pemegang slot (0 double-active slot).
         $this->assertSame('pending', $queued->fresh()->status);
+        $this->assertSame(1, Ticket::where('assigned_admin_id', $this->operatorA->id)
+            ->whereIn('status', TicketWorkQueue::ACTIVE_STATUSES)->count());
+
+        $opResumed = collect(Notification::sent($this->operatorA, TicketWorkHoursNotification::class))
+            ->filter(fn ($n) => $n->resumeReminder && (int) $n->ticket->id === (int) $paused->id);
+        $userResumed = collect(Notification::sent($this->user, TicketWorkHoursNotification::class))
+            ->filter(fn ($n) => $n->resumeReminder && (int) $n->ticket->id === (int) $paused->id);
+        $this->assertCount(1, $opResumed);
+        $this->assertCount(1, $userResumed);
     }
 
-    public function test_status_transition_cannot_bypass_work_hours_pause(): void
+    public function test_status_transition_cannot_bypass_work_hours_pause_when_closed_and_auto_resumes_when_open(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-07-17 15:00:00'));
         $ticket = $this->ticket('on_proses', $this->operatorA->id);
@@ -253,11 +258,14 @@ class TicketWorkHoursTest extends TestCase
             ->assertStatus(422)
             ->assertJsonPath('message', 'Gunakan Lanjutkan Tiket setelah jam kerja buka.');
 
-        // Begitu buka, status biasa untuk tiket ber-marker tetap ditolak.
+        // Begitu jam kerja buka, transisi biasa otomatis melanjutkan jeda jam kerja dan berhasil.
         Carbon::setTestNow(Carbon::parse('2026-07-20 09:00:00'));
         $this->postJson("/api/tickets/{$ticket->id}/status", ['status' => 'solve'])
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'Gunakan Lanjutkan Tiket setelah jam kerja buka.');
+            ->assertOk()
+            ->assertJsonPath('data.status', 'solve');
+
+        $this->assertSame('solve', $ticket->fresh()->status);
+        $this->assertNull($ticket->fresh()->work_hours_resume_status);
     }
 
     public function test_api_detail_exposes_work_hours_only_for_affected_tickets(): void
@@ -334,7 +342,7 @@ class TicketWorkHoursTest extends TestCase
         $this->assertSame('dibatalkan', $ticket->fresh()->status);
     }
 
-    public function test_scheduler_promotes_one_slot_per_operator_on_open(): void
+    public function test_scheduler_auto_resumes_holder_and_promotes_queue_when_solved(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-07-17 15:00:00'));
 
@@ -351,17 +359,14 @@ class TicketWorkHoursTest extends TestCase
         Carbon::setTestNow(Carbon::parse('2026-07-17 16:00:00'));
         $this->artisan('tickets:work-hours')->assertExitCode(0);
 
-        // Slot ditahan tiket tertunda; antrean tidak melompat saat tutup maupun saat buka.
+        // Saat jam buka: tiket aktif otomatis kembali ke status asal; antrean tetap tertunda sampai slot selesai.
         Carbon::setTestNow(Carbon::parse('2026-07-20 08:00:00'));
         $this->artisan('tickets:work-hours')->assertExitCode(0);
-        $this->assertSame('pending', $first->fresh()->status);
-        $this->assertSame('pending', $active->fresh()->status);
-
-        // Petugas melanjutkan tiketnya; status asli kembali.
-        TicketWorkQueue::resumeAfterHours($active->fresh(), $this->operatorA, new SlaCalculator);
         $this->assertSame('open', $active->fresh()->status);
+        $this->assertSame('pending', $first->fresh()->status);
+        $this->assertSame('pending', $second->fresh()->status);
 
-        // Satu tiket selesai -> antrean pertama naik, kedua tetap menunggu.
+        // Satu tiket selesai -> antrean pertama naik & petugas + pengaju mendapat notifikasi giliran.
         TicketStatusService::applyTransition($active->fresh(), 'on_proses', 'Dikerjakan', $this->operatorA);
         TicketStatusService::applyTransition($active->fresh(), 'solve', 'Selesai', $this->operatorA);
 
@@ -369,5 +374,149 @@ class TicketWorkHoursTest extends TestCase
         $this->assertSame('pending', $second->fresh()->status);
         $this->assertSame(1, Ticket::where('assigned_admin_id', $this->operatorA->id)
             ->whereIn('status', TicketWorkQueue::ACTIVE_STATUSES)->count());
+
+        Notification::assertSentTo($this->operatorA, TicketWorkHoursNotification::class, function ($n) use ($first) {
+            return (int) $n->ticket->id === (int) $first->id
+                && str_starts_with($n->toArray($this->operatorA)['title'], 'Giliran pengerjaan:');
+        });
+        Notification::assertSentTo($this->user, TicketWorkHoursNotification::class, function ($n) use ($first) {
+            return (int) $n->ticket->id === (int) $first->id
+                && str_starts_with($n->toArray($this->user)['title'], 'Giliran pengerjaan:');
+        });
+    }
+
+    public function test_queue_promotes_on_open_when_slot_free_preserves_booking_sla_and_notifies_both_parties(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:00:00'));
+        $booked = $this->ticket('pending');
+        $booked->update(['assignment_resume_status' => 'open']);
+        $window = [
+            'start' => Carbon::parse('2026-07-21 09:00:00'),
+            'end' => Carbon::parse('2026-07-21 17:00:00'),
+        ];
+        (new SlaCalculator)->createTracking($booked, $window);
+        TicketWorkQueue::assign($booked, $this->operatorA, $this->superAdmin);
+        $this->assertNotNull($booked->fresh()->assignment_queued_at);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-20 08:00:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+
+        $booked->refresh();
+        $this->assertSame('open', $booked->status);
+        $this->assertNull($booked->assignment_queued_at);
+        $this->assertSame('2026-07-21 17:00:00', $booked->slaTracking->sla_resolution_deadline->format('Y-m-d H:i:s'));
+
+        Notification::assertSentTo($this->operatorA, TicketWorkHoursNotification::class, function ($n) use ($booked) {
+            return (int) $n->ticket->id === (int) $booked->id
+                && str_starts_with($n->toArray($this->operatorA)['title'], 'Giliran pengerjaan:');
+        });
+        Notification::assertSentTo($this->user, TicketWorkHoursNotification::class, function ($n) use ($booked) {
+            return (int) $n->ticket->id === (int) $booked->id
+                && str_starts_with($n->toArray($this->user)['title'], 'Giliran pengerjaan:');
+        });
+    }
+
+    public function test_reassigning_work_hours_paused_ticket_to_busy_operator_avoids_state_stacking(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-17 15:00:00'));
+        $paused = $this->ticket('on_proses', $this->operatorA->id);
+        $this->tracking($paused);
+        $busyTicket = $this->ticket('on_proses', $this->operatorB->id);
+        $this->tracking($busyTicket);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-17 16:00:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('on_proses', $paused->fresh()->work_hours_resume_status);
+
+        // Reassign tiket yang dijeda jam kerja ke operatorB yang sedang sibuk -> masuk antrean murni.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 16:30:00'));
+        TicketWorkQueue::assign($paused->fresh(), $this->operatorB, $this->superAdmin);
+
+        $reassigned = $paused->fresh();
+        $this->assertNull($reassigned->work_hours_resume_status);
+        $this->assertNull($reassigned->work_hours_sla_paused_at);
+        $this->assertNotNull($reassigned->assignment_queued_at);
+        $this->assertSame('on_proses', $reassigned->assignment_resume_status);
+
+        // Senin 08:00: saat operatorB menyelesaikan tiketnya, tiket hasil reassign langsung aktif (bukan zombie pending).
+        Carbon::setTestNow(Carbon::parse('2026-07-20 08:30:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        TicketStatusService::applyTransition($busyTicket->fresh(), 'solve', 'Selesai', $this->operatorB);
+
+        $promoted = $paused->fresh();
+        $this->assertSame('on_proses', $promoted->status);
+        $this->assertNull($promoted->work_hours_resume_status);
+        $this->assertNull($promoted->assignment_queued_at);
+
+        Notification::assertSentTo($this->operatorB, TicketWorkHoursNotification::class, function ($n) use ($promoted) {
+            return (int) $n->ticket->id === (int) $promoted->id
+                && str_starts_with($n->toArray($this->operatorB)['title'], 'Giliran pengerjaan:');
+        });
+        Notification::assertSentTo($this->user, TicketWorkHoursNotification::class, function ($n) use ($promoted) {
+            return (int) $n->ticket->id === (int) $promoted->id
+                && str_starts_with($n->toArray($this->user)['title'], 'Giliran pengerjaan:');
+        });
+    }
+
+    public function test_on_demand_fallback_syncs_paused_and_queued_tickets_without_scheduler(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-17 15:00:00'));
+        $paused = $this->ticket('on_proses', $this->operatorA->id);
+        $this->tracking($paused);
+        $queued = $this->ticket('open');
+        $this->tracking($queued);
+        TicketWorkQueue::assign($queued, $this->operatorA, $this->superAdmin);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-17 16:00:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+
+        // Tanpa menjalankan artisan tickets:work-hours saat jam buka, membuka detail langsung menyinkronkan!
+        Carbon::setTestNow(Carbon::parse('2026-07-20 08:15:00'));
+        $this->actingAs($this->user)
+            ->get(route('tiket.show', $queued->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('ticket.status', 'pending')
+                ->where('work_hours.reason', 'queued')
+                ->where('work_hours.is_open', true)
+            );
+
+        // Paused holder sudah otomatis lanjut ketika user membuka detail tiket antrean milik operator yang sama.
+        $this->assertSame('on_proses', $paused->fresh()->status);
+
+        $this->actingAs($this->operatorA, 'admin')
+            ->get(route('admin.tiket.show', $paused->id))
+            ->assertOk()
+            ->assertInertia(fn ($page) => $page
+                ->where('ticket.status', 'on_proses')
+                ->where('work_hours', null)
+            );
+    }
+
+    public function test_unassigned_out_of_hours_ticket_activates_on_open_and_notifies_requester(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:30:00'));
+        $unassigned = Ticket::create([
+            'user_id' => $this->user->id,
+            'unit_id' => $this->unit->id,
+            'sub_unit_id' => $this->subUnit->id,
+            'form_data' => ['judul' => 'Malam hari'],
+            'status' => 'pending',
+            'assignment_resume_status' => 'open',
+            'priority' => 'Sedang',
+        ]);
+        $this->tracking($unassigned);
+
+        Carbon::setTestNow(Carbon::parse('2026-07-20 08:00:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+
+        $unassigned->refresh();
+        $this->assertSame('open', $unassigned->status);
+        $this->assertNull($unassigned->assignment_resume_status);
+        $this->assertNull($unassigned->slaTracking->paused_at);
+
+        Notification::assertSentTo($this->user, TicketWorkHoursNotification::class, function ($n) use ($unassigned) {
+            return (int) $n->ticket->id === (int) $unassigned->id && $n->resumeReminder === true;
+        });
     }
 }

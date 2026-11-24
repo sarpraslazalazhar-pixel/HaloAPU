@@ -11,7 +11,7 @@ import { formatDateId, formatTicketId } from '@/lib/utils';
 import { subscribe } from '@/lib/realtime';
 import type { FormField } from '@/types';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
+import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, Play, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
 import EditTicketFormDialog from '@/Components/EditTicketFormDialog';
 import { TicketEditHistory, type EditHistoryEntry } from '@/Components/TicketEditHistory';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
@@ -87,6 +87,7 @@ interface TicketDetailProps {
   canManage?: boolean;
   canCancelTicket?: boolean;
   canEditForm?: boolean;
+  canActivateFromQueue?: boolean;
   work_hours?: WorkHoursInfo | null;
 }
 
@@ -95,7 +96,7 @@ interface AdminDetailPageProps {
   errors?: Record<string, string>;
 }
 
-export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, work_hours }: TicketDetailProps) {
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, canActivateFromQueue = false, work_hours }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as AdminDetailPageProps;
 
@@ -133,6 +134,8 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const [tab, setTab] = useState(canManage ? 'chat' : 'informasi');
   const [resuming, setResuming] = useState(false);
   const [enqueuing, setEnqueuing] = useState(false);
+  const [swapDialogOpen, setSwapDialogOpen] = useState(false);
+  const [swapping, setSwapping] = useState(false);
   const chatPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -152,7 +155,9 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
 
     return subscribe(`ticket.${ticket.id}`, {
       '.TicketMessagePosted': ({ log }) => {
-        if (log?.aksi?.startsWith('work_hours')) {
+        const reloadActions = ['open', 'on_proses', 'pending', 'need_revision', 'solve', 'selesai', 'dibatalkan', 'reject'];
+
+        if (log?.aksi && (log.aksi.startsWith('work_hours') || reloadActions.includes(log.aksi))) {
           router.reload({ only: ['ticket', 'work_hours'] });
         }
       },
@@ -948,6 +953,25 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                     </div>
                   )}
 
+                  {canActivateFromQueue && isQueued && Boolean(ticket.assigned_admin_id) && (work_hours?.is_open ?? true) && (
+                    <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                      <p className="text-xs text-blue-900">
+                        Tiket ini sedang berada dalam antrean petugas. Aktifkan sekarang untuk memprioritaskan dan menjeda sementara tiket aktif petugas ke antrean terdepan.
+                      </p>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={swapping}
+                        className="w-full border-blue-300 bg-white text-blue-700 hover:bg-blue-100"
+                        onClick={() => setSwapDialogOpen(true)}
+                      >
+                        <Play className="mr-1.5 h-3.5 w-3.5" />
+                        {swapping ? 'Memproses...' : 'Kerjakan Sekarang (Tukar Tiket Aktif)'}
+                      </Button>
+                    </div>
+                  )}
+
                   <form onSubmit={handleMainSubmit} className="space-y-4">
                     <div className="space-y-2">
                       <span className="text-sm text-slate-500">Status Saat Ini:</span>
@@ -1252,6 +1276,29 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
          formFields={formFields || []}
        />
      )}
+
+     <ConfirmDialog
+       open={swapDialogOpen}
+       variant="default"
+       onOpenChange={(open) => {
+         if (!open && !swapping) setSwapDialogOpen(false);
+       }}
+       title="Kerjakan Tiket Ini Sekarang?"
+       message={`Tiket yang sedang dikerjakan petugas akan dijeda sementara ke antrean terdepan, dan tiket #TKT-${formatTicketId(ticket.id)} akan langsung menjadi tiket aktif. Lanjutkan?`}
+       confirmText={swapping ? 'Memproses...' : 'Ya, Kerjakan Sekarang'}
+       cancelText="Batal"
+       onConfirm={() => {
+         if (swapping) return;
+
+         setSwapping(true);
+         router.post(route('admin.tiket.activate-from-queue', ticket.id), {}, {
+           preserveScroll: true,
+           preserveState: true,
+           onSuccess: () => setSwapDialogOpen(false),
+           onFinish: () => setSwapping(false),
+         });
+       }}
+     />
    </AdminLayout>
  );
 }

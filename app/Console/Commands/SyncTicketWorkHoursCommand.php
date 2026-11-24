@@ -3,12 +3,10 @@
 namespace App\Console\Commands;
 
 use App\Models\Ticket;
-use App\Models\TicketLog;
 use App\Notifications\TicketWorkHoursNotification;
 use App\Services\SlaCalculator;
 use App\Services\TicketWorkQueue;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -16,7 +14,7 @@ class SyncTicketWorkHoursCommand extends Command
 {
     protected $signature = 'tickets:work-hours';
 
-    protected $description = 'Tunda tiket aktif di luar jam kerja dan promosikan antrean saat jam kerja buka.';
+    protected $description = 'Tunda tiket aktif di luar jam kerja dan sinkronkan antrean saat jam kerja buka.';
 
     public function handle(SlaCalculator $calendar): int
     {
@@ -28,7 +26,11 @@ class SyncTicketWorkHoursCommand extends Command
             return self::SUCCESS;
         }
 
-        return $state['is_open'] ? $this->promoteQueues($calendar) : $this->pauseTickets($calendar, $state['closed_since']);
+        if ($state['is_open']) {
+            return TicketWorkQueue::syncOpenWorkHours($calendar) === 0 ? self::SUCCESS : self::FAILURE;
+        }
+
+        return $this->pauseTickets($calendar, $state['closed_since']);
     }
 
     private function pauseTickets(SlaCalculator $calendar, ?\Carbon\Carbon $closedSince): int
@@ -60,75 +62,6 @@ class SyncTicketWorkHoursCommand extends Command
                     }
                 }
             });
-
-        return $failed === 0 ? self::SUCCESS : self::FAILURE;
-    }
-
-    private function promoteQueues(SlaCalculator $calendar): int
-    {
-        $failed = 0;
-
-        $adminIds = Ticket::query()
-            ->whereNotNull('assigned_admin_id')
-            ->where('status', 'pending')
-            ->whereNotNull('assignment_queued_at')
-            ->whereNotNull('assignment_resume_status')
-            ->distinct()
-            ->pluck('assigned_admin_id');
-
-        foreach ($adminIds as $adminId) {
-            try {
-                TicketWorkQueue::promoteWhenOpen((int) $adminId, $calendar);
-            } catch (Throwable $e) {
-                $failed++;
-                Log::error("tickets:work-hours gagal mempromosikan antrean petugas #{$adminId}: ".$e->getMessage());
-            }
-        }
-
-        $unassignedIds = Ticket::query()
-            ->whereNull('assigned_admin_id')
-            ->where('status', 'pending')
-            ->whereNull('assignment_queued_at')
-            ->where('assignment_resume_status', 'open')
-            ->pluck('id');
-
-        foreach ($unassignedIds as $ticketId) {
-            try {
-                DB::transaction(function () use ($ticketId, $calendar): void {
-                    $locked = Ticket::lockForUpdate()->find($ticketId);
-                    if (! $locked
-                        || $locked->assigned_admin_id !== null
-                        || $locked->status !== 'pending'
-                        || $locked->assignment_queued_at !== null
-                        || $locked->assignment_resume_status !== 'open') {
-                        return;
-                    }
-
-                    $at = now()->microsecond(0);
-                    $sla = $locked->slaTracking()->lockForUpdate()->first();
-                    if ($sla && ($sla->responded_at === null || $sla->resolved_at === null)) {
-                        $sla->setRelation('ticket', $locked);
-                        $calendar->resumeSla($sla, $at);
-                    }
-
-                    $locked->update([
-                        'status' => 'open',
-                        'assignment_resume_status' => null,
-                    ]);
-
-                    TicketLog::withoutEvents(fn () => TicketLog::create([
-                        'ticket_id' => $locked->id,
-                        'admin_id' => null,
-                        'aksi' => 'open',
-                        'catatan' => 'Jam kerja telah buka. Tiket siap ditindaklanjuti.',
-                        'timestamp' => $at,
-                    ]));
-                });
-            } catch (Throwable $e) {
-                $failed++;
-                Log::error("tickets:work-hours gagal mengaktifkan tiket luar jam kerja #{$ticketId}: ".$e->getMessage());
-            }
-        }
 
         return $failed === 0 ? self::SUCCESS : self::FAILURE;
     }

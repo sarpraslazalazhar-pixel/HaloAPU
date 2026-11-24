@@ -38,6 +38,8 @@ class TicketController extends Controller
 {
     public function index(Request $request)
     {
+        TicketWorkQueue::syncOpenWorkHoursThrottled();
+
         $query = Ticket::with(['user.divisi', 'createdByAdmin', 'unit', 'subUnit', 'slaTracking', 'assignedAdmin', 'booking:id,ticket_id,status,tanggal_mulai,tanggal_selesai', 'csat:id,ticket_id,rating,komentar']);
 
         $admin = auth('admin')->user();
@@ -284,6 +286,8 @@ class TicketController extends Controller
             abort(403);
         }
 
+        $ticket = TicketWorkQueue::syncTicketIfWorkHoursOpen($ticket);
+
         $ticket->load([
             'user', 'user.divisi', 'user.orgUnit', 'user.jabatan', 'createdByAdmin',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
@@ -311,6 +315,7 @@ class TicketController extends Controller
             'canManage' => $canManage,
             'canCancelTicket' => $ticket->canBeCancelledByAdmin($admin),
             'canEditForm' => $canManage && in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true),
+            'canActivateFromQueue' => $canManage && $this->canManageQueueAction($admin, $ticket),
             'work_hours' => TicketWorkQueue::workHoursFor($ticket, $admin),
         ]);
     }
@@ -418,6 +423,14 @@ class TicketController extends Controller
         return back()->with('success', 'Terima kasih atas rating kamu!');
     }
 
+    private function canManageQueueAction(Admin $admin, Ticket $ticket): bool
+    {
+        return $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || $admin->isCoordinator()
+            || $admin->checkPermissionTo('akses-assign-operator')
+            || ($ticket->assigned_admin_id !== null && (int) $ticket->assigned_admin_id === (int) $admin->id);
+    }
+
     public function enqueuePending(Ticket $ticket)
     {
         $admin = auth('admin')->user();
@@ -425,12 +438,7 @@ class TicketController extends Controller
             abort(403, 'Kamu tidak berhak mengelola tiket ini.');
         }
 
-        $canEnqueue = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
-            || $admin->isCoordinator()
-            || $admin->checkPermissionTo('akses-assign-operator')
-            || ($ticket->assigned_admin_id !== null && (int) $ticket->assigned_admin_id === (int) $admin->id);
-
-        if (! $canEnqueue) {
+        if (! $this->canManageQueueAction($admin, $ticket)) {
             abort(403, 'Kamu tidak memiliki hak akses untuk memasukkan tiket ini ke antrean.');
         }
 
@@ -448,6 +456,26 @@ class TicketController extends Controller
                 ? 'Tiket berhasil dimasukkan ke antrean petugas.'
                 : 'Slot petugas kosong; tiket langsung diaktifkan untuk dikerjakan.'
         );
+    }
+
+    public function activateFromQueue(Request $request, Ticket $ticket)
+    {
+        $admin = auth('admin')->user();
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak mengelola tiket ini.');
+        }
+
+        if (! $this->canManageQueueAction($admin, $ticket)) {
+            abort(403, 'Kamu tidak memiliki hak akses untuk menukar tiket antrean ini.');
+        }
+
+        try {
+            TicketWorkQueue::swapWithActive($ticket, $admin);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->back()->with('success', 'Tiket antrean berhasil dijadikan tiket aktif.');
     }
 
     public function resumeWork(Ticket $ticket, SlaCalculator $slaCalculator)

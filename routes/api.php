@@ -67,6 +67,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive:
     Route::post('/tickets/{id}/revision', [TicketController::class, 'requestRevision']);
     Route::post('/tickets/{id}/status', [TicketController::class, 'changeStatus']);
     Route::post('/tickets/{id}/enqueue', [TicketController::class, 'enqueuePending']);
+    Route::post('/tickets/{id}/activate-from-queue', [TicketController::class, 'activateFromQueue']);
     Route::post('/tickets/{id}/resume-work', [TicketController::class, 'resumeWork']);
     Route::post('/tickets/{id}/kembalikan-alat', [TicketController::class, 'kembalikanAlat']);
     Route::patch('/tickets/{id}/priority', [TicketController::class, 'changePriority']);

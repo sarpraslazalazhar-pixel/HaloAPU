@@ -7,7 +7,7 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Plus, Search, Send, X, XCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Play, Plus, Search, Send, X, XCircle } from 'lucide-react';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { formatTicketId } from '@/lib/utils';
 
@@ -97,6 +97,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [search, setSearch] = useState(filters?.search || '');
  const [openOperator, setOpenOperator] = useState<number | null>(null);
  const [enqueuingTicketId, setEnqueuingTicketId] = useState<number | null>(null);
+ const [swapTarget, setSwapTarget] = useState<{ ticket: OperatorLoadTicket; hasActive: boolean } | null>(null);
+ const [swapping, setSwapping] = useState(false);
  const [cancelTargetTicket, setCancelTargetTicket] = useState<Ticket | null>(null);
 
  const enqueueTicket = (ticketId: number) => {
@@ -354,6 +356,19 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  >
  <ArrowDown className="size-3.5" />
  </Button>
+ {op.work_hours_open && (
+ <Button
+ type="button"
+ variant="outline"
+ size="sm"
+ disabled={swapping}
+ title="Ganti tiket yang sedang dikerjakan dengan tiket antrean ini"
+ className="h-7 border-blue-300 bg-blue-50 px-2 text-xs font-medium text-blue-700 hover:bg-blue-100"
+ onClick={() => setSwapTarget({ ticket: tk, hasActive: op.working > 0 })}
+ >
+ <Play className="mr-1 size-3" /> Kerjakan
+ </Button>
+ )}
  </>
  )}
  {tk.position === null && !tk.is_work_hours_paused && tk.status === 'pending' && (
@@ -500,6 +515,35 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  router.patch(route('admin.tiket.cancel', cancelTargetTicket.id), {}, {
  preserveScroll: true,
  onSuccess: () => setCancelTargetTicket(null),
+ });
+ }}
+ />
+
+ <ConfirmDialog
+ open={swapTarget !== null}
+ variant="default"
+ onOpenChange={(open) => {
+ if (!open && !swapping) setSwapTarget(null);
+ }}
+ title="Kerjakan Tiket Ini Sekarang?"
+ message={
+ swapTarget
+ ? swapTarget.hasActive
+ ? `Tiket yang sedang dikerjakan akan dijeda sementara ke antrean terdepan, dan tiket #TKT-${swapTarget.ticket.formatted_id} akan langsung menjadi tiket aktif. Lanjutkan?`
+ : `Tiket #TKT-${swapTarget.ticket.formatted_id} akan langsung diaktifkan dari antrean untuk dikerjakan. Lanjutkan?`
+ : ''
+ }
+ confirmText={swapping ? 'Memproses...' : 'Ya, Kerjakan Sekarang'}
+ cancelText="Batal"
+ onConfirm={() => {
+ if (!swapTarget || swapping) return;
+
+ setSwapping(true);
+ router.post(route('admin.tiket.activate-from-queue', swapTarget.ticket.id), {}, {
+ preserveScroll: true,
+ preserveState: true,
+ onSuccess: () => setSwapTarget(null),
+ onFinish: () => setSwapping(false),
  });
  }}
  />

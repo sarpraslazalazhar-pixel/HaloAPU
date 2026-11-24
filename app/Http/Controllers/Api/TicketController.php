@@ -44,6 +44,8 @@ class TicketController extends Controller
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
+        TicketWorkQueue::syncOpenWorkHoursThrottled();
+
         $query = Ticket::with(['subUnit', 'assignedAdmin', 'user', 'slaTracking', 'createdByAdmin']);
 
         if ($user instanceof Admin) {
@@ -414,6 +416,37 @@ class TicketController extends Controller
         }
         if (! $isAdmin && (int) $ticket->user_id !== (int) $user->id) {
             return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        $beforeState = [
+            $ticket->status,
+            $ticket->work_hours_resume_status,
+            $ticket->assignment_queued_at?->toIso8601String(),
+            $ticket->assignment_resume_status,
+        ];
+        $ticket = TicketWorkQueue::syncTicketIfWorkHoursOpen($ticket);
+        $afterState = [
+            $ticket->status,
+            $ticket->work_hours_resume_status,
+            $ticket->assignment_queued_at?->toIso8601String(),
+            $ticket->assignment_resume_status,
+        ];
+        if ($afterState !== $beforeState) {
+            $ticket->load([
+                'subUnit',
+                'unit',
+                'assignedAdmin',
+                'user',
+                'createdByAdmin',
+                'attachments',
+                'csat',
+                'slaTracking',
+                'logs' => fn ($q) => $q->orderBy('timestamp', 'desc'),
+                'logs.admin',
+                'logs.attachments',
+                'logs.chatMessage.attachments',
+                'editHistories.editor',
+            ]);
         }
 
         // Get form fields for label mapping
@@ -1117,6 +1150,50 @@ class TicketController extends Controller
             'message' => $queued
                 ? 'Tiket berhasil dimasukkan ke antrean petugas.'
                 : 'Slot petugas kosong; tiket langsung diaktifkan untuk dikerjakan.',
+            'data' => $this->formatTicket($updated->fresh(['subUnit', 'assignedAdmin', 'user'])),
+        ]);
+    }
+
+    /**
+     * Activate a queued ticket immediately by pausing the operator's current active ticket to the front of the queue (Admin only).
+     */
+    public function activateFromQueue(Request $request, string $id)
+    {
+        $user = $request->user();
+
+        if (! $user instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat menukar tiket antrean'], 403);
+        }
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (! $ticket->isAccessibleBy($user)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk mengelola tiket ini.'], 403);
+        }
+
+        $canSwap = $user->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || $user->isCoordinator()
+            || $user->checkPermissionTo('akses-assign-operator')
+            || ($ticket->assigned_admin_id !== null && (int) $ticket->assigned_admin_id === (int) $user->id);
+
+        if (! $canSwap) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk menukar tiket antrean ini.'], 403);
+        }
+
+        try {
+            $updated = TicketWorkQueue::swapWithActive($ticket, $user);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => 'Tiket antrean berhasil dijadikan tiket aktif.',
             'data' => $this->formatTicket($updated->fresh(['subUnit', 'assignedAdmin', 'user'])),
         ]);
     }

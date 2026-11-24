@@ -22,19 +22,31 @@ interface Props {
 export function TicketWorkHoursNotice({ workHours, isAdmin, onContact, onResume, resumeProcessing }: Props) {
   const paused = workHours.reason === 'paused';
 
-  const heading = workHours.is_open
-    ? paused ? 'Menunggu petugas melanjutkan tiket' : 'Tiket menunggu giliran petugas'
-    : 'Jam kerja sudah berakhir';
+  const open = workHours.is_open;
 
-  const body = paused
-    ? 'Pengerjaan tiket ditunda.'
-    : 'Posisi tiket dalam antrean tidak berubah.';
+  const heading = !open
+    ? 'Jam kerja sudah berakhir'
+    : paused
+      ? workHours.is_assignee ? 'Tiket siap dilanjutkan' : 'Menunggu petugas melanjutkan tiket'
+      : 'Tiket menunggu giliran petugas';
 
-  const guidance = isAdmin
-    ? 'Jika harus ditangani hari ini, koordinasikan lewat chat tiket dan ajukan lembur sesuai prosedur kantor.'
-    : workHours.operator_name
-      ? 'Perlu ditangani hari ini? Hubungi petugas lewat chat tiket untuk meminta lembur.'
-      : 'Petugas belum ditugaskan. Sampaikan kebutuhan hari ini di chat tiket.';
+  const body = !open
+    ? paused ? 'Pengerjaan tiket ditunda.' : 'Posisi tiket dalam antrean tidak berubah.'
+    : paused
+      ? 'Jam kerja sudah dimulai. Tiket ini sudah mendapat giliran dan menunggu dilanjutkan oleh petugas.'
+      : 'Jam kerja sedang berlangsung. Tiket ini sedang dalam antrean dan akan otomatis diproses saat petugas menyelesaikan tiket sebelumnya.';
+
+  const guidance = !open
+    ? isAdmin
+      ? 'Jika harus ditangani hari ini, koordinasikan lewat chat tiket dan ajukan lembur sesuai prosedur kantor.'
+      : workHours.operator_name
+        ? 'Perlu ditangani hari ini? Hubungi petugas lewat chat tiket untuk meminta lembur.'
+        : 'Petugas belum ditugaskan. Sampaikan kebutuhan hari ini di chat tiket.'
+    : paused && workHours.is_assignee
+      ? 'Pilih Lanjutkan Tiket untuk melanjutkan pengerjaan.'
+      : null;
+
+  const showResume = workHours.can_resume && !!onResume && paused;
 
   return (
     <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4 sm:p-5">
@@ -52,12 +64,12 @@ export function TicketWorkHoursNotice({ workHours, isAdmin, onContact, onResume,
           <p className="text-sm text-amber-900/80">
             {workHours.operator_name ? `Petugas: ${workHours.operator_name}` : 'Belum ada petugas yang ditugaskan'}
           </p>
-          <p className="text-sm text-amber-900/80">{guidance}</p>
+          {guidance && <p className="text-sm text-amber-900/80">{guidance}</p>}
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-2 pl-0 sm:pl-8">
-        {workHours.can_resume && onResume && (
+        {showResume && onResume && (
           <Button size="sm" onClick={onResume} disabled={resumeProcessing} className="min-h-11">
             <PlayCircle className="mr-1.5 h-4 w-4" aria-hidden="true" />
             {resumeProcessing ? 'Memproses...' : 'Lanjutkan Tiket'}

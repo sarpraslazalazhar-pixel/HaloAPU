@@ -52,7 +52,45 @@ class TicketStatusService
             }
 
             if ($lockedTicket->work_hours_resume_status !== null) {
-                throw new InvalidArgumentException('Gunakan Lanjutkan Tiket setelah jam kerja buka.');
+                $calendar = new SlaCalculator;
+                if (! $calendar->isWithinWorkingHours($at)) {
+                    throw new InvalidArgumentException('Gunakan Lanjutkan Tiket setelah jam kerja buka.');
+                }
+
+                $adminId = $lockedTicket->assigned_admin_id !== null ? (int) $lockedTicket->assigned_admin_id : null;
+                if ($adminId !== null && TicketWorkQueue::hasOtherActive($lockedTicket, $adminId)) {
+                    $resumeStatus = $lockedTicket->work_hours_resume_status;
+                    $lockedTicket->work_hours_resume_status = null;
+                    $lockedTicket->work_hours_sla_paused_at = null;
+                    TicketWorkQueue::place($lockedTicket, $resumeStatus, $at);
+
+                    throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket masuk antrean.');
+                }
+
+                if ($sla = $lockedTicket->slaTracking()->lockForUpdate()->first()) {
+                    $sla->setRelation('ticket', $lockedTicket);
+                    if ($sla->isPaused()) {
+                        $calendar->resumeSla($sla, $at, true);
+                    }
+                }
+
+                $resumedStatus = $lockedTicket->work_hours_resume_status;
+                $lockedTicket->update([
+                    'status' => $resumedStatus,
+                    'work_hours_resume_status' => null,
+                    'work_hours_sla_paused_at' => null,
+                ]);
+                TicketLog::withoutEvents(fn () => TicketLog::create([
+                    'ticket_id' => $lockedTicket->id,
+                    'admin_id' => null,
+                    'aksi' => 'work_hours_resumed',
+                    'catatan' => 'Jam kerja telah buka. Pengerjaan tiket dilanjutkan otomatis.',
+                    'timestamp' => $at,
+                ]));
+                $oldStatus = $resumedStatus;
+                if ($oldStatus === $newStatus) {
+                    return;
+                }
             }
 
             if ($newStatus === 'on_proses') {

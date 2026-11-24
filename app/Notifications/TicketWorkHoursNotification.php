@@ -17,8 +17,12 @@ class TicketWorkHoursNotification extends Notification implements ShouldBroadcas
 {
     use Queueable, FilterNotificationChannels;
 
-    public function __construct(public Ticket $ticket, public string $message)
-    {
+    public function __construct(
+        public Ticket $ticket,
+        public string $message,
+        public bool $resumeReminder = false,
+        public ?string $customTitle = null,
+    ) {
     }
 
     public function via(object $notifiable): array
@@ -40,7 +44,13 @@ class TicketWorkHoursNotification extends Notification implements ShouldBroadcas
 
     private function title(): string
     {
-        return "Jam kerja berakhir: Tiket #TKT-{$this->ticket->formatted_id}";
+        if ($this->customTitle !== null) {
+            return $this->customTitle;
+        }
+
+        return $this->resumeReminder
+            ? "Jam kerja sudah buka: Tiket #TKT-{$this->ticket->formatted_id}"
+            : "Jam kerja berakhir: Tiket #TKT-{$this->ticket->formatted_id}";
     }
 
     public function toArray(object $notifiable): array

@@ -74,7 +74,9 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
 
    return subscribe(`ticket.${ticket.id}`, {
      '.TicketMessagePosted': ({ log }) => {
-       if (log?.aksi?.startsWith('work_hours')) {
+       const reloadActions = ['open', 'on_proses', 'pending', 'need_revision', 'solve', 'selesai', 'dibatalkan', 'reject'];
+
+       if (log?.aksi && (log.aksi.startsWith('work_hours') || reloadActions.includes(log.aksi))) {
          router.reload({ only: ['ticket', 'work_hours'] });
        }
      },

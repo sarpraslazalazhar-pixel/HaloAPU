@@ -213,6 +213,31 @@ class SlaCalculator
     }
 
     /**
+     * Pratinjau kolom resolusi SLA setelah menerapkan tanggal form tanpa menulis ke DB.
+     *
+     * @return array{
+     *     sla_resolution_deadline: ?Carbon,
+     *     sla_resolution_policy_deadline: ?Carbon,
+     *     sla_resolution_form_deadline: ?Carbon,
+     * }
+     */
+    public function previewFormDeadline(TicketSlaTracking $sla, ?Carbon $formDeadline): array
+    {
+        if ($sla->resolved_at !== null) {
+            return [
+                'sla_resolution_deadline' => $sla->sla_resolution_deadline?->copy(),
+                'sla_resolution_policy_deadline' => $sla->sla_resolution_policy_deadline?->copy(),
+                'sla_resolution_form_deadline' => $sla->sla_resolution_form_deadline?->copy(),
+            ];
+        }
+
+        return $this->resolutionColumns(
+            $this->resolutionPolicy($sla)?->copy(),
+            $formDeadline?->copy(),
+        );
+    }
+
+    /**
      * Set/ganti/hapus tanggal form tanpa menghitung ulang durasi policy.
      */
     public function applyFormDeadline(TicketSlaTracking $sla, ?Carbon $formDeadline): void
@@ -221,7 +246,7 @@ class SlaCalculator
             return;
         }
 
-        $sla->update($this->resolutionColumns($this->resolutionPolicy($sla), $formDeadline));
+        $sla->update($this->previewFormDeadline($sla, $formDeadline));
     }
 
     /** Deadline penyelesaian yang berlaku tanpa tanggal form. */
@@ -237,7 +262,7 @@ class SlaCalculator
     {
         if ($formDeadline === null) {
             return [
-                'sla_resolution_deadline' => $policy,
+                'sla_resolution_deadline' => $policy?->copy(),
                 'sla_resolution_policy_deadline' => null,
                 'sla_resolution_form_deadline' => null,
             ];
@@ -245,9 +270,9 @@ class SlaCalculator
 
         return [
             'sla_resolution_deadline' => $policy === null ? null
-                : ($formDeadline->greaterThan($policy) ? $formDeadline->copy() : $policy),
-            'sla_resolution_policy_deadline' => $policy,
-            'sla_resolution_form_deadline' => $formDeadline,
+                : ($formDeadline->greaterThan($policy) ? $formDeadline->copy() : $policy->copy()),
+            'sla_resolution_policy_deadline' => $policy?->copy(),
+            'sla_resolution_form_deadline' => $formDeadline->copy(),
         ];
     }
 

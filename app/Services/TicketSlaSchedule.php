@@ -123,7 +123,7 @@ class TicketSlaSchedule
     {
         $byId = [];
         foreach ($fields as $field) {
-            if ($field->sub_unit_id === (int) $subUnit->id) {
+            if ((int) $field->sub_unit_id === (int) $subUnit->id) {
                 $byId[$field->id] = $field;
             }
         }
@@ -161,6 +161,9 @@ class TicketSlaSchedule
     private static function filled(?array $input): bool
     {
         $value = $input['value'] ?? null;
+        if (is_string($value)) {
+            return trim($value) !== '';
+        }
 
         return $value !== null && $value !== '';
     }
@@ -171,7 +174,7 @@ class TicketSlaSchedule
             return self::parse($date, ['Y-m-d\TH:i', 'Y-m-d\TH:i:s', 'Y-m-d H:i', 'Y-m-d H:i:s'], $timezone);
         }
 
-        $day = self::parse($date, ['Y-m-d'], $timezone);
+        $day = self::parse($date, ['Y-m-d', 'Y-m-d H:i:s', 'Y-m-d H:i', 'Y-m-d\TH:i:s', 'Y-m-d\TH:i', 'd/m/Y', 'd-m-Y'], $timezone);
         $clock = self::filled($time) ? self::parse($time, ['H:i', 'H:i:s'], $timezone)->format('H:i:s') : $defaultTime;
 
         return self::parse([
@@ -184,9 +187,10 @@ class TicketSlaSchedule
     {
         $value = $input['value'];
         if (is_string($value) && ! str_contains($value, "\0")) {
+            $trimmed = trim($value);
             foreach ($formats as $format) {
-                $parsed = DateTimeImmutable::createFromFormat('!'.$format, $value, $timezone);
-                if ($parsed && $parsed->format($format) === $value) {
+                $parsed = DateTimeImmutable::createFromFormat('!'.$format, $trimmed, $timezone);
+                if ($parsed && $parsed->format($format) === $trimmed) {
                     return Carbon::instance($parsed);
                 }
             }

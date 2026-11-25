@@ -2,7 +2,7 @@ import React from 'react';
 import { 
   Clock, User, FilePlus, UserCheck, PlayCircle, PauseCircle, 
   CheckCircle2, CheckCheck, XCircle, AlertTriangle, AlertCircle, 
-  RefreshCw, MessageSquare, Paperclip, HelpCircle 
+  RefreshCw, MessageSquare, Paperclip, HelpCircle, PackageCheck 
 } from 'lucide-react';
 import { formatDateId } from '@/lib/utils';
 import { TicketAttachmentList } from './TicketAttachmentList';
@@ -126,6 +126,12 @@ const actionConfigMap = {
     icon: MessageSquare,
     badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
     nodeBg: 'bg-indigo-500',
+  },
+  alat_diserahkan: {
+    label: 'Alat Diserahkan',
+    icon: PackageCheck,
+    badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
+    nodeBg: 'bg-sky-500',
   },
   alat_dikembalikan: {
     label: 'Alat Dikembalikan',

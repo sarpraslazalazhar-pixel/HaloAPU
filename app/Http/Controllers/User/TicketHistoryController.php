@@ -12,6 +12,7 @@ use App\Models\TicketLog;
 use App\Notifications\BrowserNotification;
 use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\TicketCommentPushNotification;
+use App\Services\EquipmentLoanService;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
 use App\Services\TicketWorkQueue;
@@ -21,7 +22,6 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Notifications\AnonymousNotifiable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
@@ -113,11 +113,14 @@ class TicketHistoryController extends Controller
 
         $ticket->load([
             'unit',
-            'subUnit',
+            'subUnit.formFields',
             'orgDivisi',
             'orgUnit',
             'jabatan',
             'booking',
+            'diserahkanOlehAdmin:id,name,username',
+            'penerimaAlatUser:id,name,username',
+            'diterimaKembaliOlehAdmin:id,name,username',
             'attachments.field',
             'attachments.log',
             'attachments.log.admin',
@@ -136,12 +139,18 @@ class TicketHistoryController extends Controller
             ->get();
 
         $maxRevisions = (int) SystemConfig::getValue('max_revisions', 5);
+        $isEquipmentLoan = EquipmentLoanService::isLoanTicket($ticket);
 
         return Inertia::render('User/Tiket/Detail', [
             'ticket' => $ticket,
             'formFields' => $formFields,
             'maxRevisions' => $maxRevisions,
             'work_hours' => TicketWorkQueue::workHoursFor($ticket, auth()->user()),
+            'isEquipmentLoan' => $isEquipmentLoan,
+            'loanSummary' => $isEquipmentLoan ? EquipmentLoanService::extractLoanSummary($ticket) : null,
+            'loanAttachments' => $isEquipmentLoan
+                ? EquipmentLoanService::extractLoanAttachments($ticket)
+                : ['serah' => [], 'kembali' => []],
         ]);
     }
 
@@ -462,57 +471,10 @@ class TicketHistoryController extends Controller
             abort(403);
         }
 
-        // Pastikan sub unit wajib_kembali aktif
-        if ($ticket->subUnit && ! $ticket->subUnit->wajib_kembali) {
-            $ticket->subUnit->update(['wajib_kembali' => true]);
-        }
+        $msg = 'Konfirmasi serah-terima dan pengembalian alat hanya dapat dilakukan oleh operator/admin.';
 
-        $statusNormalized = strtolower(trim((string) $ticket->status));
-        if (! in_array($statusNormalized, ['solve', 'selesai'])) {
-            return redirect()->back()->with('error', 'Status tiket harus selesai terlebih dahulu.');
-        }
-
-        $validated = $request->validate([
-            'kondisi_kembali' => 'nullable|string|in:baik,rusak,tidak_lengkap',
-            'catatan_kembali' => 'nullable|string|max:1000',
-        ]);
-
-        $kondisi = $validated['kondisi_kembali'] ?? 'baik';
-        $catatan = ! empty($validated['catatan_kembali']) ? trim($validated['catatan_kembali']) : null;
-
-        $now = now();
-        $ticket->dikembalikan_at = $now;
-        if (Schema::hasColumn('tickets', 'kondisi_kembali')) {
-            $ticket->kondisi_kembali = $kondisi;
-        }
-        if (Schema::hasColumn('tickets', 'catatan_kembali')) {
-            $ticket->catatan_kembali = $catatan;
-        }
-        $ticket->save();
-
-        $kondisiLabel = match ($kondisi) {
-            'rusak' => 'Rusak',
-            'tidak_lengkap' => 'Tidak Lengkap (Aksesoris Kurang)',
-            default => 'Baik (Normal)',
-        };
-
-        $logCatatan = 'Alat dikembalikan [Kondisi: '.$kondisiLabel.'], ditandai oleh user '.auth()->user()->username;
-        if ($catatan) {
-            $logCatatan .= ' — Catatan: '.$catatan;
-        }
-
-        try {
-            TicketLog::create([
-                'ticket_id' => $ticket->id,
-                'admin_id' => null,
-                'aksi' => 'alat_dikembalikan',
-                'catatan' => $logCatatan,
-                'timestamp' => $now,
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Log error: '.$e->getMessage());
-        }
-
-        return redirect()->back()->with('success', 'Alat berhasil ditandai sudah dikembalikan.');
+        return $request->expectsJson()
+            ? response()->json(['message' => $msg], 403)
+            : redirect()->back()->with('error', $msg);
     }
 }

@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   FileText, Download, Eye, Image as ImageIcon,
-  FileArchive, ShieldCheck, MessageSquare, Layers, Paperclip 
+  FileArchive, ShieldCheck, MessageSquare, Layers, Paperclip, PackageCheck 
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { AttachmentViewer } from './AttachmentViewer';
@@ -78,6 +78,8 @@ const statusNameMap = {
   assign_operator: 'Penugasan Operator',
   revisi: 'Revisi',
   balasan: 'Balasan',
+  alat_diserahkan: 'Serah-Terima Alat',
+  alat_dikembalikan: 'Pengembalian Alat',
 } satisfies Record<string, string>;
 
 export function TicketAttachmentList({ attachments, downloadRoute, grouped = false }: TicketAttachmentListProps) {
@@ -164,6 +166,7 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
   const initialAttachments: Attachment[] = [];
   const adminAttachments: Attachment[] = [];
   const revisionAttachments: Attachment[] = [];
+  const loanAttachments: Attachment[] = [];
   const otherAttachments: Attachment[] = [];
 
   attachments.forEach((att) => {
@@ -172,6 +175,8 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
         adminAttachments.push(att);
       } else if (['revisi', 'balasan', 'need_revision'].includes(att.log.aksi)) {
         revisionAttachments.push(att);
+      } else if (['alat_diserahkan', 'alat_dikembalikan'].includes(att.log.aksi)) {
+        loanAttachments.push(att);
       } else {
         otherAttachments.push(att);
       }
@@ -207,6 +212,15 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
       color: 'text-amber-600',
       bgColor: 'bg-amber-50/50',
       items: revisionAttachments,
+    },
+    {
+      id: 'loan',
+      title: 'Lampiran Serah-Terima & Pengembalian Alat',
+      subtitle: 'Foto atau dokumen bukti serah-terima dan pengembalian alat',
+      icon: PackageCheck,
+      color: 'text-teal-600',
+      bgColor: 'bg-teal-50/50',
+      items: loanAttachments,
     },
     {
       id: 'other',

@@ -367,6 +367,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/download/{attachment}', [TicketController::class, 'downloadAttachment'])->name('download');
             Route::get('/view/{attachment}', [TicketController::class, 'viewAttachment'])->name('view');
             Route::get('/aktif', [TicketController::class, 'activeAssigned'])->name('aktif');
+            Route::get('/penerima-alat-options', [TicketController::class, 'loanRecipientOptions'])->name('penerima-alat-options');
             Route::get('/{ticket}', [TicketController::class, 'show'])->name('show');
             Route::post('/{ticket}/reply', [TicketController::class, 'reply'])->name('reply');
             Route::patch('/{ticket}/balas/{log}', [TicketController::class, 'updateReply'])->name('reply.update');
@@ -381,6 +382,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/form', [TicketController::class, 'updateForm'])->name('form');
             Route::patch('/{ticket}/cancel-booking', [TicketController::class, 'cancelBooking'])->name('cancel-booking');
             Route::patch('/{ticket}/batal', [TicketController::class, 'cancel'])->name('cancel');
+            Route::patch('/{ticket}/serahkan-alat', [TicketController::class, 'serahkanAlat'])->name('serahkan-alat');
             Route::patch('/{ticket}/kembalikan-alat', [TicketController::class, 'kembalikanAlat'])->name('kembalikan-alat');
         });
 

@@ -85,8 +85,9 @@ class Ticket extends Model
         'assignment_queued_at', 'assignment_resume_status',
         'work_hours_resume_status', 'work_hours_sla_paused_at',
         'source',
-        'revision_count', 'waiting_approval_at', 'is_result_accepted', 'dikembalikan_at',
-        'kondisi_kembali', 'catatan_kembali'
+        'revision_count', 'waiting_approval_at', 'is_result_accepted',
+        'diserahkan_at', 'diserahkan_oleh_admin_id', 'penerima_alat_user_id', 'penerima_alat', 'kondisi_serah', 'catatan_serah',
+        'dikembalikan_at', 'diterima_kembali_oleh_admin_id', 'kondisi_kembali', 'catatan_kembali'
     ];
 
     public function getFormattedIdAttribute()
@@ -130,7 +131,11 @@ class Ticket extends Model
         'unit_id' => 'integer',
         'sub_unit_id' => 'integer',
         'is_result_accepted' => 'boolean',
+        'diserahkan_at' => 'datetime',
+        'diserahkan_oleh_admin_id' => 'integer',
+        'penerima_alat_user_id' => 'integer',
         'dikembalikan_at' => 'datetime',
+        'diterima_kembali_oleh_admin_id' => 'integer',
         'assignment_queued_at' => 'datetime',
         'work_hours_sla_paused_at' => 'datetime',
     ];
@@ -269,6 +274,21 @@ class Ticket extends Model
     public function assignedAdmin()
     {
         return $this->belongsTo(Admin::class, 'assigned_admin_id');
+    }
+
+    public function diserahkanOlehAdmin()
+    {
+        return $this->belongsTo(Admin::class, 'diserahkan_oleh_admin_id');
+    }
+
+    public function penerimaAlatUser()
+    {
+        return $this->belongsTo(User::class, 'penerima_alat_user_id');
+    }
+
+    public function diterimaKembaliOlehAdmin()
+    {
+        return $this->belongsTo(Admin::class, 'diterima_kembali_oleh_admin_id');
     }
 
     /**

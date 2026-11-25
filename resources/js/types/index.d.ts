@@ -24,6 +24,7 @@ export interface SubUnit {
  nama_layanan: string;
  deskripsi: string | null;
  aktif: boolean;
+ wajib_kembali?: boolean;
  unit: Unit;
  form_fields_count: number;
 }
@@ -61,9 +62,30 @@ export interface FormField {
 
 export type FormFieldValue = string | number | boolean | string[] | null | undefined;
 
+export interface EquipmentLoanSummary {
+ status_peminjaman: 'Menunggu Persetujuan' | 'Menunggu Diserahkan' | 'Sedang Dipinjam' | 'Belum Dikembalikan' | 'Dikembalikan';
+ is_overdue_schedule: boolean;
+ is_due_today: boolean;
+ alat_list: string[];
+ alat_text: string;
+ rentang_waktu: string;
+ tanggal_mulai_iso: string;
+ tanggal_selesai_iso: string;
+ sort_date: number;
+}
+
+export interface TicketAdminActor {
+ id: number;
+ name?: string | null;
+ username?: string | null;
+}
+
 export interface Ticket {
  id: number;
- user_id: number;
+ formatted_id?: string;
+ user_id: number | null;
+ created_by_admin_id?: number | null;
+ assigned_admin_id?: number | null;
  divisi_id: number | null;
  org_unit_id: number | null;
  jabatan_id: number | null;
@@ -71,6 +93,23 @@ export interface Ticket {
  sub_unit_id: number;
  form_data: Record<string, FormFieldValue>;
  status: string;
+ diserahkan_at?: string | null;
+ diserahkan_oleh_admin_id?: number | null;
+ penerima_alat_user_id?: number | null;
+ penerima_alat?: string | null;
+ kondisi_serah?: string | null;
+ catatan_serah?: string | null;
+ dikembalikan_at?: string | null;
+ diterima_kembali_oleh_admin_id?: number | null;
+ kondisi_kembali?: string | null;
+ catatan_kembali?: string | null;
+ lampiran_serah_count?: number;
+ lampiran_kembali_count?: number;
+ diserahkan_oleh_admin?: TicketAdminActor | null;
+ diterima_kembali_oleh_admin?: TicketAdminActor | null;
+ loan_summary?: EquipmentLoanSummary | null;
+ can_serahkan?: boolean;
+ can_kembalikan?: boolean;
  created_at: string;
  updated_at: string;
  unit?: Unit;

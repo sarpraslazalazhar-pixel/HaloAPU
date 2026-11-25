@@ -50,7 +50,7 @@ class SubUnitSeeder extends Seeder
                 'deskripsi' => $deskripsi,
                 'aktif' => true,
                 'is_revision_enabled' => $revisi,
-                'wajib_kembali' => false,
+                'wajib_kembali' => $namaLayanan === 'Peminjaman Alat',
                 'is_monitored' => $monitored,
                 'monitor_kategori' => $kategori,
             ]);

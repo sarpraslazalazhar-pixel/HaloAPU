@@ -17,6 +17,7 @@ use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\TicketCommentPushNotification;
 use App\Notifications\TicketCreatedAdminNotification;
 use App\Notifications\TicketCreatedUserNotification;
+use App\Services\EquipmentLoanService;
 use App\Services\SlaCalculator;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
@@ -25,8 +26,10 @@ use App\Services\TicketSlaSchedule;
 use App\Services\TicketStatusService;
 use App\Services\TicketWorkQueue;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Notifications\AnonymousNotifiable;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -46,33 +49,197 @@ class TicketController extends Controller
 
         TicketWorkQueue::syncOpenWorkHoursThrottled();
 
-        $query = Ticket::with(['subUnit', 'assignedAdmin', 'user', 'slaTracking', 'createdByAdmin']);
+        $relations = [
+            'subUnit.formFields',
+            'assignedAdmin',
+            'user',
+            'slaTracking',
+            'booking',
+            'createdByAdmin',
+            'diserahkanOlehAdmin:id,name,username',
+            'penerimaAlatUser:id,name,username',
+            'diterimaKembaliOlehAdmin:id,name,username',
+            'logs' => fn ($q) => $q->whereIn('aksi', ['alat_diserahkan', 'alat_dikembalikan'])->with('attachments'),
+        ];
 
-        if ($user instanceof Admin) {
-            $tab = $request->query('tab', 'masuk');
-            if ($tab === 'saya_ajukan' || $tab === 'mine') {
-                $query->submittedBy($user);
-            } else {
-                // Tiket yang diajukan admin sendiri tetap tampil di daftar utama.
-                $query->accessibleBy($user);
+        $isAdmin = $user instanceof Admin;
+        $canViewEquipmentLoans = false;
+        $peminjamanAlatCount = 0;
+        $tab = 'masuk';
+        $loanStage = null;
+        $loanStageCounts = [];
+
+        if ($isAdmin) {
+            $canViewEquipmentLoans = EquipmentLoanService::canViewLoanTab($user);
+            $peminjamanAlatCount = $canViewEquipmentLoans
+                ? EquipmentLoanService::scopeManageableLoanTickets(Ticket::query(), $user)
+                    ->whereIn(DB::raw('LOWER(tickets.status)'), Ticket::WORKLOAD_FINISHED_STATUSES)
+                    ->whereNull('dikembalikan_at')
+                    ->count()
+                : 0;
+
+            $requestedTab = $request->query('tab', 'masuk');
+            $tab = in_array($requestedTab, ['masuk', 'saya_ajukan', 'mine', 'peminjaman_alat'], true)
+                ? $requestedTab
+                : 'masuk';
+            if ($tab === 'peminjaman_alat' && ! $canViewEquipmentLoans) {
+                $tab = 'masuk';
             }
-        } else {
-            $query->where(function ($q) use ($user) {
-                $q->where('user_id', $user->id);
-                $matchedAdminIds = Admin::where('username', $user->username)
-                    ->orWhere('email', $user->email)
-                    ->pluck('id')
-                    ->filter()
-                    ->all();
-                if (! empty($matchedAdminIds)) {
-                    $q->orWhereIn('created_by_admin_id', $matchedAdminIds);
-                }
-            });
         }
 
-        // Filter by search keyword
+        if ($isAdmin && $tab === 'peminjaman_alat') {
+            $loanBaseQuery = EquipmentLoanService::scopeManageableLoanTickets(Ticket::query(), $user)
+                ->whereNotIn('status', ['reject', 'dibatalkan']);
+
+            $this->applyIndexSearchAndDateFilters($loanBaseQuery, $request);
+
+            $finishedFilter = fn ($q) => $q->whereIn(DB::raw('LOWER(tickets.status)'), Ticket::WORKLOAD_FINISHED_STATUSES);
+
+            $loanStageCounts = [
+                'aktif' => $finishedFilter(clone $loanBaseQuery)->whereNull('dikembalikan_at')->count(),
+                'menunggu_diserahkan' => $finishedFilter(clone $loanBaseQuery)->whereNull('diserahkan_at')->whereNull('dikembalikan_at')->count(),
+                'sedang_dipinjam' => $finishedFilter(clone $loanBaseQuery)->whereNotNull('diserahkan_at')->whereNull('dikembalikan_at')->count(),
+                'dikembalikan' => (clone $loanBaseQuery)->whereNotNull('dikembalikan_at')->count(),
+                'semua' => (clone $loanBaseQuery)->count(),
+            ];
+
+            $requestedStage = $request->query('loan_stage');
+            $loanStage = in_array($requestedStage, ['aktif', 'menunggu_diserahkan', 'sedang_dipinjam', 'dikembalikan', 'semua'], true)
+                ? $requestedStage
+                : 'aktif';
+
+            $loanQuery = (clone $loanBaseQuery)->with($relations);
+
+            if ($loanStage === 'aktif') {
+                $finishedFilter($loanQuery)->whereNull('dikembalikan_at');
+            } elseif ($loanStage === 'menunggu_diserahkan') {
+                $finishedFilter($loanQuery)->whereNull('diserahkan_at')->whereNull('dikembalikan_at');
+            } elseif ($loanStage === 'sedang_dipinjam') {
+                $finishedFilter($loanQuery)->whereNotNull('diserahkan_at')->whereNull('dikembalikan_at');
+            } elseif ($loanStage === 'dikembalikan') {
+                $loanQuery->whereNotNull('dikembalikan_at');
+            }
+
+            $now = Carbon::now();
+            $loanItems = $loanQuery->get()->map(function (Ticket $t) use ($now): Ticket {
+                $t->setAttribute('loan_summary', EquipmentLoanService::extractLoanSummary($t, $now));
+
+                return $t;
+            });
+
+            if (in_array($loanStage, ['aktif', 'menunggu_diserahkan', 'sedang_dipinjam'], true)) {
+                $sortedLoanItems = $loanItems->sort(function (Ticket $a, Ticket $b): int {
+                    $aSummary = $a->getAttribute('loan_summary');
+                    $bSummary = $b->getAttribute('loan_summary');
+                    $aUrgency = ($aSummary['status_peminjaman'] ?? '') === EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN ? 0 : 1;
+                    $bUrgency = ($bSummary['status_peminjaman'] ?? '') === EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN ? 0 : 1;
+
+                    if ($aUrgency !== $bUrgency) {
+                        return $aUrgency <=> $bUrgency;
+                    }
+
+                    $aSort = (int) ($aSummary['sort_date'] ?? 0);
+                    $bSort = (int) ($bSummary['sort_date'] ?? 0);
+                    if ($aSort !== $bSort) {
+                        return $aSort <=> $bSort;
+                    }
+
+                    return $a->id <=> $b->id;
+                })->values();
+            } else {
+                $sortedLoanItems = $loanItems->sortByDesc(function (Ticket $t): array {
+                    return [
+                        ($t->dikembalikan_at ?? $t->created_at)?->timestamp ?? 0,
+                        $t->created_at?->timestamp ?? 0,
+                        $t->id,
+                    ];
+                })->values();
+            }
+
+            $perPage = max(1, (int) $request->get('per_page', 15));
+            $currentPage = LengthAwarePaginator::resolveCurrentPage();
+            $tickets = (new LengthAwarePaginator(
+                $sortedLoanItems->slice(($currentPage - 1) * $perPage, $perPage)->values(),
+                $sortedLoanItems->count(),
+                $perPage,
+                $currentPage,
+                ['path' => $request->url()]
+            ))->withQueryString();
+        } else {
+            $query = Ticket::with($relations);
+
+            if ($isAdmin) {
+                if ($tab === 'saya_ajukan' || $tab === 'mine') {
+                    $query->submittedBy($user);
+                } else {
+                    // Tiket yang diajukan admin sendiri tetap tampil di daftar utama.
+                    $query->accessibleBy($user);
+                }
+            } else {
+                $query->where(function ($q) use ($user) {
+                    $q->where('user_id', $user->id);
+                    $matchedAdminIds = Admin::where('username', $user->username)
+                        ->orWhere('email', $user->email)
+                        ->pluck('id')
+                        ->filter()
+                        ->all();
+                    if (! empty($matchedAdminIds)) {
+                        $q->orWhereIn('created_by_admin_id', $matchedAdminIds);
+                    }
+                });
+            }
+
+            $this->applyIndexSearchAndDateFilters($query, $request);
+
+            // Filter by status
+            if ($request->has('status') && ! empty($request->status)) {
+                $status = $request->status;
+                if (is_string($status)) {
+                    $status = str_contains($status, ',') ? explode(',', $status) : [$status];
+                }
+                if (is_array($status)) {
+                    $query->whereIn('status', $status);
+                } else {
+                    $query->where('status', $status);
+                }
+            }
+
+            $tickets = $query->orderBy('created_at', 'desc')
+                ->paginate($request->get('per_page', 15));
+        }
+
+        // Transform tickets to match flutter app model
+        $formattedTickets = $tickets->getCollection()->map(function ($ticket) use ($user) {
+            return $this->formatTicket($ticket, $user);
+        });
+
+        $meta = [
+            'current_page' => $tickets->currentPage(),
+            'last_page' => $tickets->lastPage(),
+            'per_page' => $tickets->perPage(),
+            'total' => $tickets->total(),
+        ];
+
+        if ($isAdmin) {
+            $meta['can_view_equipment_loans'] = $canViewEquipmentLoans;
+            $meta['peminjaman_alat_count'] = $peminjamanAlatCount;
+            $meta['current_tab'] = $tab;
+            if ($tab === 'peminjaman_alat') {
+                $meta['loan_stage'] = $loanStage;
+                $meta['loan_stage_counts'] = $loanStageCounts;
+            }
+        }
+
+        return response()->json([
+            'data' => $formattedTickets,
+            'meta' => $meta,
+        ], 200);
+    }
+
+    private function applyIndexSearchAndDateFilters(Builder $query, Request $request): void
+    {
         if ($request->has('search') && ! empty($request->search)) {
-            $keyword = trim($request->search);
+            $keyword = trim((string) $request->search);
             $cleanId = str_replace(['#', '-', ' '], '', $keyword);
 
             $query->where(function ($q) use ($keyword, $cleanId) {
@@ -80,23 +247,19 @@ class TicketController extends Controller
                     $q->where('id', 'like', "%{$cleanId}%");
                 }
                 $q->orWhere('form_data', 'like', "%{$keyword}%")
-                  // Jenis Layanan (SubUnit)
                     ->orWhereHas('subUnit', function ($subQuery) use ($keyword) {
                         $subQuery->where('nama_layanan', 'like', "%{$keyword}%")
                             ->orWhere('deskripsi', 'like', "%{$keyword}%")
                             ->orWhere('monitor_kategori', 'like', "%{$keyword}%");
                     })
-                  // Kanal Layanan (Unit)
                     ->orWhereHas('unit', function ($unitQuery) use ($keyword) {
                         $unitQuery->where('nama_unit', 'like', "%{$keyword}%")
                             ->orWhere('deskripsi', 'like', "%{$keyword}%");
                     })
-                  // Pemohon Tiket
                     ->orWhereHas('user', function ($userQuery) use ($keyword) {
                         $userQuery->where('name', 'like', "%{$keyword}%")
                             ->orWhere('username', 'like', "%{$keyword}%");
                     })
-                  // Operator / Admin Ditugaskan
                     ->orWhereHas('assignedAdmin', function ($adminQuery) use ($keyword) {
                         $adminQuery->where('name', 'like', "%{$keyword}%")
                             ->orWhere('username', 'like', "%{$keyword}%");
@@ -104,44 +267,12 @@ class TicketController extends Controller
             });
         }
 
-        // Filter by status
-        if ($request->has('status') && ! empty($request->status)) {
-            $status = $request->status;
-            if (is_string($status)) {
-                $status = str_contains($status, ',') ? explode(',', $status) : [$status];
-            }
-            if (is_array($status)) {
-                $query->whereIn('status', $status);
-            } else {
-                $query->where('status', $status);
-            }
-        }
-
-        // Filter by date range
         if ($request->has('date_from') && $request->date_from) {
             $query->whereDate('created_at', '>=', $request->date_from);
         }
         if ($request->has('date_to') && $request->date_to) {
             $query->whereDate('created_at', '<=', $request->date_to);
         }
-
-        $tickets = $query->orderBy('created_at', 'desc')
-            ->paginate($request->get('per_page', 15));
-
-        // Transform tickets to match flutter app model
-        $formattedTickets = $tickets->getCollection()->map(function ($ticket) {
-            return $this->formatTicket($ticket);
-        });
-
-        return response()->json([
-            'data' => $formattedTickets,
-            'meta' => [
-                'current_page' => $tickets->currentPage(),
-                'last_page' => $tickets->lastPage(),
-                'per_page' => $tickets->perPage(),
-                'total' => $tickets->total(),
-            ],
-        ], 200);
     }
 
     /**
@@ -385,11 +516,15 @@ class TicketController extends Controller
         $user = $request->user();
 
         $ticket = Ticket::with([
-            'subUnit',
+            'subUnit.formFields',
             'unit',
             'assignedAdmin',
             'user',
             'createdByAdmin',
+            'diserahkanOlehAdmin:id,name,username',
+            'penerimaAlatUser:id,name,username',
+            'diterimaKembaliOlehAdmin:id,name,username',
+            'booking',
             'attachments',
             'csat',
             'slaTracking',
@@ -433,11 +568,15 @@ class TicketController extends Controller
         ];
         if ($afterState !== $beforeState) {
             $ticket->load([
-                'subUnit',
+                'subUnit.formFields',
                 'unit',
                 'assignedAdmin',
                 'user',
                 'createdByAdmin',
+                'diserahkanOlehAdmin:id,name,username',
+                'penerimaAlatUser:id,name,username',
+                'diterimaKembaliOlehAdmin:id,name,username',
+                'booking',
                 'attachments',
                 'csat',
                 'slaTracking',
@@ -457,7 +596,7 @@ class TicketController extends Controller
         $maxRevisions = (int) SystemConfig::getValue('max_revisions', 5);
 
         // Build detailed response
-        $responseData = $this->formatTicket($ticket);
+        $responseData = $this->formatTicket($ticket, $user);
 
         // Add extra detail fields
         $responseData['formFields'] = $formFields->map(function ($field) {
@@ -1326,7 +1465,7 @@ class TicketController extends Controller
     /**
      * Format a ticket for API response.
      */
-    private function formatTicket(Ticket $ticket): array
+    private function formatTicket(Ticket $ticket, mixed $viewer = null): array
     {
         $flutterStatus = match (strtolower($ticket->status)) {
             'open' => 'open',
@@ -1357,7 +1496,15 @@ class TicketController extends Controller
         } else {
             $resolvedFormData = $formData;
         }
-        $ticket->loadMissing(['subUnit', 'slaTracking', 'booking']);
+        $ticket->loadMissing([
+            'subUnit.formFields',
+            'slaTracking',
+            'booking',
+            'diserahkanOlehAdmin:id,name,username',
+            'penerimaAlatUser:id,name,username',
+            'diterimaKembaliOlehAdmin:id,name,username',
+            'logs.attachments',
+        ]);
         $sla = $ticket->slaTracking;
 
         $endDT = null;
@@ -1394,6 +1541,25 @@ class TicketController extends Controller
             $wajibKembali = !$isBookingPast || $ticket->dikembalikan_at !== null;
         }
 
+        $isLoan = EquipmentLoanService::isLoanTicket($ticket);
+        $loanSummary = $isLoan ? EquipmentLoanService::extractLoanSummary($ticket) : null;
+        $loanAttachments = $isLoan
+            ? EquipmentLoanService::extractLoanAttachments($ticket)
+            : ['serah' => [], 'kembali' => []];
+        $mapLoanAttachments = fn (array $items): array => array_map(fn (array $att): array => [
+            'id' => $att['id'],
+            'fileName' => $att['file_name'],
+            'mimeType' => $att['mime_type'] ?: 'application/octet-stream',
+            'fileSize' => $att['file_size'],
+            'path' => $att['path'],
+            'url' => $att['url'],
+        ], $items);
+
+        $canManageLoan = $viewer instanceof Admin
+            && $isLoan
+            && EquipmentLoanService::canManageLoanTicket($ticket, $viewer);
+        $isFinishedLoan = EquipmentLoanService::isFinishedStatus($ticket->status);
+
         $responseDeadlineStr = $sla?->sla_response_deadline
             ? Carbon::parse($sla->sla_response_deadline)->translatedFormat('d M Y, H:i')
             : null;
@@ -1427,9 +1593,23 @@ class TicketController extends Controller
             'is_sla_breached' => $isSlaBreached,
             'is_sla_paused' => $isSlaPaused,
             'is_queued' => $ticket->assignment_queued_at !== null,
+            'diserahkan_at' => $ticket->diserahkan_at ? $ticket->diserahkan_at->format('d M Y, H:i') : null,
+            'diserahkan_oleh' => $ticket->diserahkanOlehAdmin ? ($ticket->diserahkanOlehAdmin->name ?: $ticket->diserahkanOlehAdmin->username) : null,
+            'penerima_alat_user_id' => $ticket->penerima_alat_user_id ? (int) $ticket->penerima_alat_user_id : null,
+            'penerima_alat' => $ticket->penerima_alat,
+            'kondisi_serah' => $ticket->kondisi_serah,
+            'catatan_serah' => $ticket->catatan_serah,
             'dikembalikan_at' => $ticket->dikembalikan_at ? $ticket->dikembalikan_at->format('d M Y, H:i') : null,
+            'diterima_kembali_oleh' => $ticket->diterimaKembaliOlehAdmin ? ($ticket->diterimaKembaliOlehAdmin->name ?: $ticket->diterimaKembaliOlehAdmin->username) : null,
             'kondisi_kembali' => $ticket->kondisi_kembali,
             'catatan_kembali' => $ticket->catatan_kembali,
+            'status_peminjaman' => $loanSummary['status_peminjaman'] ?? null,
+            'alat_text' => $loanSummary['alat_text'] ?? null,
+            'rentang_waktu' => $loanSummary['rentang_waktu'] ?? null,
+            'can_serahkan' => $canManageLoan && $isFinishedLoan && $ticket->diserahkan_at === null && $ticket->dikembalikan_at === null,
+            'can_kembalikan' => $canManageLoan && $isFinishedLoan && $ticket->dikembalikan_at === null,
+            'lampiran_serah' => $mapLoanAttachments($loanAttachments['serah']),
+            'lampiran_kembali' => $mapLoanAttachments($loanAttachments['kembali']),
             'wajib_kembali' => (bool) $wajibKembali,
             'is_booking_past' => (bool) $isBookingPast,
             'booking_end_time' => $endDT?->toIso8601String(),
@@ -1527,6 +1707,89 @@ class TicketController extends Controller
     }
 
     /**
+     * List recipient options for equipment loan handover (Admin only).
+     */
+    public function loanRecipientOptions(Request $request)
+    {
+        $user = $request->user();
+
+        if (! $user instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat mengakses daftar penerima alat'], 403);
+        }
+
+        $ticketId = $request->filled('ticket_id') ? (int) $request->query('ticket_id') : null;
+        $search = $request->query('search');
+
+        return response()->json([
+            'data' => EquipmentLoanService::searchRecipientOptions(
+                $user,
+                is_string($search) ? $search : null,
+                $ticketId
+            ),
+        ], 200);
+    }
+
+    /**
+     * Mark equipment as handed over to borrower (Admin only).
+     */
+    public function serahkanAlat(Request $request, string $id)
+    {
+        $admin = $request->user();
+
+        if (! $admin instanceof Admin) {
+            return response()->json(['message' => 'Hanya Admin yang dapat menandai serah-terima alat'], 403);
+        }
+
+        $ticket = Ticket::with(['subUnit', 'booking'])
+            ->where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (! EquipmentLoanService::canManageLoanTicket($ticket, $admin)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk mengelola serah-terima alat tiket ini.'], 403);
+        }
+
+        $validated = $request->validate([
+            'penerima_alat_user_id' => 'nullable|integer|exists:users,id',
+            'kondisi_serah' => 'nullable|string|in:baik,rusak,tidak_lengkap',
+            'catatan_serah' => 'nullable|string|max:1000',
+            'lampiran' => 'nullable|array|max:3',
+            'lampiran.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+            'attachments' => 'nullable|array|max:3',
+            'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+        ]);
+
+        $files = $request->file('lampiran');
+        if (empty($files)) {
+            $files = $request->file('attachments', []);
+        }
+        $files = is_array($files) ? $files : ($files ? [$files] : []);
+
+        try {
+            $updated = EquipmentLoanService::markAsHandedOver(
+                $ticket,
+                $admin,
+                isset($validated['penerima_alat_user_id']) ? (int) $validated['penerima_alat_user_id'] : null,
+                $validated['kondisi_serah'] ?? 'baik',
+                $validated['catatan_serah'] ?? null,
+                $files
+            );
+        } catch (\InvalidArgumentException|\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Alat berhasil ditandai sudah diserahkan',
+            'data' => $this->formatTicket($updated, $admin),
+        ], 200);
+    }
+
+    /**
      * Mark asset / equipment as returned.
      */
     public function kembalikanAlat(Request $request, string $id)
@@ -1546,52 +1809,41 @@ class TicketController extends Controller
             return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
         }
 
-        if (! $ticket->isAccessibleBy($admin)) {
-            return response()->json(['message' => 'Kamu tidak memiliki hak akses ke tiket ini.'], 403);
+        if (! EquipmentLoanService::canManageLoanTicket($ticket, $admin)) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk mengelola pengembalian alat tiket ini.'], 403);
         }
 
-        $request->validate([
+        $validated = $request->validate([
             'kondisi_kembali' => 'nullable|string|in:baik,rusak,tidak_lengkap',
             'catatan_kembali' => 'nullable|string|max:1000',
+            'lampiran' => 'nullable|array|max:3',
+            'lampiran.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+            'attachments' => 'nullable|array|max:3',
+            'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
         ]);
 
-        $kondisi = $request->kondisi_kembali ?? 'baik';
-        $catatan = ! empty($request->catatan_kembali) ? trim($request->catatan_kembali) : null;
-
-        $ticket->update([
-            'dikembalikan_at' => now(),
-            'kondisi_kembali' => $kondisi,
-            'catatan_kembali' => $catatan,
-        ]);
-
-        // Jika ada booking kendaraan / ruangan, tandai selesai agar aset kembali Tersedia
-        if ($ticket->booking) {
-            $ticket->booking->update(['status' => 'selesai']);
+        $files = $request->file('lampiran');
+        if (empty($files)) {
+            $files = $request->file('attachments', []);
         }
+        $files = is_array($files) ? $files : ($files ? [$files] : []);
 
-        $kondisiLabel = match ($kondisi) {
-            'rusak' => 'Rusak',
-            'tidak_lengkap' => 'Tidak Lengkap (Aksesoris Kurang)',
-            default => 'Baik (Normal)',
-        };
-
-        $logCatatan = 'Alat/aset dikembalikan [Kondisi: '.$kondisiLabel.'], ditandai oleh Admin '.($admin->name ?: $admin->username);
-        if ($catatan) {
-            $logCatatan .= ' — Catatan: '.$catatan;
+        try {
+            $updated = EquipmentLoanService::markAsReturned(
+                $ticket,
+                $admin,
+                $validated['kondisi_kembali'] ?? 'baik',
+                $validated['catatan_kembali'] ?? null,
+                $files
+            );
+        } catch (\InvalidArgumentException|\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
         }
-
-        TicketLog::create([
-            'ticket_id' => $ticket->id,
-            'admin_id' => $admin->id,
-            'aksi' => 'alat_dikembalikan',
-            'catatan' => $logCatatan,
-            'timestamp' => now(),
-        ]);
 
         return response()->json([
             'success' => true,
             'message' => 'Alat/aset berhasil ditandai sudah dikembalikan',
-            'data' => $this->formatTicket($ticket->fresh()),
+            'data' => $this->formatTicket($updated, $admin),
         ], 200);
     }
 

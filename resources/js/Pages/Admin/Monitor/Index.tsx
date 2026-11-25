@@ -43,7 +43,7 @@ export default function AdminMonitor({ assets, calendarData, alatPinjam = [], ke
  <Head title="Live Monitor" />
  <div className="container mx-auto py-6">
  <MonitorGrid assets={assets} calendarData={calendarData || []} lastUpdated={lastUpdated} />
- <MonitorAlat items={alatPinjam} ketersediaan={ketersediaanAlat} />
+ <MonitorAlat items={alatPinjam} ketersediaan={ketersediaanAlat} canQuickAction={true} />
  </div>
  </AdminLayout>
  );

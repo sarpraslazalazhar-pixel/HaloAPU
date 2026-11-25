@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Admin;
 use App\Models\RoomVehicleBooking;
 use App\Models\Ticket;
+use App\Services\EquipmentLoanService;
 use Carbon\Carbon;
 use Inertia\Inertia;
 
@@ -243,7 +245,7 @@ class MonitorController extends Controller
     public function userIndex()
     {
         $ticketUrl = $this->ticketUrlResolver(false);
-        $alat = $this->getAlatData($ticketUrl);
+        $alat = $this->getAlatData($ticketUrl, null);
 
         return Inertia::render('User/Monitor/Index', [
             'assets' => $this->getAssetData($ticketUrl),
@@ -257,7 +259,7 @@ class MonitorController extends Controller
     public function adminIndex()
     {
         $ticketUrl = $this->ticketUrlResolver(true);
-        $alat = $this->getAlatData($ticketUrl);
+        $alat = $this->getAlatData($ticketUrl, auth('admin')->user());
 
         return Inertia::render('Admin/Monitor/Index', [
             'assets' => $this->getAssetData($ticketUrl),
@@ -268,27 +270,40 @@ class MonitorController extends Controller
         ]);
     }
 
-    protected function getAlatData(\Closure $ticketUrl)
+    protected function getAlatData(\Closure $ticketUrl, ?Admin $admin = null)
     {
         $sevenDaysAgo = Carbon::now()->subDays(7);
         $now = Carbon::now();
 
-        $tickets = \App\Models\Ticket::whereHas('subUnit', function ($q) {
-            $q->where('wajib_kembali', true);
-        })
-        ->whereNotIn('status', ['reject', 'dibatalkan'])
-        ->where(function ($q) use ($sevenDaysAgo) {
-            $q->whereNull('dikembalikan_at')
-              ->orWhere('dikembalikan_at', '>=', $sevenDaysAgo);
-        })
-        ->with(['user:id,name,username', 'user.divisi:id,nama_divisi', 'createdByAdmin:id,name,username', 'subUnit:id,nama_layanan', 'subUnit.formFields'])
-        ->orderByRaw('CASE WHEN dikembalikan_at IS NULL THEN 0 ELSE 1 END ASC')
-        ->orderBy('created_at', 'desc')
-        ->limit(100)
-        ->get();
+        $tickets = EquipmentLoanService::scopeLoanTickets(Ticket::query())
+            ->whereNotIn('status', ['reject', 'dibatalkan'])
+            ->where(function ($q) use ($sevenDaysAgo) {
+                $q->whereNull('dikembalikan_at')
+                    ->orWhere('dikembalikan_at', '>=', $sevenDaysAgo);
+            })
+            ->with([
+                'user:id,name,username',
+                'user.divisi:id,nama_divisi',
+                'createdByAdmin:id,name,username',
+                'subUnit:id,unit_id,nama_layanan,wajib_kembali',
+                'subUnit.formFields',
+                'diserahkanOlehAdmin:id,name,username',
+                'penerimaAlatUser:id,name,username',
+                'diterimaKembaliOlehAdmin:id,name,username',
+                'logs' => fn ($q) => $q->whereIn('aksi', ['alat_diserahkan', 'alat_dikembalikan'])->with('attachments'),
+            ])
+            ->orderByRaw('CASE WHEN dikembalikan_at IS NULL THEN 0 ELSE 1 END ASC')
+            ->orderBy('created_at', 'desc')
+            ->limit(100)
+            ->get();
 
         // 1. Koleksi master daftar alat dari FormField tipe multi_pilih/dropdown
-        $subUnits = \App\Models\SubUnit::where('wajib_kembali', true)->with('formFields')->get();
+        $subUnits = \App\Models\SubUnit::query()
+            ->where(function ($q): void {
+                EquipmentLoanService::applyLoanSubUnitConstraint($q);
+            })
+            ->with('formFields')
+            ->get();
         $masterTools = collect();
 
         foreach ($subUnits as $su) {
@@ -313,114 +328,88 @@ class MonitorController extends Controller
             }
         }
 
+        $statusPriority = [
+            EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN => 4,
+            EquipmentLoanService::STATUS_SEDANG_DIPINJAM => 3,
+            EquipmentLoanService::STATUS_MENUNGGU_DISERAHKAN => 2,
+            EquipmentLoanService::STATUS_MENUNGGU_PERSETUJUAN => 1,
+            'Tersedia' => 0,
+        ];
+
         // 2. Map data tiket dan update ketersediaan alat
-        $peminjaman = $tickets->map(function ($t) use ($now, $masterTools, $ticketUrl) {
+        $peminjaman = $tickets->map(function (Ticket $t) use ($now, $masterTools, $ticketUrl, $admin, $statusPriority) {
             $userStr = $t->user?->name ?? $t->createdByAdmin?->name ?? $t->user?->username ?? $t->createdByAdmin?->username ?? '-';
-            $divisiStr = $t->user?->divisi?->nama_divisi ?? ($t->createdByAdmin ? 'Internal Admin' : '-');
-            $formData = is_array($t->form_data) ? $t->form_data : [];
+            $summary = EquipmentLoanService::extractLoanSummary($t, $now);
+            $statusPengembalian = $summary['status_peminjaman'];
+            $rentangWaktu = $summary['rentang_waktu'];
+            $resolvedTicketUrl = $ticketUrl($t);
 
-            $fields = $t->subUnit?->formFields ?? collect();
-            $choiceField = $fields->first(fn ($f) => in_array($f->tipe_field, ['multi_pilih', 'dropdown']));
-            $childFields = $choiceField ? $fields->where('parent_field_id', $choiceField->id) : collect();
+            if (! $t->dikembalikan_at) {
+                foreach ($summary['custom_alat'] as $customVal) {
+                    $toolKey = "custom_{$t->id}_{$customVal}";
+                    $masterTools->put($toolKey, [
+                        'nama_alat' => "{$customVal} (Lainnya)",
+                        'status' => $statusPengembalian,
+                        'user' => $userStr,
+                        'waktu' => $rentangWaktu,
+                        'ticket_id' => $t->id,
+                        'formatted_id' => $t->formatted_id,
+                        'ticket_url' => $resolvedTicketUrl,
+                    ]);
+                }
 
-            $dateFields = $fields->where('tipe_field', 'tanggal')->values();
-            $tglMulaiStr = $dateFields->get(0) && isset($formData[$dateFields->get(0)->id]) ? $formData[$dateFields->get(0)->id] : null;
-            $tglSelesaiStr = $dateFields->get(1) && isset($formData[$dateFields->get(1)->id]) ? $formData[$dateFields->get(1)->id] : null;
+                foreach ($summary['alat_list'] as $itemStr) {
+                    if (str_starts_with(strtolower($itemStr), 'yang lain') || ! $masterTools->has($itemStr)) {
+                        continue;
+                    }
 
-            $startDT = $tglMulaiStr ? Carbon::parse($tglMulaiStr)->startOfDay() : $t->created_at->startOfDay();
-            $endDT = $tglSelesaiStr ? Carbon::parse($tglSelesaiStr)->endOfDay() : ($tglMulaiStr ? Carbon::parse($tglMulaiStr)->endOfDay() : $t->created_at->endOfDay());
+                    $cur = $masterTools->get($itemStr);
+                    $curPriority = $statusPriority[$cur['status']] ?? 0;
+                    $nextPriority = $statusPriority[$statusPengembalian] ?? 0;
 
-            $rentangWaktu = null;
-            if ($tglMulaiStr && $tglSelesaiStr) {
-                $rentangWaktu = Carbon::parse($tglMulaiStr)->format('d M Y') . ' - ' . Carbon::parse($tglSelesaiStr)->format('d M Y');
-            } elseif ($tglMulaiStr) {
-                $rentangWaktu = Carbon::parse($tglMulaiStr)->format('d M Y');
-            } else {
-                $rentangWaktu = $t->created_at->format('d M Y');
-            }
-
-            // Status peminjaman tiket
-            if ($t->dikembalikan_at) {
-                $statusPengembalian = 'Dikembalikan';
-            } elseif ($now->lt($startDT)) {
-                $statusPengembalian = ($t->status === 'open') ? 'Menunggu Persetujuan' : 'Dipesan';
-            } elseif ($now->between($startDT, $endDT)) {
-                $statusPengembalian = ($t->status === 'open') ? 'Menunggu Persetujuan' : 'Sedang Dipinjam';
-            } else {
-                $statusPengembalian = 'Belum Dikembalikan';
-            }
-
-            // Ekstrak alat yang dipinjam, termasuk resolusi "Yang lain:"
-            $resolvedAlat = [];
-            if ($choiceField && isset($formData[$choiceField->id])) {
-                $rawVal = $formData[$choiceField->id];
-                $rawList = is_array($rawVal) ? $rawVal : [$rawVal];
-
-                foreach ($rawList as $item) {
-                    $itemStr = trim((string) $item);
-                    $isYangLain = in_array(strtolower($itemStr), ['yang lain:', 'yang lain']);
-
-                    if ($isYangLain) {
-                        $matchingChild = $childFields->first(function ($cf) use ($itemStr) {
-                            return strtolower(trim((string)$cf->trigger_value)) === strtolower($itemStr);
-                        });
-                        $customVal = ($matchingChild && !empty($formData[$matchingChild->id]))
-                            ? trim((string)$formData[$matchingChild->id])
-                            : null;
-
-                        $label = $customVal ? "Yang lain: {$customVal}" : $itemStr;
-                        $resolvedAlat[] = $label;
-
-                        // Tambahkan ke katalog alat jika tiket sedang aktif/dipesan dan belum dikembalikan
-                        if (!$t->dikembalikan_at && $customVal) {
-                            $toolKey = "custom_{$t->id}_{$customVal}";
-                            $masterTools->put($toolKey, [
-                                'nama_alat' => "{$customVal} (Lainnya)",
-                                'status' => $statusPengembalian,
-                                'user' => $userStr,
-                                'waktu' => $rentangWaktu,
-                                'ticket_id' => $t->id,
-                                'formatted_id' => $t->formatted_id,
-                                'ticket_url' => $ticketUrl($t),
-                            ]);
-                        }
-                    } else {
-                        $resolvedAlat[] = $itemStr;
-
-                        // Perbarui status alat di katalog master jika sedang dipinjam / dipesan
-                        if (!$t->dikembalikan_at && $masterTools->has($itemStr)) {
-                            $cur = $masterTools->get($itemStr);
-                            if ($cur['status'] === 'Tersedia' || in_array($statusPengembalian, ['Sedang Dipinjam', 'Belum Dikembalikan'])) {
-                                $masterTools->put($itemStr, [
-                                    'nama_alat' => $itemStr,
-                                    'status' => $statusPengembalian,
-                                    'user' => $userStr,
-                                    'waktu' => $rentangWaktu,
-                                    'ticket_id' => $t->id,
-                                    'formatted_id' => $t->formatted_id,
-                                    'ticket_url' => $ticketUrl($t),
-                                ]);
-                            }
-                        }
+                    if ($nextPriority > $curPriority) {
+                        $masterTools->put($itemStr, [
+                            'nama_alat' => $itemStr,
+                            'status' => $statusPengembalian,
+                            'user' => $userStr,
+                            'waktu' => $rentangWaktu,
+                            'ticket_id' => $t->id,
+                            'formatted_id' => $t->formatted_id,
+                            'ticket_url' => $resolvedTicketUrl,
+                        ]);
                     }
                 }
             }
 
-            $alatName = !empty($resolvedAlat) ? implode(', ', $resolvedAlat) : '-';
+            $canManage = $admin !== null && EquipmentLoanService::canManageLoanTicket($t, $admin);
+            $isFinished = EquipmentLoanService::isFinishedStatus($t->status);
+            $loanAttachments = EquipmentLoanService::extractLoanAttachments($t);
 
             return [
                 'ticket_id' => $t->id,
                 'formatted_id' => $t->formatted_id,
-                'ticket_url' => $ticketUrl($t),
+                'ticket_url' => $resolvedTicketUrl,
                 'peminjam' => $userStr,
                 'layanan' => $t->subUnit?->nama_layanan ?? 'Peminjaman Alat',
-                'alat' => $alatName,
+                'alat' => $summary['alat_text'],
                 'waktu' => $rentangWaktu,
                 'status_tiket' => $t->status,
                 'status_pengembalian' => $statusPengembalian,
+                'diserahkan_at' => $t->diserahkan_at ? $t->diserahkan_at->format('d M Y H:i') : null,
+                'diserahkan_oleh' => $t->diserahkanOlehAdmin ? ($t->diserahkanOlehAdmin->name ?: $t->diserahkanOlehAdmin->username) : null,
+                'penerima_alat_user_id' => $t->penerima_alat_user_id ? (int) $t->penerima_alat_user_id : null,
+                'penerima_alat' => $t->penerima_alat,
+                'kondisi_serah' => $t->kondisi_serah,
+                'catatan_serah' => $t->catatan_serah,
                 'dikembalikan_at' => $t->dikembalikan_at ? $t->dikembalikan_at->format('d M Y H:i') : null,
+                'diterima_kembali_oleh' => $t->diterimaKembaliOlehAdmin ? ($t->diterimaKembaliOlehAdmin->name ?: $t->diterimaKembaliOlehAdmin->username) : null,
                 'kondisi_kembali' => $t->kondisi_kembali,
                 'catatan_kembali' => $t->catatan_kembali,
+                'lampiran_serah_count' => count($loanAttachments['serah']),
+                'lampiran_kembali_count' => count($loanAttachments['kembali']),
+                'is_overdue_schedule' => $summary['is_overdue_schedule'],
+                'can_serahkan' => $canManage && $isFinished && $t->diserahkan_at === null && $t->dikembalikan_at === null,
+                'can_kembalikan' => $canManage && $isFinished && $t->dikembalikan_at === null,
             ];
         });
 

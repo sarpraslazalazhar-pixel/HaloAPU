@@ -7,9 +7,16 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Play, Plus, Search, Send, UserCheck, X, XCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, CheckCircle2, ChevronDown, Eye, Filter, Inbox, PackageCheck, Paperclip, Play, Plus, Search, Send, UserCheck, X, XCircle } from 'lucide-react';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
-import { formatTicketId } from '@/lib/utils';
+import {
+  HandoverEquipmentModal,
+  ReturnEquipmentModal,
+  resolveConditionMeta,
+  type EquipmentLoanModalTarget,
+} from '@/Components/EquipmentLoanModals';
+import { formatDateId, formatTicketId } from '@/lib/utils';
+import type { EquipmentLoanSummary, TicketAdminActor } from '@/types';
 
 const STATUS_LIST = [
   { value: 'open', label: 'Baru' },
@@ -21,7 +28,8 @@ const STATUS_LIST = [
 
 interface Ticket {
  id: number;
- user?: { id: number; username: string; divisi?: { nama_divisi: string } } | null;
+ formatted_id?: string;
+ user?: { id: number; username: string; name?: string; divisi?: { nama_divisi: string } } | null;
  created_by_admin?: { id: number; name: string; username: string } | null;
  unit?: { nama_unit: string };
  sub_unit?: { nama_layanan: string };
@@ -34,6 +42,21 @@ interface Ticket {
  booking?: { id?: number; status: string } | null;
  can_cancel?: boolean;
  csat?: { id?: number; rating: number; komentar?: string | null } | null;
+ diserahkan_at?: string | null;
+ penerima_alat_user_id?: number | null;
+ penerima_alat?: string | null;
+ kondisi_serah?: string | null;
+ catatan_serah?: string | null;
+ diserahkan_oleh_admin?: TicketAdminActor | null;
+ dikembalikan_at?: string | null;
+ kondisi_kembali?: string | null;
+ catatan_kembali?: string | null;
+ lampiran_serah_count?: number;
+ lampiran_kembali_count?: number;
+ diterima_kembali_oleh_admin?: TicketAdminActor | null;
+ loan_summary?: EquipmentLoanSummary | null;
+ can_serahkan?: boolean;
+ can_kembalikan?: boolean;
 }
 
 interface OperatorLoadTicket {
@@ -61,6 +84,7 @@ interface OperatorLoad {
 
 type TicketFilterParams = {
  tab: string;
+ loan_stage?: string;
  unit_id?: string;
  sub_unit_id?: string;
  status?: string[];
@@ -75,6 +99,15 @@ type TicketFilterParams = {
 const TABS = [
  { key: 'masuk', label: 'Tiket Masuk', Icon: Inbox },
  { key: 'saya_ajukan', label: 'Tiket Saya Ajukan', Icon: Send },
+ { key: 'peminjaman_alat', label: 'Peminjaman Alat', Icon: PackageCheck },
+];
+
+const LOAN_STAGES = [
+ { key: 'aktif', label: 'Perlu Tindakan' },
+ { key: 'menunggu_diserahkan', label: 'Menunggu Dikasih' },
+ { key: 'sedang_dipinjam', label: 'Sedang Dipinjam' },
+ { key: 'dikembalikan', label: 'Sudah Dikembalikan' },
+ { key: 'semua', label: 'Semua' },
 ];
 
 interface OperatorOption {
@@ -83,7 +116,7 @@ interface OperatorOption {
  username?: string;
 }
 
-export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, operators = [], currentTab = 'masuk', tabCounts, operatorLoads = [], canBulkCreate = false, assignedToMeCount = 0 }: { tickets: any; filters: any; units: any; divisiList: any; orgUnitList: any; operators?: OperatorOption[]; currentTab?: string; tabCounts: any; operatorLoads?: OperatorLoad[]; canBulkCreate?: boolean; assignedToMeCount?: number }) {
+export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, operators = [], currentTab = 'masuk', canViewEquipmentLoans = false, loanStage = 'aktif', loanStageCounts = {}, tabCounts, operatorLoads = [], canBulkCreate = false, assignedToMeCount = 0 }: { tickets: any; filters: any; units: any; divisiList: any; orgUnitList: any; operators?: OperatorOption[]; currentTab?: string; canViewEquipmentLoans?: boolean; loanStage?: string | null; loanStageCounts?: Record<string, number>; tabCounts: any; operatorLoads?: OperatorLoad[]; canBulkCreate?: boolean; assignedToMeCount?: number }) {
  const { auth } = usePage<{ auth?: { admin?: { id?: number } } }>().props;
  const currentAdminId = auth?.admin?.id ?? null;
 
@@ -124,6 +157,19 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [swapTarget, setSwapTarget] = useState<{ ticket: OperatorLoadTicket; hasActive: boolean } | null>(null);
  const [swapping, setSwapping] = useState(false);
  const [cancelTargetTicket, setCancelTargetTicket] = useState<Ticket | null>(null);
+ const [handoverModalTicket, setHandoverModalTicket] = useState<EquipmentLoanModalTarget | null>(null);
+ const [returnModalTicket, setReturnModalTicket] = useState<EquipmentLoanModalTarget | null>(null);
+
+ const activeLoanStage = loanStage || 'aktif';
+
+ const buildLoanModalTarget = (t: Ticket): EquipmentLoanModalTarget => ({
+  id: t.id,
+  formatted_id: t.formatted_id || formatTicketId(t.id),
+  borrowerName: t.user?.name || t.user?.username || t.created_by_admin?.name || t.created_by_admin?.username || '-',
+  equipmentText: t.loan_summary?.alat_text && t.loan_summary.alat_text !== '-' ? t.loan_summary.alat_text : (t.sub_unit?.nama_layanan || 'Peminjaman Alat'),
+  scheduleText: t.loan_summary?.rentang_waktu || undefined,
+  hasHandedOver: Boolean(t.diserahkan_at),
+ });
 
  const isMyAssignmentActive = isAssignedToMeFilter(assignment);
 
@@ -170,16 +216,19 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  router.get(route('admin.tiket.index'), { tab }, {});
  };
 
-  const applyFilter = (overrides?: { search?: string; assignment?: string }) => {
+  const applyFilter = (overrides?: { search?: string; assignment?: string; loan_stage?: string }) => {
     const params: TicketFilterParams = { tab: currentTab };
     const keyword = overrides?.search !== undefined ? overrides.search : search;
     const nextAssignment = overrides?.assignment !== undefined ? overrides.assignment : assignment;
+    const nextLoanStage = overrides?.loan_stage !== undefined ? overrides.loan_stage : activeLoanStage;
+
+ if (currentTab === 'peminjaman_alat' && nextLoanStage) params.loan_stage = nextLoanStage;
 
  if (unitId) params.unit_id = unitId;
 
  if (subUnitId) params.sub_unit_id = subUnitId;
 
- if (selectedStatuses.length > 0) params.status = selectedStatuses;
+ if (currentTab !== 'peminjaman_alat' && selectedStatuses.length > 0) params.status = selectedStatuses;
 
  if (dateFrom) params.date_from = dateFrom;
 
@@ -217,7 +266,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  router.get(route('admin.tiket.index'), { tab: currentTab }, {});
  };
 
- const columns = [
+ const defaultColumns = [
  {
  key: 'sla_tracking',
  header: 'SLA',
@@ -350,6 +399,178 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  ),
  },
  ].filter(c => !(currentTab === 'saya_ajukan' && c.key === 'user'));
+
+ const loanColumns = [
+  {
+   key: 'id',
+   header: 'ID Tiket',
+   render: (t: Ticket) => (
+    <div className="space-y-1">
+     <div className="font-mono text-xs font-semibold text-slate-800">#TKT-{formatTicketId(t.id)}</div>
+     <StatusBadge status={t.status} />
+    </div>
+   ),
+  },
+  {
+   key: 'peminjam',
+   header: 'Peminjam',
+   render: (t: Ticket) => (
+    <div>
+     <p className="font-medium text-slate-900">
+      {t.user?.name || t.user?.username || (t.created_by_admin ? `${t.created_by_admin.name || t.created_by_admin.username} (Admin)` : '-')}
+     </p>
+     <p className="text-xs text-slate-500">
+      {t.user?.divisi?.nama_divisi || (t.created_by_admin ? 'Internal Admin' : '-')}
+     </p>
+    </div>
+   ),
+  },
+  {
+   key: 'alat_jadwal',
+   header: 'Alat & Jadwal Pakai',
+   render: (t: Ticket) => (
+    <div className="space-y-1 max-w-xs">
+     <p className="font-medium text-slate-800 text-xs sm:text-sm">
+      {t.loan_summary?.alat_text || t.sub_unit?.nama_layanan || '-'}
+     </p>
+     <p className="text-xs text-slate-500">
+      Jadwal: {t.loan_summary?.rentang_waktu || '-'}
+     </p>
+     {t.loan_summary?.is_overdue_schedule && (
+      <span className="inline-flex items-center rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700 border border-rose-200">
+       Jadwal pakai sudah lewat
+      </span>
+     )}
+     {!t.loan_summary?.is_overdue_schedule && t.loan_summary?.is_due_today && (
+      <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800 border border-amber-200">
+       Jadwal aktif hari ini
+      </span>
+     )}
+    </div>
+   ),
+  },
+  {
+   key: 'status_serah_kembali',
+   header: 'Status & Keterangan Serah/Kembali',
+   render: (t: Ticket) => {
+    const statusPinjam = t.loan_summary?.status_peminjaman || 'Menunggu Persetujuan';
+
+    const badgeStyle =
+     statusPinjam === 'Dikembalikan'
+      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+      : statusPinjam === 'Belum Dikembalikan'
+      ? 'bg-rose-100 text-rose-800 border-rose-200'
+      : statusPinjam === 'Sedang Dipinjam'
+      ? 'bg-sky-100 text-sky-800 border-sky-200'
+      : statusPinjam === 'Menunggu Diserahkan'
+      ? 'bg-amber-100 text-amber-800 border-amber-200'
+      : 'bg-purple-100 text-purple-800 border-purple-200';
+
+    const penyerah = t.diserahkan_oleh_admin?.name || t.diserahkan_oleh_admin?.username;
+    const penerimaKembali = t.diterima_kembali_oleh_admin?.name || t.diterima_kembali_oleh_admin?.username;
+    const handoverCondition = t.kondisi_serah ? resolveConditionMeta(t.kondisi_serah) : null;
+    const returnCondition = t.kondisi_kembali ? resolveConditionMeta(t.kondisi_kembali) : null;
+
+    return (
+     <div className="space-y-1.5 text-xs">
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border ${badgeStyle}`}>
+       {statusPinjam}
+      </span>
+      {t.diserahkan_at && (
+       <div className="text-slate-600 space-y-0.5">
+        <div>
+         Diserahkan: <span className="font-medium">{formatDateId(t.diserahkan_at)}</span>
+         {penyerah ? ` (${penyerah})` : ''}
+        </div>
+        {(handoverCondition || (t.lampiran_serah_count ?? 0) > 0) && (
+         <div className="flex flex-wrap items-center gap-1.5">
+          {handoverCondition && (
+           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${handoverCondition.className}`}>
+            {handoverCondition.label}
+           </span>
+          )}
+          {(t.lampiran_serah_count ?? 0) > 0 && (
+           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-medium">
+            <Paperclip className="w-2.5 h-2.5" />
+            {t.lampiran_serah_count}
+           </span>
+          )}
+         </div>
+        )}
+        {t.penerima_alat && <div>Penerima: {t.penerima_alat}</div>}
+        {t.catatan_serah && <div className="italic text-slate-500">&ldquo;{t.catatan_serah}&rdquo;</div>}
+       </div>
+      )}
+      {t.dikembalikan_at && (
+       <div className="text-slate-600 space-y-0.5 pt-1 border-t border-slate-100">
+        <div>
+         Dikembalikan: <span className="font-medium">{formatDateId(t.dikembalikan_at)}</span>
+         {penerimaKembali ? ` (${penerimaKembali})` : ''}
+        </div>
+        {(returnCondition || (t.lampiran_kembali_count ?? 0) > 0) && (
+         <div className="flex flex-wrap items-center gap-1.5">
+          {returnCondition && (
+           <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold ${returnCondition.className}`}>
+            {returnCondition.label}
+           </span>
+          )}
+          {(t.lampiran_kembali_count ?? 0) > 0 && (
+           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-medium">
+            <Paperclip className="w-2.5 h-2.5" />
+            {t.lampiran_kembali_count}
+           </span>
+          )}
+         </div>
+        )}
+        {t.catatan_kembali && <div className="italic text-slate-500">&ldquo;{t.catatan_kembali}&rdquo;</div>}
+       </div>
+      )}
+     </div>
+    );
+   },
+  },
+  {
+   key: 'aksi',
+   header: 'Aksi',
+   className: 'w-[280px]',
+   render: (t: Ticket) => (
+    <div className="flex flex-wrap items-center gap-1.5">
+     {t.can_serahkan && (
+      <Button
+       type="button"
+       size="sm"
+       className="bg-sky-600 hover:bg-sky-700 text-white"
+       onClick={() => setHandoverModalTicket(buildLoanModalTarget(t))}
+      >
+       <PackageCheck className="w-3.5 h-3.5 mr-1" /> Serahkan
+      </Button>
+     )}
+     {t.can_kembalikan && (
+      <Button
+       type="button"
+       size="sm"
+       variant={t.can_serahkan ? 'outline' : 'default'}
+       className={
+        t.can_serahkan
+         ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+         : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+       }
+       onClick={() => setReturnModalTicket(buildLoanModalTarget(t))}
+      >
+       <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Kembalikan
+      </Button>
+     )}
+     <Button variant="outline" size="sm" onClick={() => router.get(route('admin.tiket.show', t.id))}>
+      <Eye className="w-4 h-4 mr-1" /> Detail
+     </Button>
+    </div>
+   ),
+  },
+ ];
+
+ const columns = currentTab === 'peminjaman_alat' ? loanColumns : defaultColumns;
+
+ const visibleTabs = canViewEquipmentLoans ? TABS : TABS.filter((t) => t.key !== 'peminjaman_alat');
 
  return (
  <AdminLayout title="Daftar Tiket">
@@ -527,8 +748,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </div>
  </div>
 
- <div className="flex gap-2 mb-4 border-b">
- {TABS.map(({ key, label, Icon }) => (
+ <div className="flex flex-wrap gap-2 mb-4 border-b">
+ {visibleTabs.map(({ key, label, Icon }) => (
  <button
  key={key}
  onClick={() => changeTab(key)}
@@ -539,6 +760,37 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </button>
  ))}
  </div>
+
+ {currentTab === 'peminjaman_alat' && (
+ <div className="flex flex-wrap items-center gap-2 mb-4">
+ {LOAN_STAGES.map(({ key, label }) => {
+ const active = activeLoanStage === key;
+ const count = loanStageCounts?.[key] ?? 0;
+
+ return (
+ <button
+ key={key}
+ type="button"
+ onClick={() => applyFilter({ loan_stage: key })}
+ className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+ active
+ ? 'border-teal-600 bg-teal-600 text-white shadow-2xs'
+ : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+ }`}
+ >
+ <span>{label}</span>
+ <span
+ className={`rounded-full px-1.5 py-0.5 text-[11px] ${
+ active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-700'
+ }`}
+ >
+ {count}
+ </span>
+ </button>
+ );
+ })}
+ </div>
+ )}
 
  {showFilter && (
  <div className="bg-white rounded-lg border p-4 mb-4 space-y-4">
@@ -564,6 +816,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </div>
  
  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+ {currentTab !== 'peminjaman_alat' && (
  <div className="flex flex-col gap-1.5 lg:col-span-5">
  <span className="text-sm font-medium text-slate-700 ">Status</span>
  <div className="flex flex-wrap items-center gap-3 p-2.5 border rounded-md bg-slate-50/50 ">
@@ -575,6 +828,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  ))}
  </div>
  </div>
+ )}
 
  <div className="flex flex-col gap-1.5 lg:col-span-4">
  <span className="text-sm font-medium text-slate-700 ">Tanggal</span>
@@ -674,6 +928,22 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  onFinish: () => setSwapping(false),
  });
  }}
+ />
+
+ <HandoverEquipmentModal
+ open={handoverModalTicket !== null}
+ onOpenChange={(open) => {
+ if (!open) setHandoverModalTicket(null);
+ }}
+ ticket={handoverModalTicket}
+ />
+
+ <ReturnEquipmentModal
+ open={returnModalTicket !== null}
+ onOpenChange={(open) => {
+ if (!open) setReturnModalTicket(null);
+ }}
+ ticket={returnModalTicket}
  />
  </AdminLayout>
  );

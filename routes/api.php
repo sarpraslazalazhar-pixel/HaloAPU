@@ -58,6 +58,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive:
 
     // Tickets
     Route::get('/tickets', [TicketController::class, 'index']);
+    Route::get('/tickets/loan-recipients', [TicketController::class, 'loanRecipientOptions']);
     Route::get('/tickets/{id}', [TicketController::class, 'show']);
     Route::post('/tickets', [TicketController::class, 'store']);
     Route::post('/tickets/{id}/reply', [TicketController::class, 'reply']);
@@ -71,6 +72,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive:
     Route::post('/tickets/{id}/enqueue', [TicketController::class, 'enqueuePending']);
     Route::post('/tickets/{id}/activate-from-queue', [TicketController::class, 'activateFromQueue']);
     Route::post('/tickets/{id}/resume-work', [TicketController::class, 'resumeWork']);
+    Route::post('/tickets/{id}/serahkan-alat', [TicketController::class, 'serahkanAlat']);
     Route::post('/tickets/{id}/kembalikan-alat', [TicketController::class, 'kembalikanAlat']);
     Route::patch('/tickets/{id}/priority', [TicketController::class, 'changePriority']);
     Route::patch('/tickets/{id}/form', [TicketController::class, 'updateForm']);

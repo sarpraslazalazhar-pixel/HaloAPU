@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Events\ChatMessageDeleted;
-use App\Events\ChatMessageEdited;
 use App\Events\ChatMessageRead;
 use App\Events\UserTypingStatus;
 use App\Http\Controllers\Controller;
@@ -15,12 +14,14 @@ use App\Models\MessageRead;
 use App\Models\Ticket;
 use App\Services\ChatInboxService;
 use App\Services\TicketChatBridgeService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class ChatController extends Controller
@@ -328,33 +329,37 @@ class ChatController extends Controller
     public function updateMessage(Request $request, Message $message)
     {
         $admin = Auth::guard('admin')->user();
-        if ($message->sender_type !== Admin::class || (int) $message->sender_id !== (int) $admin->id) {
-            abort(403);
-        }
-
-        $hasBeenRead = MessageRead::where('message_id', $message->id)
-            ->where(fn ($q) => $q->where('user_type', '!=', Admin::class)->orWhere('user_id', '!=', $admin->id))
-            ->exists();
-
-        if ($hasBeenRead) {
-            return response()->json(['error' => 'Pesan yang sudah dibaca tidak dapat diedit.'], 422);
-        }
-
-        $request->validate(['body' => 'required|string']);
-
-        $message->update([
-            'body' => $request->body,
-            'is_edited' => true,
-            'edited_at' => now(),
+        $validator = Validator::make($request->all(), [
+            'body' => ['required', 'string', 'max:5000'],
         ]);
 
-        try {
-            broadcast(new ChatMessageEdited($message))->toOthers();
-        } catch (\Throwable $e) {
-            \Log::warning('ChatMessageEdited broadcast failed: '.$e->getMessage());
+        if ($validator->fails()) {
+            $firstError = $validator->errors()->first('body');
+
+            return response()->json([
+                'error' => $firstError,
+                'message' => $firstError,
+                'errors' => $validator->errors()->toArray(),
+            ], 422);
         }
 
-        return response()->json(['success' => true]);
+        $validated = $validator->validated();
+
+        try {
+            $updated = TicketChatBridgeService::editChatMessage($message, $admin, $validated['body']);
+        } catch (AuthorizationException) {
+            abort(403);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'error' => $e->getMessage(),
+                'message' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $this->serializeMessage($updated->load(['sender', 'attachments', 'ticket.subUnit', 'replyTo.sender', 'reads'])),
+        ]);
     }
 
     public function destroyMessage(Message $message)

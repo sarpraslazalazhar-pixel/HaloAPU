@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { DataTable } from '@/Components/DataTable';
 import { StatusBadge } from '@/Components/StatusBadge';
@@ -7,7 +7,7 @@ import SlaBadge from '@/Components/SlaBadge';
 import { Pagination } from '@/Components/Pagination';
 import { Button } from '@/Components/ui/button';
 import { DateRangePicker } from '@/Components/ui/date-range-picker';
-import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Play, Plus, Search, Send, X, XCircle } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, Eye, Filter, Inbox, Play, Plus, Search, Send, UserCheck, X, XCircle } from 'lucide-react';
 import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { formatTicketId } from '@/lib/utils';
 
@@ -25,6 +25,7 @@ interface Ticket {
  created_by_admin?: { id: number; name: string; username: string } | null;
  unit?: { nama_unit: string };
  sub_unit?: { nama_layanan: string };
+ assigned_admin_id?: number | null;
  assigned_admin?: { id: number; name: string; username: string };
  source?: 'web' | 'mobile' | string;
  status: string;
@@ -68,6 +69,7 @@ type TicketFilterParams = {
  divisi_id?: string;
  org_unit_id?: string;
  search?: string;
+ assignment?: string;
 };
 
 const TABS = [
@@ -75,9 +77,30 @@ const TABS = [
  { key: 'saya_ajukan', label: 'Tiket Saya Ajukan', Icon: Send },
 ];
 
-export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, currentTab = 'masuk', tabCounts, operatorLoads = [], canBulkCreate = false }: { tickets: any; filters: any; units: any; divisiList: any; orgUnitList: any; currentTab?: string; tabCounts: any; operatorLoads?: OperatorLoad[]; canBulkCreate?: boolean }) {
+interface OperatorOption {
+ id: number;
+ name?: string;
+ username?: string;
+}
+
+export default function TicketIndex({ tickets, filters, units, divisiList, orgUnitList, operators = [], currentTab = 'masuk', tabCounts, operatorLoads = [], canBulkCreate = false, assignedToMeCount = 0 }: { tickets: any; filters: any; units: any; divisiList: any; orgUnitList: any; operators?: OperatorOption[]; currentTab?: string; tabCounts: any; operatorLoads?: OperatorLoad[]; canBulkCreate?: boolean; assignedToMeCount?: number }) {
+ const { auth } = usePage<{ auth?: { admin?: { id?: number } } }>().props;
+ const currentAdminId = auth?.admin?.id ?? null;
+
+ const isAssignedToMeFilter = (value: string | number | null | undefined): boolean => {
+ if (value === 'me') return true;
+
+ return currentAdminId !== null && value !== '' && value !== null && value !== undefined && String(value) === String(currentAdminId);
+ };
+
+ const normalizeAssignment = (value: string | number | null | undefined): string => {
+ if (value === 'me' && currentAdminId !== null) return String(currentAdminId);
+
+ return value ? String(value) : '';
+ };
+
  const [showFilter, setShowFilter] = useState(() => {
- return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id);
+ return !!(filters?.unit_id || filters?.sub_unit_id || filters?.status || filters?.date_from || filters?.date_to || filters?.divisi_id || filters?.org_unit_id || (filters?.assignment && !isAssignedToMeFilter(filters.assignment)));
  });
 
  const [unitId, setUnitId] = useState(filters?.unit_id || '');
@@ -93,6 +116,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [dateTo, setDateTo] = useState(filters?.date_to || '');
  const [divisiId, setDivisiId] = useState(filters?.divisi_id || '');
  const [orgUnitId, setOrgUnitId] = useState(filters?.org_unit_id || '');
+ const [assignment, setAssignment] = useState(() => normalizeAssignment(filters?.assignment));
  const [subUnits, setSubUnits] = useState<any[]>([]);
  const [search, setSearch] = useState(filters?.search || '');
  const [openOperator, setOpenOperator] = useState<number | null>(null);
@@ -100,6 +124,16 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  const [swapTarget, setSwapTarget] = useState<{ ticket: OperatorLoadTicket; hasActive: boolean } | null>(null);
  const [swapping, setSwapping] = useState(false);
  const [cancelTargetTicket, setCancelTargetTicket] = useState<Ticket | null>(null);
+
+ const isMyAssignmentActive = isAssignedToMeFilter(assignment);
+
+ const isAssignedToMe = (ticket: Ticket): boolean => {
+ if (currentAdminId === null) return false;
+
+ const assignedId = ticket.assigned_admin_id ?? ticket.assigned_admin?.id;
+
+ return assignedId !== null && assignedId !== undefined && Number(assignedId) === Number(currentAdminId);
+ };
 
  const enqueueTicket = (ticketId: number) => {
   if (enqueuingTicketId !== null) return;
@@ -122,6 +156,10 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  }
  }, []);
 
+ useEffect(() => {
+ setAssignment(normalizeAssignment(filters?.assignment));
+ }, [filters?.assignment, currentAdminId]);
+
  const toggleStatus = (val: string) => {
  setSelectedStatuses(prev =>
  prev.includes(val) ? prev.filter(s => s !== val) : [...prev, val]
@@ -132,9 +170,10 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  router.get(route('admin.tiket.index'), { tab }, {});
  };
 
-  const applyFilter = (searchOverride?: string) => {
+  const applyFilter = (overrides?: { search?: string; assignment?: string }) => {
     const params: TicketFilterParams = { tab: currentTab };
-    const keyword = searchOverride ?? search;
+    const keyword = overrides?.search !== undefined ? overrides.search : search;
+    const nextAssignment = overrides?.assignment !== undefined ? overrides.assignment : assignment;
 
  if (unitId) params.unit_id = unitId;
 
@@ -151,7 +190,31 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  if (orgUnitId) params.org_unit_id = orgUnitId;
 
  if (keyword) params.search = keyword;
+
+ if (nextAssignment) params.assignment = nextAssignment;
+
  router.get(route('admin.tiket.index'), params, { });
+ };
+
+ const toggleAssignedToMe = () => {
+ const next = isMyAssignmentActive ? '' : (currentAdminId !== null ? String(currentAdminId) : 'me');
+
+ setAssignment(next);
+ applyFilter({ assignment: next });
+ };
+
+ const resetFilter = () => {
+ setUnitId('');
+ setSubUnitId('');
+ setSubUnits([]);
+ setSelectedStatuses([]);
+ setDateFrom('');
+ setDateTo('');
+ setDivisiId('');
+ setOrgUnitId('');
+ setAssignment('');
+ setSearch('');
+ router.get(route('admin.tiket.index'), { tab: currentTab }, {});
  };
 
  const columns = [
@@ -204,9 +267,24 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  {
  key: 'operator',
  header: 'Operator',
- render: (t: Ticket) => (
- <p className="font-medium">{t.assigned_admin?.name || t.assigned_admin?.username || '-'}</p>
- ),
+ render: (t: Ticket) => {
+ const assignedToMe = isAssignedToMe(t);
+ const operatorName = t.assigned_admin?.name || t.assigned_admin?.username || '-';
+
+ return (
+ <div className="flex flex-col items-start gap-1">
+ <span className={assignedToMe ? 'font-semibold text-indigo-950' : 'font-medium'}>
+ {operatorName}
+ </span>
+ {assignedToMe && (
+ <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+ <UserCheck className="h-3 w-3" />
+ Ditugaskan ke Saya
+ </span>
+ )}
+ </div>
+ );
+ },
  },
  {
  key: 'source',
@@ -356,7 +434,6 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  >
  <ArrowDown className="size-3.5" />
  </Button>
- {op.work_hours_open && (
  <Button
  type="button"
  variant="outline"
@@ -368,7 +445,6 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  >
  <Play className="mr-1 size-3" /> Kerjakan
  </Button>
- )}
  </>
  )}
  {tk.position === null && !tk.is_work_hours_paused && tk.status === 'pending' && (
@@ -409,12 +485,33 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  className="w-full rounded-md border border-input bg-transparent pl-9 pr-8 py-2 text-sm"
  />
  {search && (
-                  <button onClick={() => { setSearch(''); applyFilter(''); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                  <button onClick={() => { setSearch(''); applyFilter({ search: '' }); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     <X className="h-4 w-4" />
                   </button>
  )}
  </div>
  <div className="flex flex-wrap items-center gap-2">
+ <Button
+ type="button"
+ variant={isMyAssignmentActive ? 'default' : 'outline'}
+ aria-pressed={isMyAssignmentActive}
+ onClick={toggleAssignedToMe}
+ className={`flex items-center gap-2 ${
+ isMyAssignmentActive
+ ? 'border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700'
+ : 'border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800'
+ }`}
+ >
+ <UserCheck className="w-4 h-4" />
+ <span>Ditugaskan ke Saya</span>
+ <span
+ className={`rounded-full px-1.5 py-0.5 text-xs font-semibold ${
+ isMyAssignmentActive ? 'bg-white/20 text-white' : 'bg-indigo-100 text-indigo-700'
+ }`}
+ >
+ {assignedToMeCount}
+ </span>
+ </Button>
  <Button onClick={() => setShowFilter(!showFilter)} variant="outline" className="flex items-center gap-2">
  <Filter className="w-4 h-4" />
  {showFilter ? 'Sembunyikan Filter' : 'Tampilkan Filter'}
@@ -466,8 +563,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  </select>
  </div>
  
- <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
- <div className="flex flex-col gap-1.5">
+ <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4">
+ <div className="flex flex-col gap-1.5 lg:col-span-5">
  <span className="text-sm font-medium text-slate-700 ">Status</span>
  <div className="flex flex-wrap items-center gap-3 p-2.5 border rounded-md bg-slate-50/50 ">
  {STATUS_LIST.map(s => (
@@ -478,20 +575,51 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
  ))}
  </div>
  </div>
- 
- <div className="flex flex-col gap-1.5">
+
+ <div className="flex flex-col gap-1.5 lg:col-span-4">
  <span className="text-sm font-medium text-slate-700 ">Tanggal</span>
  <DateRangePicker dateFrom={dateFrom} dateTo={dateTo} onDateFromChange={setDateFrom} onDateToChange={setDateTo} />
  </div>
+
+ <div className="flex flex-col gap-1.5 lg:col-span-3">
+ <label htmlFor="filter-penugasan" className="text-sm font-medium text-slate-700">Penugasan</label>
+ <select
+ id="filter-penugasan"
+ className="h-[42px] rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+ value={assignment}
+ onChange={e => setAssignment(e.target.value)}
+ >
+ <option value="">Semua Penugasan</option>
+ {operators.map((op) => {
+ const isSelf = currentAdminId !== null && Number(op.id) === Number(currentAdminId);
+
+ return (
+ <option key={op.id} value={String(op.id)}>
+ {op.name || op.username}{isSelf ? ' (Saya)' : ''}
+ </option>
+ );
+ })}
+ </select>
+ </div>
  </div>
 
- <div className="flex justify-end pt-2">
+ <div className="flex flex-wrap justify-end gap-2 pt-2">
+ <Button type="button" variant="outline" onClick={resetFilter} className="w-full md:w-auto">Reset Filter</Button>
  <Button onClick={() => applyFilter()} className="w-full md:w-auto">Terapkan Filter</Button>
  </div>
  </div>
  )}
 
- <DataTable columns={columns} data={tickets.data || []} keyExtractor={(t: Ticket) => t.id} />
+ <DataTable
+ columns={columns}
+ data={tickets.data || []}
+ keyExtractor={(t: Ticket) => t.id}
+ rowClassName={(t: Ticket) =>
+ isAssignedToMe(t)
+ ? 'bg-indigo-50/70 hover:bg-indigo-100/60 [&_td:first-child]:shadow-[inset_3px_0_0_0_#4f46e5]'
+ : undefined
+ }
+ />
  <Pagination links={tickets.links} />
 
  <ConfirmDialog

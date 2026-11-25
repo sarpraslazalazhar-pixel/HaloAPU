@@ -560,6 +560,9 @@ class TicketController extends Controller
                 'id' => $log->id,
                 'action' => $log->aksi,
                 'note' => $body,
+                'is_edited' => (bool) ($chatMessage?->is_edited ?? $log->is_edited),
+                'edited_at' => ($chatMessage?->edited_at ?? $log->edited_at)?->toIso8601String(),
+                'adminId' => $log->admin_id ? (int) $log->admin_id : null,
                 'adminName' => $log->admin ? $log->admin->name : null,
                 'createdAt' => $log->timestamp ? $log->timestamp->toIso8601String() : $log->created_at?->toIso8601String(),
                 'isFromAdmin' => $log->admin_id !== null,
@@ -691,12 +694,96 @@ class TicketController extends Controller
                 'id' => $log->id,
                 'action' => $log->aksi,
                 'note' => $log->catatan,
+                'is_edited' => (bool) ($log->is_edited ?? false),
+                'edited_at' => $log->edited_at?->toIso8601String(),
+                'adminId' => $log->admin_id ? (int) $log->admin_id : null,
                 'adminName' => $isAdmin ? $user->name : null,
                 'createdAt' => $log->timestamp->toIso8601String(),
                 'isFromAdmin' => $isAdmin,
             ],
             'message' => 'Balasan berhasil dikirim',
         ], 201);
+    }
+
+    /**
+     * Edit an existing ticket reply (`aksi = balasan`) owned by the authenticated actor.
+     */
+    public function updateReply(Request $request, string $id, int $logId, TicketChatBridgeService $bridge)
+    {
+        $user = $request->user();
+        $isAdmin = $user instanceof Admin;
+
+        $ticket = Ticket::where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        if (! $isAdmin && ! $ticket->isOwnedByUser($user)) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        if ($isAdmin && ! $ticket->isAccessibleBy($user)) {
+            return response()->json(['message' => 'Akses ditolak'], 403);
+        }
+
+        $log = TicketLog::where('id', $logId)
+            ->where('ticket_id', $ticket->id)
+            ->first();
+
+        if (! $log) {
+            return response()->json(['message' => 'Komentar tidak ditemukan'], 404);
+        }
+
+        if (strtolower((string) $log->aksi) !== 'balasan') {
+            return response()->json(['message' => 'Log sistem tidak dapat diedit'], 422);
+        }
+
+        if ($isAdmin) {
+            if ($log->admin_id === null || (int) $log->admin_id !== (int) $user->id) {
+                return response()->json(['message' => 'Kamu hanya dapat mengedit komentarmu sendiri'], 403);
+            }
+        } elseif ($log->admin_id !== null) {
+            return response()->json(['message' => 'Kamu tidak berhak mengedit komentar admin'], 403);
+        }
+
+        if (TicketChatBridgeService::isTicketClosed($ticket)) {
+            return response()->json(['message' => 'Tiket sudah ditutup, komentar tidak dapat diedit.'], 422);
+        }
+
+        $validated = $request->validate([
+            'catatan' => ['required', 'string', 'max:5000'],
+        ]);
+
+        if (trim($validated['catatan']) === '') {
+            return response()->json([
+                'message' => 'Komentar tidak boleh kosong.',
+                'errors' => ['catatan' => ['Komentar tidak boleh kosong.']],
+            ], 422);
+        }
+
+        try {
+            $updated = $bridge->editTicketLog($ticket, $log, $validated['catatan']);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'data' => [
+                'id' => $updated->id,
+                'action' => $updated->aksi,
+                'note' => $updated->catatan,
+                'is_edited' => (bool) $updated->is_edited,
+                'edited_at' => $updated->edited_at?->toIso8601String(),
+                'adminId' => $updated->admin_id ? (int) $updated->admin_id : null,
+                'adminName' => $updated->admin?->name,
+                'createdAt' => $updated->timestamp?->toIso8601String(),
+                'isFromAdmin' => $updated->admin_id !== null,
+            ],
+            'message' => 'Komentar berhasil diperbarui',
+        ], 200);
     }
 
     /**

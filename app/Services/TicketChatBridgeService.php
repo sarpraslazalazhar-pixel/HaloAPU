@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Events\ChatMessageEdited;
 use App\Events\ChatMessageSent;
+use App\Events\TicketMessageEdited;
 use App\Models\Admin;
 use App\Models\ChatAttachment;
 use App\Models\Conversation;
@@ -15,6 +17,7 @@ use App\Models\User;
 use App\Notifications\DirectChatMessageNotification;
 use App\Notifications\TicketCommentPushNotification;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -452,8 +455,219 @@ class TicketChatBridgeService
         $run();
     }
 
+    public const CLOSED_TICKET_STATUSES = ['solve', 'selesai', 'reject', 'dibatalkan'];
+
+    public static function isTicketClosed(Ticket $ticket): bool
+    {
+        return in_array(strtolower((string) $ticket->status), self::CLOSED_TICKET_STATUSES, true);
+    }
+
+    /**
+     * Edit a ticket reply (`aksi = balasan`) and keep its mirrored chat message
+     * in sync inside one transaction, then broadcast to both channels.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function editTicketLog(Ticket $ticket, TicketLog $log, string $newBody): TicketLog
+    {
+        $trimmed = trim($newBody);
+        if ($trimmed === '') {
+            throw new \InvalidArgumentException('Komentar tidak boleh kosong.');
+        }
+
+        [$updatedLog, $updatedMessage] = DB::transaction(function () use ($ticket, $log, $trimmed) {
+            /** @var TicketLog $locked */
+            $locked = TicketLog::lockForUpdate()->findOrFail($log->id);
+
+            if ((int) $locked->ticket_id !== (int) $ticket->id) {
+                throw new \InvalidArgumentException('Komentar tidak ditemukan pada tiket ini.');
+            }
+
+            if (strtolower((string) $locked->aksi) !== 'balasan') {
+                throw new \InvalidArgumentException('Log sistem tidak dapat diedit.');
+            }
+
+            /** @var Message|null $message */
+            $message = Message::withTrashed()
+                ->where('ticket_log_id', $locked->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($message && $message->trashed()) {
+                throw new \InvalidArgumentException('Pesan yang sudah dihapus tidak dapat diedit.');
+            }
+
+            $now = now();
+
+            $locked->update([
+                'catatan' => $trimmed,
+                'is_edited' => true,
+                'edited_at' => $now,
+            ]);
+
+            if ($message) {
+                $message->update([
+                    'body' => $trimmed,
+                    'is_edited' => true,
+                    'edited_at' => $now,
+                ]);
+            }
+
+            return [
+                $locked->fresh(['admin', 'attachments']),
+                $message?->fresh(),
+            ];
+        });
+
+        self::afterCommit(function () use ($updatedLog, $updatedMessage): void {
+            self::emitTicketMessageEdited($updatedLog);
+
+            if ($updatedMessage) {
+                self::emitChatMessageEdited($updatedMessage);
+            }
+        });
+
+        return $updatedLog;
+    }
+
+    /**
+     * Mirror a chat message edit back onto its linked `ticket_logs` row and
+     * broadcast the timeline edit to ticket watchers.
+     */
+    public static function syncMessageEditToTicketLog(Message $message): ?TicketLog
+    {
+        if (! $message->ticket_log_id) {
+            return null;
+        }
+
+        $log = TicketLog::find($message->ticket_log_id);
+        if (! $log || strtolower((string) $log->aksi) !== 'balasan') {
+            return null;
+        }
+
+        $log->update([
+            'catatan' => $message->body,
+            'is_edited' => true,
+            'edited_at' => $message->edited_at ?? now(),
+        ]);
+
+        $fresh = $log->fresh(['admin', 'attachments']);
+
+        self::afterCommit(fn () => self::emitTicketMessageEdited($fresh));
+
+        return $fresh;
+    }
+
+    /**
+     * Validate and apply a chat message edit across web/API controllers,
+     * keeping linked ticket logs in sync.
+     *
+     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws \InvalidArgumentException
+     */
+    public static function editChatMessage(Message $message, object $actor, string $newBody): Message
+    {
+        $actorType = $actor instanceof Admin ? Admin::class : User::class;
+
+        if ($message->sender_type !== $actorType || (int) $message->sender_id !== (int) $actor->id) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('Anda tidak berhak mengedit pesan ini.');
+        }
+
+        $conversation = $message->conversation;
+        if (! $conversation || ! Gate::forUser($actor)->allows('view', $conversation)) {
+            throw new \Illuminate\Auth\Access\AuthorizationException('Anda tidak berhak mengakses percakapan ini.');
+        }
+
+        $trimmed = trim($newBody);
+        if ($trimmed === '') {
+            throw new \InvalidArgumentException('Pesan tidak boleh kosong.');
+        }
+
+        [$freshMessage, $freshLog] = DB::transaction(function () use ($message, $actor, $actorType, $trimmed) {
+            // Keep lock order identical to editTicketLog() (`ticket_logs` -> `messages`) to prevent AB-BA deadlocks.
+            $lockedLog = $message->ticket_log_id !== null
+                ? TicketLog::lockForUpdate()->find($message->ticket_log_id)
+                : null;
+
+            /** @var Message $lockedMessage */
+            $lockedMessage = Message::withTrashed()->lockForUpdate()->findOrFail($message->id);
+
+            if ($lockedLog === null && $lockedMessage->ticket_log_id !== null) {
+                $lockedLog = TicketLog::lockForUpdate()->find($lockedMessage->ticket_log_id);
+            }
+
+            if ($lockedMessage->sender_type !== $actorType || (int) $lockedMessage->sender_id !== (int) $actor->id) {
+                throw new \Illuminate\Auth\Access\AuthorizationException('Anda tidak berhak mengedit pesan ini.');
+            }
+
+            $lockedConversation = $lockedMessage->conversation()->first();
+            if (! $lockedConversation || ! Gate::forUser($actor)->allows('view', $lockedConversation)) {
+                throw new \Illuminate\Auth\Access\AuthorizationException('Anda tidak berhak mengakses percakapan ini.');
+            }
+
+            if ($lockedMessage->trashed()) {
+                throw new \InvalidArgumentException('Pesan yang sudah dihapus tidak dapat diedit.');
+            }
+
+            if ($lockedConversation->type === 'ticket') {
+                $ticket = $lockedConversation->ticket()->first();
+                if ($ticket && self::isTicketClosed($ticket)) {
+                    throw new \InvalidArgumentException('Tiket sudah ditutup, pesan tidak dapat diedit.');
+                }
+            } else {
+                $hasBeenRead = MessageRead::where('message_id', $lockedMessage->id)
+                    ->where(fn ($q) => $q->where('user_type', '!=', $actorType)->orWhere('user_id', '!=', $actor->id))
+                    ->exists();
+
+                if ($hasBeenRead) {
+                    throw new \InvalidArgumentException('Pesan yang sudah dibaca tidak dapat diedit.');
+                }
+            }
+
+            $now = now();
+
+            $lockedMessage->update([
+                'body' => $trimmed,
+                'is_edited' => true,
+                'edited_at' => $now,
+            ]);
+
+            $freshLog = null;
+            if ($lockedLog && strtolower((string) $lockedLog->aksi) === 'balasan') {
+                $lockedLog->update([
+                    'catatan' => $trimmed,
+                    'is_edited' => true,
+                    'edited_at' => $now,
+                ]);
+                $freshLog = $lockedLog->fresh(['admin', 'attachments']);
+            }
+
+            return [$lockedMessage->fresh(), $freshLog];
+        });
+
+        self::afterCommit(function () use ($freshMessage, $freshLog): void {
+            self::emitChatMessageEdited($freshMessage);
+
+            if ($freshLog) {
+                self::emitTicketMessageEdited($freshLog);
+            }
+        });
+
+        return $freshMessage;
+    }
+
     public static function emitChatMessage(Message $message): void
     {
         broadcast(new ChatMessageSent($message))->toOthers();
+    }
+
+    public static function emitChatMessageEdited(Message $message): void
+    {
+        broadcast(new ChatMessageEdited($message))->toOthers();
+    }
+
+    public static function emitTicketMessageEdited(TicketLog $log): void
+    {
+        broadcast(new TicketMessageEdited($log));
     }
 }

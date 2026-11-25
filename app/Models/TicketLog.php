@@ -11,10 +11,12 @@ class TicketLog extends Model
     public $timestamps = false; // We use timestamp column manually
 
     protected $fillable = [
-        'ticket_id', 'admin_id', 'aksi', 'catatan', 'timestamp'
+        'ticket_id', 'admin_id', 'aksi', 'catatan', 'is_edited', 'edited_at', 'timestamp'
     ];
 
     protected $casts = [
+        'is_edited' => 'boolean',
+        'edited_at' => 'datetime',
         'timestamp' => 'datetime',
     ];
 

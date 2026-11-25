@@ -36,6 +36,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive:
     Route::get('/conversations', [ChatController::class, 'index']);
     Route::get('/conversations/{conversation}', [ChatController::class, 'show']);
     Route::post('/conversations/{conversation}/messages', [ChatController::class, 'store']);
+    Route::put('/chat/messages/{message}', [ChatController::class, 'update']);
     Route::post('/conversations/{conversation}/read', [ChatController::class, 'read']);
     Route::get('/tickets/{ticket}/chat', [ChatController::class, 'ticketRoom']);
     Route::get('/chat/attachments/{attachment}', [ChatController::class, 'downloadAttachment']);
@@ -60,6 +61,7 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\EnsureUserAccountActive:
     Route::get('/tickets/{id}', [TicketController::class, 'show']);
     Route::post('/tickets', [TicketController::class, 'store']);
     Route::post('/tickets/{id}/reply', [TicketController::class, 'reply']);
+    Route::patch('/tickets/{id}/reply/{logId}', [TicketController::class, 'updateReply']);
     Route::post('/tickets/{id}/assign', [TicketController::class, 'assignOperator']);
     Route::patch('/tickets/{id}/cancel', [TicketController::class, 'cancel']);
     Route::patch('/tickets/{id}/cancel-booking', [TicketController::class, 'cancelBooking']);

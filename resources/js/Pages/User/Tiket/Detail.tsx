@@ -18,7 +18,7 @@ import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/Components/ui/dialog';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
-import { subscribe } from '@/lib/realtime';
+import { subscribe, type TicketEvents } from '@/lib/realtime';
 import Swal from 'sweetalert2';
 
 
@@ -72,13 +72,16 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
  useEffect(() => {
    if (!ticket?.id) return;
 
-   return subscribe(`ticket.${ticket.id}`, {
+   return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
      '.TicketMessagePosted': ({ log }) => {
        const reloadActions = ['open', 'on_proses', 'pending', 'need_revision', 'solve', 'selesai', 'dibatalkan', 'reject'];
 
        if (log?.aksi && (log.aksi.startsWith('work_hours') || reloadActions.includes(log.aksi))) {
          router.reload({ only: ['ticket', 'work_hours'] });
        }
+     },
+     '.TicketMessageEdited': () => {
+       router.reload({ only: ['ticket'] });
      },
    });
  }, [ticket?.id]);
@@ -650,6 +653,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours }:
              ticket={ticket}
              isAdmin={false}
              replyRoute="tiket.reply"
+             editReplyRoute="tiket.reply.update"
              downloadRoute="tiket.download"
              viewRoute="tiket.view"
              canReply={['solve', 'reject', 'dibatalkan', 'waiting_approval'].indexOf(ticket.status) === -1}

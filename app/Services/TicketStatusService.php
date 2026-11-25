@@ -46,66 +46,101 @@ class TicketStatusService
         bool $skipSparcLoop = false,
     ): void {
         $updated = TicketWorkQueue::mutate($ticket, null, function (Ticket $lockedTicket, Carbon $at) use ($newStatus, $catatan, $actor, $attachments, $deliverableUrl, $skipSparcLoop) {
+            $calendar = new SlaCalculator;
+            $hours = $calendar->workingHoursState($at);
+            $withinWorkHours = $hours['is_open'];
             $oldStatus = $lockedTicket->status;
             if ($oldStatus === $newStatus) {
                 return;
             }
 
             if ($lockedTicket->work_hours_resume_status !== null) {
-                $calendar = new SlaCalculator;
-                if (! $calendar->isWithinWorkingHours($at)) {
-                    throw new InvalidArgumentException('Petugas yang ditugaskan perlu memilih Lanjutkan di luar jam kerja terlebih dahulu.');
-                }
-
+                $resumedStatus = $lockedTicket->work_hours_resume_status;
+                $targetIsActive = in_array($newStatus, TicketWorkQueue::ACTIVE_STATUSES, true);
                 $adminId = $lockedTicket->assigned_admin_id !== null ? (int) $lockedTicket->assigned_admin_id : null;
-                if ($adminId !== null && TicketWorkQueue::hasOtherActive($lockedTicket, $adminId)) {
-                    $resumeStatus = $lockedTicket->work_hours_resume_status;
+
+                if ($targetIsActive && $adminId !== null && TicketWorkQueue::hasOtherActive($lockedTicket, $adminId)) {
                     $lockedTicket->work_hours_resume_status = null;
                     $lockedTicket->work_hours_sla_paused_at = null;
-                    TicketWorkQueue::place($lockedTicket, $resumeStatus, $at);
+                    TicketWorkQueue::place($lockedTicket, $newStatus, $at);
 
-                    throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket masuk antrean.');
+                    if (filled($catatan)) {
+                        TicketLog::create([
+                            'ticket_id' => $lockedTicket->id,
+                            'admin_id' => $actor?->id,
+                            'aksi' => 'pending',
+                            'catatan' => $catatan,
+                            'timestamp' => $at,
+                        ]);
+                    }
+
+                    return;
                 }
 
                 if ($sla = $lockedTicket->slaTracking()->lockForUpdate()->first()) {
                     $sla->setRelation('ticket', $lockedTicket);
-                    if ($sla->isPaused()) {
+                    if ($sla->isPaused() || $lockedTicket->status === 'pending') {
                         $calendar->resumeSla($sla, $at, true);
                     }
                 }
 
-                $resumedStatus = $lockedTicket->work_hours_resume_status;
                 $lockedTicket->update([
                     'status' => $resumedStatus,
                     'work_hours_resume_status' => null,
                     'work_hours_sla_paused_at' => null,
+                    'assignment_queued_at' => null,
+                    'assignment_resume_status' => null,
                 ]);
-                TicketLog::withoutEvents(fn () => TicketLog::create([
-                    'ticket_id' => $lockedTicket->id,
-                    'admin_id' => null,
-                    'aksi' => 'work_hours_resumed',
-                    'catatan' => 'Jam kerja telah buka. Pengerjaan tiket dilanjutkan otomatis.',
-                    'timestamp' => $at,
-                ]));
+
+                if ($withinWorkHours) {
+                    TicketLog::withoutEvents(fn () => TicketLog::create([
+                        'ticket_id' => $lockedTicket->id,
+                        'admin_id' => null,
+                        'aksi' => 'work_hours_resumed',
+                        'catatan' => 'Jam kerja telah buka. Pengerjaan tiket dilanjutkan otomatis.',
+                        'timestamp' => $at,
+                    ]));
+                } elseif ($targetIsActive) {
+                    TicketWorkQueue::recordOvertimeIfNeeded($lockedTicket, $actor?->id, $at, $calendar);
+                }
+
                 $oldStatus = $resumedStatus;
                 if ($oldStatus === $newStatus) {
+                    if ($newStatus === 'on_proses') {
+                        if ($sla = $lockedTicket->slaTracking()->lockForUpdate()->first()) {
+                            if ($sla->responded_at === null) {
+                                $sla->update([
+                                    'responded_at' => $at,
+                                    'is_response_breached' => $sla->is_response_breached
+                                        || ($sla->sla_response_deadline && $at->gt($sla->sla_response_deadline)),
+                                ]);
+                            }
+                        }
+                    }
+
+                    if (filled($catatan)) {
+                        TicketLog::create([
+                            'ticket_id' => $lockedTicket->id,
+                            'admin_id' => $actor?->id,
+                            'aksi' => $newStatus,
+                            'catatan' => $catatan,
+                            'timestamp' => $at,
+                        ]);
+                    }
+
                     return;
                 }
             }
 
             if ($newStatus === 'on_proses') {
-                if ($lockedTicket->assignment_queued_at !== null) {
-                    throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
-                }
-
-                $hours = (new SlaCalculator)->workingHoursState($at);
-                $withinWorkHours = $hours['is_open'];
                 $operatorBusy = $lockedTicket->assigned_admin_id !== null
                     && TicketWorkQueue::hasOtherActive($lockedTicket, (int) $lockedTicket->assigned_admin_id);
 
-                if ($oldStatus === 'pending'
-                    && $lockedTicket->assigned_admin_id !== null
-                    && (! $withinWorkHours || $operatorBusy)) {
+                if ($lockedTicket->assignment_queued_at !== null && ($operatorBusy || $withinWorkHours)) {
+                    throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
+                }
+
+                if ($oldStatus === 'pending' && $lockedTicket->assigned_admin_id !== null && $operatorBusy) {
                     TicketWorkQueue::place($lockedTicket, 'on_proses', $at);
 
                     if (filled($catatan)) {
@@ -121,17 +156,6 @@ class TicketStatusService
                     return;
                 }
 
-                if (! $withinWorkHours) {
-                    $overtime = $oldStatus === 'open' && $actor !== null
-                        && (int) $lockedTicket->assigned_admin_id === (int) $actor->id
-                        && $hours['closed_since'] !== null
-                        && $lockedTicket->logs()->where('aksi', 'work_hours_overtime_resumed')
-                            ->where('admin_id', $actor->id)->where('timestamp', '>=', $hours['closed_since'])->exists();
-                    if (! $overtime) {
-                        throw new InvalidArgumentException('Jam kerja belum buka. Tiket belum bisa dilanjutkan.');
-                    }
-                }
-
                 if ($operatorBusy) {
                     throw new InvalidArgumentException('Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
                 }
@@ -142,6 +166,11 @@ class TicketStatusService
             }
 
             $finalCatatan = self::applyLockedTransition($lockedTicket, $newStatus, $catatan, $actor, $attachments, $deliverableUrl, $at);
+
+            if (! $withinWorkHours && in_array($newStatus, TicketWorkQueue::ACTIVE_STATUSES, true)) {
+                TicketWorkQueue::recordOvertimeIfNeeded($lockedTicket, $actor?->id, $at, $calendar);
+            }
+
             DB::afterCommit(fn () => self::notifyTransition($lockedTicket, $actor, $finalCatatan, $skipSparcLoop));
         });
 
@@ -166,7 +195,8 @@ class TicketStatusService
                 (new SlaCalculator)->pauseSla($sla, $at);
             } elseif ($newStatus === 'on_proses') {
                 if ($oldStatus === 'pending') {
-                    (new SlaCalculator)->resumeSla($sla, $at);
+                    $preserveScheduled = $ticket->assignment_resume_status !== null || $ticket->assignment_queued_at !== null;
+                    (new SlaCalculator)->resumeSla($sla, $at, $preserveScheduled);
                 }
                 if ($sla->responded_at === null) {
                     $sla->update([

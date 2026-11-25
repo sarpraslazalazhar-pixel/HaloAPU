@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
 
@@ -69,6 +70,33 @@ class SchedulerController extends Controller
         } catch (\Exception $e) {
             Log::error('Manual CSAT Reminder failed', ['error' => $e->getMessage()]);
             return back()->with('error', 'Gagal menjalankan CSAT Reminder: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Jalankan command briefing operasional AI secara manual.
+     */
+    public function runAiBriefing(Request $request)
+    {
+        $validated = $request->validate([
+            'period' => 'nullable|in:daily,weekly',
+        ]);
+
+        $period = $validated['period'] ?? 'daily';
+
+        try {
+            Artisan::call('ai:briefing', [
+                '--period' => $period,
+                '--force' => true,
+            ]);
+            $output = trim(Artisan::output());
+            Log::info('Manual AI Briefing executed', ['period' => $period, 'output' => $output]);
+
+            return back()->with('success', "Briefing AI ({$period}) berhasil dijalankan. " . $output);
+        } catch (\Exception $e) {
+            Log::error('Manual AI Briefing failed', ['period' => $period, 'error' => $e->getMessage()]);
+
+            return back()->with('error', 'Gagal menjalankan Briefing AI: ' . $e->getMessage());
         }
     }
 

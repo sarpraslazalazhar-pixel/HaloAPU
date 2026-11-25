@@ -11,6 +11,8 @@ interface TimelineLog {
   id: number;
   aksi: string;
   catatan?: string | null;
+  is_edited?: boolean;
+  edited_at?: string | null;
   timestamp: string;
   admin?: { username: string; name?: string } | null;
   attachments?: any[];
@@ -183,6 +185,7 @@ export function TicketTimeline({ logs, downloadRoute = 'tiket.download' }: Ticke
                 <div className="flex items-center gap-1.5 text-xs text-slate-400">
                   <Clock className="w-3.5 h-3.5" />
                   <span>{formatDateId(log.timestamp)}</span>
+                  {log.is_edited && <span className="italic text-slate-400">(diedit)</span>}
                 </div>
               </div>
 

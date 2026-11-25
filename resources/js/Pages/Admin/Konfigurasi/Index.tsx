@@ -733,6 +733,20 @@ export default function KonfigurasiIndex({
  >
  ⭐ Kirim Reminder CSAT
  </Button>
+ <Button
+ variant="outline"
+ onClick={() => router.post('/admin/scheduler/ai-briefing', { period: 'daily' })}
+ className="justify-start"
+ >
+ 🤖 Kirim Briefing AI Harian
+ </Button>
+ <Button
+ variant="outline"
+ onClick={() => router.post('/admin/scheduler/ai-briefing', { period: 'weekly' })}
+ className="justify-start"
+ >
+ 📊 Kirim Briefing AI Mingguan
+ </Button>
  </div>
  <div className="pt-3 border-t">
  <Button

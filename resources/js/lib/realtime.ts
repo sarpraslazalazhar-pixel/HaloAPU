@@ -106,6 +106,8 @@ export interface TicketLogEntry {
   admin_id: number | null;
   aksi: string;
   catatan: string | null;
+  is_edited?: boolean;
+  edited_at?: string | null;
   timestamp: string;
   admin?: { id: number; name?: string | null; username: string } | null;
   attachments?: Array<{
@@ -124,9 +126,16 @@ export interface TicketMessagePostedPayload {
   ticketId: number;
 }
 
+/** Payload of a ticket comment edit broadcast. */
+export interface TicketMessageEditedPayload {
+  log: TicketLogEntry;
+  ticketId: number;
+}
+
 /** Events published on `ticket.{id}`. */
 export interface TicketEvents {
   '.TicketMessagePosted': TicketMessagePostedPayload;
+  '.TicketMessageEdited': TicketMessageEditedPayload;
 }
 
 /** Events published on `chat.conversation.{id}` and the per-user channels. */

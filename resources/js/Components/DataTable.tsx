@@ -14,9 +14,10 @@ interface DataTableProps<T> {
  data: T[];
  keyExtractor: (item: T) => string | number;
  emptyMessage?: string;
+ rowClassName?: (item: T) => string | undefined;
 }
 
-export function DataTable<T>({ columns, data, keyExtractor, emptyMessage = 'Tidak ada data.' }: DataTableProps<T>) {
+export function DataTable<T>({ columns, data, keyExtractor, emptyMessage = 'Tidak ada data.', rowClassName }: DataTableProps<T>) {
  if (data.length === 0) {
  return (
  <div className="text-center py-12 text-muted-foreground">
@@ -38,7 +39,7 @@ export function DataTable<T>({ columns, data, keyExtractor, emptyMessage = 'Tida
  </TableHeader>
  <TableBody>
  {data.map((item) => (
- <TableRow key={keyExtractor(item)}>
+ <TableRow key={keyExtractor(item)} className={rowClassName?.(item)}>
           {columns.map((col) => {
             // SAFETY: item is generic T; access via col.key fallback when col.render is absent.
             const cellContent = col.render ? col.render(item) : String((item as any)[col.key] ?? '');

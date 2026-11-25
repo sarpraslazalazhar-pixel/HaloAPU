@@ -35,6 +35,8 @@ class TicketMessagePosted implements ShouldBroadcastNow
             'admin_id' => $log->admin_id,
             'aksi' => $log->aksi,
             'catatan' => $log->catatan,
+            'is_edited' => (bool) $log->is_edited,
+            'edited_at' => $log->edited_at?->toIso8601String(),
             'timestamp' => $log->timestamp?->toIso8601String(),
             'admin' => $log->admin ? [
                 'id' => $log->admin->id,

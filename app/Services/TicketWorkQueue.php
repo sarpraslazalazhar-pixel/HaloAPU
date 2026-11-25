@@ -250,9 +250,6 @@ class TicketWorkQueue
 
             $calendar = new SlaCalculator;
             $at = Carbon::now()->microsecond(0);
-            if (! $calendar->isWithinWorkingHours($at)) {
-                throw new InvalidArgumentException('Pertukaran tiket antrean hanya dapat dilakukan pada jam kerja.');
-            }
 
             $holders = Ticket::where('assigned_admin_id', $snapshotAdminId)
                 ->whereKeyNot($locked->id)
@@ -336,6 +333,7 @@ class TicketWorkQueue
                 : "Diprioritaskan dari antrean oleh {$actorName}.";
 
             self::writeLog($locked, $actor->id, $readyStatus, $note, $at);
+            self::recordOvertimeIfNeeded($locked, $actor->id, $at, $calendar);
             self::notifyStatusChange($locked);
 
             $activated = $locked->fresh();
@@ -1072,6 +1070,35 @@ class TicketWorkQueue
                     ->whereNotNull('work_hours_resume_status')
                     ->whereNull('assignment_queued_at')))
             ->lockForUpdate()->first(['id']) !== null;
+    }
+
+    /**
+     * Catat log lembur sekali per periode tutup agar cron jam kerja tidak menjeda
+     * ulang tiket yang baru diaktifkan atau diperbarui statusnya di luar jam kerja.
+     */
+    public static function recordOvertimeIfNeeded(Ticket $locked, ?int $actorId, Carbon $at, SlaCalculator $calendar): void
+    {
+        $hours = $calendar->workingHoursState($at);
+        if ($hours['is_open']) {
+            return;
+        }
+
+        $alreadyRecorded = TicketLog::where('ticket_id', $locked->id)
+            ->where('aksi', 'work_hours_overtime_resumed')
+            ->when($hours['closed_since'] !== null, fn ($q) => $q->where('timestamp', '>=', $hours['closed_since']))
+            ->exists();
+
+        if ($alreadyRecorded) {
+            return;
+        }
+
+        self::writeLog(
+            $locked,
+            $actorId,
+            'work_hours_overtime_resumed',
+            'Petugas melanjutkan tiket di luar jam kerja.',
+            $at,
+        );
     }
 
     private static function hasWorkHoursLog(Ticket $ticket, ?Carbon $closedSince): bool

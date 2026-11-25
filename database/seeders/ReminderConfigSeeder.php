@@ -40,6 +40,18 @@ class ReminderConfigSeeder extends Seeder
                 'channel_aktif' => ['in_app', 'email'],
                 'aktif' => true,
             ],
+            [
+                'jenis_reminder' => 'ai_briefing_daily',
+                'lead_time_value' => 0,
+                'channel_aktif' => ['in_app'],
+                'aktif' => true,
+            ],
+            [
+                'jenis_reminder' => 'ai_briefing_weekly',
+                'lead_time_value' => 0,
+                'channel_aktif' => ['in_app'],
+                'aktif' => true,
+            ],
         ];
 
         foreach ($defaults as $config) {

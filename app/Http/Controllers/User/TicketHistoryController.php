@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Inertia\Inertia;
 
 class TicketHistoryController extends Controller
@@ -269,6 +270,76 @@ class TicketHistoryController extends Controller
         app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.replied');
 
         return redirect()->back()->with('success', 'Balasan berhasil dikirim.');
+    }
+
+    public function updateReply(Request $request, Ticket $ticket, TicketLog $log, TicketChatBridgeService $bridge)
+    {
+        if ((int) $log->ticket_id !== (int) $ticket->id) {
+            abort(404);
+        }
+
+        if ((int) $ticket->user_id !== (int) auth()->id()) {
+            abort(403);
+        }
+
+        if (strtolower((string) $log->aksi) !== 'balasan') {
+            $msg = 'Log sistem tidak dapat diedit.';
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 422)
+                : redirect()->back()->with('error', $msg);
+        }
+
+        if ($log->admin_id !== null) {
+            abort(403, 'Kamu tidak berhak mengedit komentar admin.');
+        }
+
+        if (TicketChatBridgeService::isTicketClosed($ticket)) {
+            $msg = 'Tiket sudah ditutup, komentar tidak dapat diedit.';
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 422)
+                : redirect()->back()->with('error', $msg);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'catatan' => ['required', 'string', 'max:5000'],
+        ]);
+
+        if ($validator->fails()) {
+            return $request->expectsJson()
+                ? response()->json([
+                    'message' => $validator->errors()->first('catatan'),
+                    'errors' => $validator->errors()->toArray(),
+                ], 422)
+                : redirect()->back()->withErrors($validator);
+        }
+
+        $validated = $validator->validated();
+
+        if (trim($validated['catatan']) === '') {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Komentar tidak boleh kosong.', 'errors' => ['catatan' => ['Komentar tidak boleh kosong.']]], 422)
+                : redirect()->back()->withErrors(['catatan' => 'Komentar tidak boleh kosong.']);
+        }
+
+        try {
+            $updated = $bridge->editTicketLog($ticket, $log, $validated['catatan']);
+        } catch (\InvalidArgumentException $e) {
+            return $request->expectsJson()
+                ? response()->json(['message' => $e->getMessage()], 422)
+                : redirect()->back()->with('error', $e->getMessage());
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Komentar berhasil diperbarui.',
+                'log' => $updated,
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Komentar berhasil diperbarui.');
     }
 
     public function acceptResult(Ticket $ticket)

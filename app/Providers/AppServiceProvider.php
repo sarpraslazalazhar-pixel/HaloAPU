@@ -190,6 +190,20 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        RateLimiter::for('ai-chat', function (Request $request) {
+            return Limit::perMinute(15)
+                ->by('ai-admin:' . ($request->user('admin')?->id ?? $request->ip()))
+                ->response(function (Request $request, array $headers) {
+                    $seconds = max(1, (int) ($headers['Retry-After'] ?? 60));
+
+                    return response()->json([
+                        'message' => "Terlalu banyak permintaan AI. Coba lagi dalam {$seconds} detik.",
+                        'error_code' => 'AI_RATE_LIMITED',
+                        'retry_after' => $seconds,
+                    ], 429, $headers);
+                });
+        });
+
         // Implicitly grant "Super Admin" role all permissions
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
             return $user->hasRole(['superadmin', 'Super Admin']) ? true : null;

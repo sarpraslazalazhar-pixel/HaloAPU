@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminManagementController;
 use App\Http\Controllers\Admin\AiBotController;
+use App\Http\Controllers\Admin\AiBriefingController;
 use App\Http\Controllers\Admin\AppReleaseController;
 use App\Http\Controllers\Admin\BulkTicketController;
 use App\Http\Controllers\Admin\CsatController as AdminCsatController;
@@ -130,6 +131,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/tiket/riwayat', [TicketHistoryController::class, 'index'])->name('tiket.riwayat');
     Route::get('/tiket/{ticket}', [TicketHistoryController::class, 'show'])->name('tiket.show');
     Route::post('/tiket/{ticket}/reply', [TicketHistoryController::class, 'reply'])->name('tiket.reply');
+    Route::patch('/tiket/{ticket}/balas/{log}', [TicketHistoryController::class, 'updateReply'])->name('tiket.reply.update');
     Route::post('/tiket/{ticket}/accept-result', [TicketHistoryController::class, 'acceptResult'])->name('tiket.accept-result');
     Route::post('/tiket/{ticket}/request-revision', [TicketHistoryController::class, 'requestRevision'])->name('tiket.request-revision');
     Route::post('/tiket/{ticket}/kembalikan-alat', [TicketHistoryController::class, 'kembalikanAlat'])->name('tiket.kembalikan-alat');
@@ -285,6 +287,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/booking-reminder', [SchedulerController::class, 'runBookingReminder'])->name('booking-reminder');
             Route::post('/pending-reminder', [SchedulerController::class, 'runPendingReminder'])->name('pending-reminder');
             Route::post('/csat-reminder', [SchedulerController::class, 'runCsatReminder'])->name('csat-reminder');
+            Route::post('/ai-briefing', [SchedulerController::class, 'runAiBriefing'])->name('ai-briefing');
             Route::post('/run-all', [SchedulerController::class, 'runAll'])->name('run-all');
         });
 
@@ -366,6 +369,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::get('/aktif', [TicketController::class, 'activeAssigned'])->name('aktif');
             Route::get('/{ticket}', [TicketController::class, 'show'])->name('show');
             Route::post('/{ticket}/reply', [TicketController::class, 'reply'])->name('reply');
+            Route::patch('/{ticket}/balas/{log}', [TicketController::class, 'updateReply'])->name('reply.update');
             Route::patch('/{ticket}/assign', [TicketController::class, 'assignOperator'])->name('assign');
             Route::patch('/{ticket}/status', [TicketController::class, 'updateStatus'])->name('status');
             Route::post('/{ticket}/csat', [TicketController::class, 'storeCsat'])->name('csat.store');
@@ -395,8 +399,17 @@ Route::prefix('admin')->name('admin.')->group(function () {
         });
 
         // HaloAPU AI (Admin)
-        Route::get('/ai', [AiBotController::class, 'index'])->name('ai-bot.index');
-        Route::post('/ai/chat', [AiBotController::class, 'chat'])->name('ai-bot.chat');
+        Route::prefix('ai')->name('ai-bot.')->group(function () {
+            Route::get('/', [AiBotController::class, 'index'])->name('index');
+            Route::post('/sessions', [AiBotController::class, 'createSession'])->name('sessions.store');
+            Route::get('/sessions/{conversation}', [AiBotController::class, 'showSession'])->name('sessions.show');
+            Route::patch('/sessions/{conversation}', [AiBotController::class, 'renameSession'])->name('sessions.update');
+            Route::delete('/sessions/{conversation}', [AiBotController::class, 'deleteSession'])->name('sessions.destroy');
+            Route::get('/sessions/{conversation}/export-pdf', [AiBotController::class, 'exportPdf'])->name('sessions.export-pdf');
+            Route::post('/chat', [AiBotController::class, 'chat'])->middleware('throttle:ai-chat')->name('chat');
+            Route::post('/briefings/generate', [AiBriefingController::class, 'generate'])->middleware('throttle:ai-chat')->name('briefings.generate');
+            Route::get('/briefings/{briefing}', [AiBotController::class, 'showBriefing'])->name('briefings.show');
+        });
 
         // Laravel Pulse Redirect (Admin)
         Route::get('/pulse', function () {

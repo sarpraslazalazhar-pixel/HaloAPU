@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import axios from 'axios';
 import { useForm, usePage } from '@inertiajs/react';
-import { 
-  Send, Paperclip, MessageSquare, Clock, 
-  ExternalLink, X, Loader2, Image as ImageIcon, FileText 
+import {
+  Send, Paperclip, MessageSquare, Clock, Pencil,
+  ExternalLink, X, Loader2, Image as ImageIcon, FileText
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { formatDateId } from '@/lib/utils';
@@ -40,14 +41,15 @@ interface TicketChatPageProps {
   auth?: {
     admin?: { id?: number } | null;
   };
-  [key: string]: unknown;
 }
 
 interface TicketChatBoxProps {
   ticket: TicketChatSummary;
   isAdmin?: boolean;
+  currentAdminId?: number | null;
   currentAdminName?: string;
   replyRoute: string;
+  editReplyRoute?: string;
   downloadRoute?: string;
   viewRoute?: string;
   canReply?: boolean;
@@ -57,7 +59,9 @@ interface TicketChatBoxProps {
 export function TicketChatBox({
   ticket,
   isAdmin = false,
+  currentAdminId: currentAdminIdProp,
   replyRoute,
+  editReplyRoute,
   downloadRoute = 'admin.tiket.download',
   viewRoute = 'admin.tiket.view',
   canReply = true,
@@ -77,26 +81,34 @@ export function TicketChatBox({
 
   const { data, setData, post, processing, reset, errors } = useForm({
     catatan: '',
+    // SAFETY: New reply form always starts with an empty File array.
     general_attachments: [] as File[],
     _method: 'post',
   });
 
-  // Entries that arrived over the websocket, merged with the server-rendered ones.
-  const [liveLogs, setLiveLogs] = useState<TicketLogItem[]>([]);
+  // Local timeline state synced with server props and updated via inline edits / Echo.
+  const [localLogs, setLocalLogs] = useState<TicketLogItem[]>(ticket.logs || []);
+  const [editingLogId, setEditingLogId] = useState<number | null>(null);
+  const [editText, setEditText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState('');
 
   useEffect(() => {
-    setLiveLogs([]);
+    setLocalLogs(ticket.logs || []);
+  }, [ticket.logs]);
+
+  useEffect(() => {
+    setEditingLogId(null);
+    setEditText('');
+    setEditError('');
   }, [ticket.id]);
 
   // Urutkan kronologis dari paling awal ke paling baru (chat style: paling baru di bawah)
   const sortedLogs = useMemo(() => {
-    const seen = new Set((ticket.logs || []).map((l: TicketLogItem) => l.id));
-    const merged = [...(ticket.logs || []), ...liveLogs.filter((l) => !seen.has(l.id))];
-
-    return merged.sort(
+    return [...localLogs].sort(
       (a: TicketLogItem, b: TicketLogItem) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
-  }, [ticket.logs, liveLogs]);
+  }, [localLogs]);
 
   const scrollToBottom = (smooth = true) => {
     if (messagesEndRef.current) {
@@ -110,17 +122,68 @@ export function TicketChatBox({
     }
   }, [sortedLogs.length]);
 
-  // Realtime: every timeline entry (reply, status change, mobile/SPARC reply) is
-  // broadcast by App\Models\TicketLog on the ticket channel.
+  // Realtime: every timeline entry (reply, status change, mobile/SPARC reply) and
+  // comment edit is broadcast on the ticket channel.
   useEffect(() => {
     if (!ticket?.id) return;
 
     return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
       '.TicketMessagePosted': ({ log }) => {
-        setLiveLogs((prev) => (prev.some((l) => l.id === log.id) ? prev : [...prev, log]));
+        setLocalLogs((prev) => (prev.some((l) => l.id === log.id) ? prev : [...prev, log]));
+      },
+      '.TicketMessageEdited': ({ log }) => {
+        setLocalLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, ...log } : l)));
       },
     });
   }, [ticket?.id]);
+
+  const handleSaveEdit = async (log: TicketLogItem) => {
+    if (!editReplyRoute || savingEdit) return;
+
+    const trimmed = editText.trim();
+
+    if (!trimmed) {
+      setEditError('Komentar tidak boleh kosong.');
+
+      return;
+    }
+
+    setSavingEdit(true);
+    setEditError('');
+
+    try {
+      const response = await axios.patch<{ log?: Partial<TicketLogItem> }>(
+        route(editReplyRoute, [ticket.id, log.id]),
+        { catatan: trimmed }
+      );
+
+      const updatedLog = response.data?.log;
+
+      setLocalLogs((prev) =>
+        prev.map((item) =>
+          item.id === log.id
+            ? {
+                ...item,
+                ...updatedLog,
+                catatan: updatedLog?.catatan ?? trimmed,
+                is_edited: true,
+                edited_at: updatedLog?.edited_at ?? new Date().toISOString(),
+              }
+            : item
+        )
+      );
+      setEditingLogId(null);
+      setEditText('');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.message || err.response?.data?.errors?.catatan?.[0] || 'Gagal memperbarui komentar.'
+        : 'Gagal memperbarui komentar.';
+
+      setEditError(message);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
 
   const handleScroll = () => {
     if (!chatContainerRef.current) return;
@@ -131,6 +194,7 @@ export function TicketChatBox({
 
   const handleSend = (e: React.SyntheticEvent) => {
     e.preventDefault();
+
     if (!data.catatan.trim() && data.general_attachments.length === 0) return;
 
     post(route(replyRoute, ticket.id), {
@@ -201,25 +265,40 @@ export function TicketChatBox({
     const adminName = log.admin?.name || log.admin?.username || 'Admin';
 
     if (act === 'dibuat' || act === 'open') return `Tiket dibuat oleh ${ticket.user?.name || ticket.user?.username || 'Pengguna'}`;
+
     if (act === 'on_proses') return `Status diubah menjadi Diproses oleh ${adminName}`;
+
     if (act === 'pending') return `Status diubah menjadi Ditunda oleh ${adminName}`;
+
     if (act === 'solve' || act === 'selesai') return `Tiket diselesaikan oleh ${adminName}`;
+
     if (act === 'reject') return `Tiket ditolak oleh ${adminName}`;
+
     if (act === 'dibatalkan') return `Tiket dibatalkan`;
+
     if (act === 'assign_operator') return `Penugasan operator oleh ${adminName}`;
+
     if (act === 'revisi' || act === 'need_revision') return `Permintaan revisi diajukan`;
+
     if (act === 'accepted') return `Hasil tiket diterima oleh pengguna`;
+
     if (act === 'alat_dikembalikan') return `Alat telah ditandai dikembalikan`;
+
     if (act === 'work_hours_paused') return 'Tiket ditunda karena jam kerja berakhir';
+
     if (act === 'work_hours_queued') return 'Tiket tetap antre di luar jam kerja';
+
     if (act === 'work_hours_resumed') return 'Tiket dilanjutkan setelah jam kerja buka';
+
     if (act === 'work_hours_overtime_resumed') return 'Tiket dilanjutkan di luar jam kerja';
 
     return log.catatan || act;
   };
 
-  const { auth } = usePage<TicketChatPageProps>().props;
-  const currentAdminId = auth?.admin?.id ?? null;
+  // SAFETY: Inertia page props include the shared auth object.
+  const { auth } = usePage().props as TicketChatPageProps;
+  const currentAdminId = currentAdminIdProp ?? auth?.admin?.id ?? null;
+
   const requesterLabel =
     ticket.user?.name ||
     ticket.user?.username ||
@@ -227,7 +306,7 @@ export function TicketChatBox({
     ticket.created_by_admin?.username ||
     'Pemohon Tiket';
 
-  const isClosed = ['solve', 'reject', 'dibatalkan'].includes(String(ticket.status || '').toLowerCase());
+  const isClosed = ['solve', 'selesai', 'reject', 'dibatalkan'].includes(String(ticket.status || '').toLowerCase());
 
   return (
     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs flex flex-col h-[650px] max-h-[85vh]">
@@ -299,14 +378,25 @@ export function TicketChatBox({
             // Balasan pesan
             const fromAdmin = log.admin_id !== null;
             const isAdminSubmittedTicket = Boolean(ticket.created_by_admin_id || ticket.created_by_admin?.id);
+
             const isMe = isAdmin
               ? isAdminSubmittedTicket && currentAdminId !== null
                 ? Number(log.admin_id) === Number(currentAdminId)
                 : fromAdmin
               : !fromAdmin;
+
             const senderDisplayName = fromAdmin
               ? (log.admin?.name || log.admin?.username || 'Admin')
               : requesterLabel;
+
+            const canEditLog =
+              !isClosed &&
+              Boolean(editReplyRoute) &&
+              (isAdmin
+                ? log.admin_id !== null && currentAdminId !== null && Number(log.admin_id) === Number(currentAdminId)
+                : log.admin_id === null);
+
+            const isEditingThis = editingLogId === log.id;
 
             return (
               <div
@@ -320,10 +410,27 @@ export function TicketChatBox({
                 )}
 
                 <div className="max-w-[82%] sm:max-w-[70%] space-y-1">
-                  <div className={`flex items-center gap-1.5 text-[11px] text-slate-400 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                     <span className="font-semibold text-slate-600">{isMe ? 'Anda' : senderDisplayName}</span>
                     <span>•</span>
                     <span>{formatDateId(log.timestamp)}</span>
+                    {log.is_edited && <span className="italic text-slate-400">(diedit)</span>}
+                    {canEditLog && !isEditingThis && (
+                      <button
+                        type="button"
+                        title="Edit komentar"
+                        aria-label="Edit komentar"
+                        onClick={() => {
+                          setEditingLogId(log.id);
+                          setEditText(log.catatan || '');
+                          setEditError('');
+                        }}
+                        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-500 hover:bg-slate-200/70 hover:text-sky-700 transition-colors"
+                      >
+                        <Pencil className="w-3 h-3" />
+                        <span>Edit</span>
+                      </button>
+                    )}
                   </div>
 
                   <div
@@ -333,7 +440,57 @@ export function TicketChatBox({
                         : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
                     }`}
                   >
-                    <p>{log.catatan}</p>
+                    {isEditingThis ? (
+                      <div className="space-y-2 min-w-[220px] sm:min-w-[280px]">
+                        <textarea
+                          rows={3}
+                          value={editText}
+                          disabled={savingEdit}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Escape') {
+                              e.preventDefault();
+                              setEditingLogId(null);
+                              setEditText('');
+                              setEditError('');
+                            }
+                          }}
+                          className="w-full rounded-lg border border-slate-300 bg-white p-2 text-xs sm:text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-sky-500 resize-y"
+                        />
+                        {editError && (
+                          <p className="rounded bg-rose-50 px-2 py-1 text-[11px] text-rose-700 border border-rose-200">
+                            {editError}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-end gap-1.5">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={savingEdit}
+                            onClick={() => {
+                              setEditingLogId(null);
+                              setEditText('');
+                              setEditError('');
+                            }}
+                            className="h-7 px-2.5 text-xs bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                          >
+                            Batal
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={savingEdit || !editText.trim()}
+                            onClick={() => handleSaveEdit(log)}
+                            className="h-7 px-2.5 text-xs bg-sky-700 hover:bg-sky-800 text-white"
+                          >
+                            {savingEdit ? 'Menyimpan...' : 'Simpan'}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p>{log.catatan}</p>
+                    )}
 
                     {/* Lampiran Pesan */}
                     {log.attachments && log.attachments.length > 0 && (
@@ -348,6 +505,7 @@ export function TicketChatBox({
                           {log.attachments
                             .filter((att) => {
                               const name = att.original_name || att.file_name || '';
+
                               return att.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif)$/i.test(name);
                             })
                             .map((att) => (
@@ -516,17 +674,23 @@ export function TicketChatBox({
                   className="hidden"
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
+
                     if (data.general_attachments.length + files.length > 3) {
                       alert('Maksimal hanya 3 lampiran.');
+
                       return;
                     }
+
                     const validFiles = files.filter((f) => {
                       if (f.size > MAX_ATTACHMENT_BYTES) {
                         alert(`${f.name} melebihi 3MB.`);
+
                         return false;
                       }
+
                       return true;
                     });
+
                     setData('general_attachments', [...data.general_attachments, ...validFiles]);
                     setAttachmentWarning('');
                     e.target.value = '';

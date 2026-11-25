@@ -8,10 +8,10 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketWorkHoursNotice, type WorkHoursInfo } from '@/Components/TicketWorkHoursNotice';
 import { TicketAttachmentList, type Attachment } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
-import { subscribe } from '@/lib/realtime';
+import { subscribe, type TicketEvents } from '@/lib/realtime';
 import type { FormField } from '@/types';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
-import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, Play, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare } from 'lucide-react';
+import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, Play, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare, UserCheck } from 'lucide-react';
 import EditTicketFormDialog from '@/Components/EditTicketFormDialog';
 import { TicketEditHistory, type EditHistoryEntry } from '@/Components/TicketEditHistory';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
@@ -84,6 +84,7 @@ interface TicketDetailProps {
   formFields?: FormField[];
   operators?: Array<{ id: number; name?: string; username?: string }>;
   isSubmittedByMe?: boolean;
+  isAssignedToMe?: boolean;
   canManage?: boolean;
   canCancelTicket?: boolean;
   canEditForm?: boolean;
@@ -96,7 +97,7 @@ interface AdminDetailPageProps {
   errors?: Record<string, string>;
 }
 
-export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, canActivateFromQueue = false, work_hours }: TicketDetailProps) {
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, isAssignedToMe: isAssignedToMeProp, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, canActivateFromQueue = false, work_hours }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as AdminDetailPageProps;
 
@@ -114,6 +115,10 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const isCreator = isSubmittedByMe !== undefined
     ? isSubmittedByMe
     : (ticket.created_by_admin_id != null && ticket.created_by_admin_id === auth?.admin?.id);
+
+  const isAssignedToMe = isAssignedToMeProp !== undefined
+    ? Boolean(isAssignedToMeProp)
+    : Boolean(auth?.admin?.id && ticket.assigned_admin_id != null && Number(ticket.assigned_admin_id) === Number(auth.admin.id));
 
   const showCsat = Boolean(isCreator)
     && ['solve', 'selesai'].includes(String(ticket.status || '').toLowerCase());
@@ -153,13 +158,16 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   useEffect(() => {
     if (!canManage || !ticket?.id) return;
 
-    return subscribe(`ticket.${ticket.id}`, {
+    return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
       '.TicketMessagePosted': ({ log }) => {
         const reloadActions = ['open', 'on_proses', 'pending', 'need_revision', 'solve', 'selesai', 'dibatalkan', 'reject'];
 
         if (log?.aksi && (log.aksi.startsWith('work_hours') || reloadActions.includes(log.aksi))) {
           router.reload({ only: ['ticket', 'work_hours'] });
         }
+      },
+      '.TicketMessageEdited': () => {
+        router.reload({ only: ['ticket'] });
       },
     });
   }, [canManage, ticket?.id]);
@@ -204,11 +212,23 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
   const { data: statusData, setData: setStatusData, patch: patchStatus, processing: processingStatus, errors: errorsStatus, reset: resetStatus } = useForm({ status: '', catatan: '' });
   const { data: priorityData, setData: setPriorityData, patch: patchPriority, processing: processingPriority, errors: errorsPriority } = useForm({ priority: ticket.priority || '' });
   const { data: assignData, setData: setAssignData, errors: errorsAssign } = useForm({ assigned_admin_id: ticket.assigned_admin_id || '' });
-  // SAFETY: Look up ticket transitions by status using keyof; fallback to empty array if unknown.
-  const transitions = (ticket?.status ? validTransitions[ticket.status as keyof typeof validTransitions] : undefined) || [];
   const isQueued = Boolean(ticket.assignment_queued_at);
   const isWorkHoursPaused = Boolean(work_hours?.resume_status) && !isQueued;
-  const hideStatusPicker = isQueued || isWorkHoursPaused;
+  const hideStatusPicker = isQueued;
+  const effectiveStatus = isWorkHoursPaused && work_hours?.resume_status ? work_hours.resume_status : ticket?.status;
+  // SAFETY: Look up ticket transitions by status using keyof; fallback to empty array if unknown.
+  const baseTransitions = (effectiveStatus ? validTransitions[effectiveStatus as keyof typeof validTransitions] : undefined) || [];
+
+  const transitions = isWorkHoursPaused
+    ? Array.from(new Set([
+        ...(['open', 'on_proses', 'need_revision'].includes(String(effectiveStatus || '').toLowerCase()) ? [String(effectiveStatus)] : []),
+        ...baseTransitions.filter((status) => status !== 'pending'),
+      ]))
+    : baseTransitions;
+
+  const canReply = !['solve', 'selesai', 'reject', 'dibatalkan'].includes(
+    String(ticket.status || '').toLowerCase()
+  );
 
   const focusChat = () => {
     setTab('chat');
@@ -282,7 +302,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     const selectedPriority = priorityData.priority || '';
     const isPriorityChanged = selectedPriority !== '' && selectedPriority !== currentPriority;
 
-    const selectedStatus = isQueued || isWorkHoursPaused ? '' : statusData.status;
+    const selectedStatus = isQueued ? '' : statusData.status;
 
     if (!selectedStatus && !isOperatorChanged && !isPriorityChanged) {
       alert('Silakan pilih status, operator, atau prioritas yang ingin diubah terlebih dahulu.');
@@ -293,14 +313,18 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     setIsSubmitting(true);
     const stop = () => setIsSubmitting(false);
 
-    const afterSuccess = (next: (updatedTicket?: TicketDetailData) => void) => (page: { props: unknown }) => {
+    const afterSuccess = (next: (updatedTicket?: TicketDetailData, nextWorkHours?: WorkHoursInfo | null) => void) => (page: { props: unknown }) => {
       // SAFETY: Inertia response props carry flash messages and updated ticket payload.
-      const { flash, ticket: updatedTicket } = page.props as { flash?: { error?: string }; ticket?: TicketDetailData };
+      const { flash, ticket: updatedTicket, work_hours: nextWorkHours } = page.props as {
+        flash?: { error?: string };
+        ticket?: TicketDetailData;
+        work_hours?: WorkHoursInfo | null;
+      };
 
       if (flash?.error) {
         stop();
       } else {
-        next(updatedTicket);
+        next(updatedTicket, nextWorkHours);
       }
     };
 
@@ -317,7 +341,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
       });
     };
 
-    const saveAssignment = (next: (updatedTicket?: TicketDetailData) => void) => {
+    const saveAssignment = (next: (updatedTicket?: TicketDetailData, nextWorkHours?: WorkHoursInfo | null) => void) => {
       router.patch(route('admin.tiket.assign', ticket.id), { assigned_admin_id: selectedAssignedId }, {
         preserveScroll: true,
         onSuccess: afterSuccess(next),
@@ -337,10 +361,10 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     };
 
     if (selectedStatus === 'on_proses' && isOperatorChanged) {
-      saveAssignment(updatedTicket => {
+      saveAssignment((updatedTicket, nextWorkHours) => {
         if (!updatedTicket) {
           stop();
-        } else if (updatedTicket.assignment_queued_at) {
+        } else if (updatedTicket.assignment_queued_at && (nextWorkHours?.is_open ?? true)) {
           setStatusData('status', '');
           savePriority();
         } else {
@@ -411,6 +435,38 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
    return stringValue;
  };
 
+ const renderOperatorAssignmentField = (optionalLabel: boolean) => (
+   <div className="space-y-2">
+     <label className="text-sm font-medium">
+       Tugaskan ke Operator {optionalLabel && <span className="text-xs text-slate-400 font-normal">(Opsional)</span>}
+     </label>
+     <select
+       className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+       value={assignData.assigned_admin_id}
+       onChange={e => setAssignData('assigned_admin_id', e.target.value)}
+     >
+       <option value="">-- Pilih Operator --</option>
+       {operators?.map((op) => (
+         <option key={op.id} value={op.id}>{op.name || op.username}</option>
+       ))}
+     </select>
+     {(errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id) && (
+       <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id}</p>
+     )}
+     {ticket.assigned_admin && (
+       <p className="flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
+         <span>Saat ini ditugaskan ke:</span>
+         <span className="font-semibold text-slate-700">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
+         {isAssignedToMe && (
+           <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+             Saya
+           </span>
+         )}
+       </p>
+     )}
+   </div>
+ );
+
  return (
    <AdminLayout title={`Detail Tiket #TKT-${formatTicketId(ticket.id)}`}>
      <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
@@ -422,6 +478,12 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
        <div className="flex min-w-0 flex-wrap items-center gap-2">
          <h1 className="text-xl sm:text-2xl font-bold whitespace-nowrap">#TKT-{formatTicketId(ticket.id)}</h1>
          <StatusBadge status={ticket.status} />
+         {isAssignedToMe && (
+           <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+             <UserCheck className="h-3.5 w-3.5" />
+             Ditugaskan ke Saya
+           </span>
+         )}
          {(ticket.edit_histories?.length ?? 0) > 0 && (
            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800">Diedit Admin</span>
          )}
@@ -501,10 +563,12 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
             <TicketChatBox
               ticket={ticket}
               isAdmin={true}
+              currentAdminId={auth?.admin?.id ?? null}
               replyRoute="admin.tiket.reply"
+              editReplyRoute="admin.tiket.reply.update"
               downloadRoute="admin.tiket.download"
               viewRoute="admin.tiket.view"
-              canReply={['solve', 'reject', 'dibatalkan'].indexOf(ticket.status) === -1}
+              canReply={canReply}
               chatUrl={`/admin/chat?ticket_id=${ticket.id}`}
             />
           </TabsContent>}
@@ -953,7 +1017,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                     </div>
                   )}
 
-                  {canActivateFromQueue && isQueued && Boolean(ticket.assigned_admin_id) && (work_hours?.is_open ?? true) && (
+                  {canActivateFromQueue && isQueued && Boolean(ticket.assigned_admin_id) && (
                     <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
                       <p className="text-xs text-blue-900">
                         Tiket ini sedang berada dalam antrean petugas. Aktifkan sekarang untuk memprioritaskan dan menjeda sementara tiket aktif petugas ke antrean terdepan.
@@ -977,6 +1041,23 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                       <span className="text-sm text-slate-500">Status Saat Ini:</span>
                       <div><StatusBadge status={ticket.status} /></div>
                     </div>
+
+                    {ticket.assigned_admin && !canAssignOperator && (
+                      <div className="space-y-1">
+                        <span className="text-sm text-slate-500">Ditugaskan ke:</span>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-semibold text-slate-800">
+                            {ticket.assigned_admin.name || ticket.assigned_admin.username}
+                          </span>
+                          {isAssignedToMe && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-100 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                              <UserCheck className="h-3 w-3" />
+                              Saya
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {transitions.length > 0 ? (
                       <>
@@ -1003,31 +1084,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                           </div>
                         )}
 
-                        {canAssignOperator && (
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">
-                              Tugaskan ke Operator <span className="text-xs text-slate-400 font-normal">(Opsional)</span>
-                            </label>
-                            <select
-                              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                              value={assignData.assigned_admin_id}
-                              onChange={e => setAssignData('assigned_admin_id', e.target.value)}
-                            >
-                              <option value="">-- Pilih Operator --</option>
-                              {operators?.map((op: any) => (
-                                <option key={op.id} value={op.id}>{op.name || op.username}</option>
-                              ))}
-                            </select>
-                            {(errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id) && (
-                              <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id}</p>
-                            )}
-                            {ticket.assigned_admin && (
-                              <p className="text-xs text-slate-500">
-                                Saat ini ditugaskan ke: <span className="font-semibold text-slate-700">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
-                              </p>
-                            )}
-                          </div>
-                        )}
+                        {canAssignOperator && renderOperatorAssignmentField(true)}
 
                         <div className="space-y-2">
                           <label className="text-sm font-medium">
@@ -1054,27 +1111,7 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                         <p className="text-sm text-slate-500">Tidak ada transisi status yang tersedia.</p>
                         {canAssignOperator && (
                           <div className="space-y-3">
-                            <div className="space-y-2">
-                              <label className="text-sm font-medium">Tugaskan ke Operator</label>
-                              <select
-                                className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
-                                value={assignData.assigned_admin_id}
-                                onChange={e => setAssignData('assigned_admin_id', e.target.value)}
-                              >
-                                <option value="">-- Pilih Operator --</option>
-                                {operators?.map((op: any) => (
-                                  <option key={op.id} value={op.id}>{op.name || op.username}</option>
-                                ))}
-                              </select>
-                              {(errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id) && (
-                                <p className="text-red-500 text-sm">{errorsAssign.assigned_admin_id || pageErrors?.assigned_admin_id}</p>
-                              )}
-                              {ticket.assigned_admin && (
-                                <p className="text-xs text-slate-500">
-                                  Saat ini ditugaskan ke: <span className="font-semibold text-slate-700">{ticket.assigned_admin.name || ticket.assigned_admin.username}</span>
-                                </p>
-                              )}
-                            </div>
+                            {renderOperatorAssignmentField(false)}
                             <Button type="submit" className="w-full" disabled={isSubmitting}>
                               {isSubmitting ? 'Menyimpan...' : 'Simpan Penugasan'}
                             </Button>

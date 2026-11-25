@@ -239,27 +239,155 @@ class TicketWorkHoursTest extends TestCase
         $this->assertCount(1, $userResumed);
     }
 
-    public function test_status_transition_cannot_bypass_work_hours_pause_when_closed_and_auto_resumes_when_open(): void
+    public function test_status_transition_works_outside_hours_prevents_same_period_repause_and_pauses_next_day(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-07-17 15:00:00'));
         $ticket = $this->ticket('on_proses', $this->operatorA->id);
         $this->tracking($ticket);
 
+        // Tiket dijeda karena jam kerja tutup (Jumat 16:00).
         Carbon::setTestNow(Carbon::parse('2026-07-17 16:00:00'));
         $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('pending', $ticket->fresh()->status);
+        $this->assertSame('on_proses', $ticket->fresh()->work_hours_resume_status);
 
+        // Di luar jam kerja (Jumat 17:00), admin/operator dapat langsung update status ke on_proses.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:00:00'));
         Sanctum::actingAs($this->superAdmin, ['*']);
         $this->postJson("/api/tickets/{$ticket->id}/status", ['status' => 'on_proses'])
-            ->assertStatus(422);
+            ->assertOk()
+            ->assertJsonPath('data.status', 'on_proses');
 
-        // Begitu jam kerja buka, transisi biasa otomatis melanjutkan jeda jam kerja dan berhasil.
-        Carbon::setTestNow(Carbon::parse('2026-07-20 09:00:00'));
+        $ticket->refresh();
+        $this->assertSame('on_proses', $ticket->status);
+        $this->assertNull($ticket->work_hours_resume_status);
+        $this->assertNull($ticket->slaTracking->paused_at);
+        $this->assertSame(1, $ticket->logs()->where('aksi', 'work_hours_overtime_resumed')->count());
+
+        // Cron 1 menit kemudian pada periode tutup yang sama tidak mem-pause ulang tiket lembur ini.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:01:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('on_proses', $ticket->fresh()->status);
+
+        // Tiket baru yang terbuat di luar jam kerja (status awal pending) juga bisa langsung dikerjakan saat slot kosong.
+        $newOutOfHours = $this->ticket('pending', $this->operatorB->id);
+        $newOutOfHours->update(['assignment_resume_status' => 'open']);
+        $this->tracking($newOutOfHours, ['paused_at' => Carbon::parse('2026-07-17 17:01:00')]);
+
+        $this->actingAs($this->operatorB, 'admin')
+            ->patch(route('admin.tiket.status', $newOutOfHours), ['status' => 'on_proses'])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Status tiket berhasil diubah.');
+
+        $newOutOfHours->refresh();
+        $this->assertSame('on_proses', $newOutOfHours->status);
+        $this->assertNull($newOutOfHours->assignment_resume_status);
+        $this->assertNull($newOutOfHours->slaTracking->paused_at);
+        $this->assertSame(1, $newOutOfHours->logs()->where('aksi', 'work_hours_overtime_resumed')->count());
+
+        // Cron pada periode tutup yang sama tidak menjeda tiket baru tersebut.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:02:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('on_proses', $newOutOfHours->fresh()->status);
+
+        // Pada periode tutup hari kerja berikutnya (Senin 16:00), cron kembali menjeda tiket aktif.
+        Carbon::setTestNow(Carbon::parse('2026-07-20 16:00:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('pending', $ticket->fresh()->status);
+        $this->assertSame('on_proses', $ticket->fresh()->work_hours_resume_status);
+        $this->assertSame('pending', $newOutOfHours->fresh()->status);
+
+        // Di luar jam kerja, tiket jeda tersebut juga tetap bisa langsung diselesaikan (solve).
+        Carbon::setTestNow(Carbon::parse('2026-07-20 17:00:00'));
+        Sanctum::actingAs($this->superAdmin, ['*']);
         $this->postJson("/api/tickets/{$ticket->id}/status", ['status' => 'solve'])
             ->assertOk()
             ->assertJsonPath('data.status', 'solve');
 
         $this->assertSame('solve', $ticket->fresh()->status);
         $this->assertNull($ticket->fresh()->work_hours_resume_status);
+    }
+
+    public function test_assigned_idle_queued_ticket_can_be_activated_outside_hours_preserving_booking_sla_while_busy_stays_422(): void
+    {
+        // Buat tiket baru di luar jam kerja dengan jadwal booking/form deadline tetap.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:00:00'));
+        $scheduledDeadline = Carbon::parse('2026-07-21 17:00:00');
+
+        $webQueued = $this->ticket('pending');
+        $webQueued->update(['assignment_resume_status' => 'open']);
+        $this->tracking($webQueued, [
+            'paused_at' => Carbon::parse('2026-07-17 17:00:00'),
+            'sla_resolution_starts_at' => Carbon::parse('2026-07-21 09:00:00'),
+            'sla_resolution_base_deadline' => $scheduledDeadline,
+            'sla_resolution_deadline' => $scheduledDeadline,
+        ]);
+        $webSla = $webQueued->fresh()->slaTracking;
+
+        // Assign pasif ke operatorA yang sedang kosong -> masuk antrean luar jam kerja.
+        TicketWorkQueue::assign($webQueued, $this->operatorA, $this->superAdmin);
+        $webQueued->refresh();
+        $this->assertSame('pending', $webQueued->status);
+        $this->assertNotNull($webQueued->assignment_queued_at);
+
+        // Karena slot operatorA kosong di luar jam kerja, ubah status ke on_proses via Web berhasil.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:10:00'));
+        $this->actingAs($this->operatorA, 'admin')
+            ->patch(route('admin.tiket.status', $webQueued), ['status' => 'on_proses'])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Status tiket berhasil diubah.');
+
+        $webQueued->refresh();
+        $webSla->refresh();
+        $this->assertSame('on_proses', $webQueued->status);
+        $this->assertNull($webQueued->assignment_queued_at);
+        $this->assertNull($webQueued->assignment_resume_status);
+        $this->assertNull($webSla->paused_at);
+        $this->assertTrue($webSla->sla_resolution_deadline->equalTo($scheduledDeadline));
+        $this->assertSame(1, $webQueued->logs()->where('aksi', 'work_hours_overtime_resumed')->count());
+
+        // Cron 1 menit kemudian tidak mem-pause ulang.
+        Carbon::setTestNow(Carbon::parse('2026-07-17 17:11:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('on_proses', $webQueued->fresh()->status);
+
+        // Sekarang operatorA sedang aktif memegang $webQueued; tiket antrean ke-2 ditolak 422 jika dipaksa on_proses.
+        $busyQueued = $this->ticket('pending');
+        $busyQueued->update(['assignment_resume_status' => 'open']);
+        $this->tracking($busyQueued, ['paused_at' => Carbon::parse('2026-07-17 17:12:00')]);
+        TicketWorkQueue::assign($busyQueued, $this->operatorA, $this->superAdmin);
+
+        Sanctum::actingAs($this->operatorA, ['*']);
+        $this->postJson("/api/tickets/{$busyQueued->id}/status", ['status' => 'on_proses'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Petugas masih menangani tiket lain. Tiket tetap menunggu giliran.');
+        $this->assertSame('pending', $busyQueued->fresh()->status);
+        $this->assertNotNull($busyQueued->fresh()->assignment_queued_at);
+
+        // Sementara operatorB yang slotnya kosong bisa mengaktifkan tiket antreannya via API di luar jam kerja.
+        $apiQueued = $this->ticket('pending');
+        $apiQueued->update(['assignment_resume_status' => 'open']);
+        $this->tracking($apiQueued, [
+            'paused_at' => Carbon::parse('2026-07-17 17:12:00'),
+            'sla_resolution_starts_at' => Carbon::parse('2026-07-21 09:00:00'),
+            'sla_resolution_base_deadline' => $scheduledDeadline,
+            'sla_resolution_deadline' => $scheduledDeadline,
+        ]);
+        $apiSla = $apiQueued->fresh()->slaTracking;
+        TicketWorkQueue::assign($apiQueued, $this->operatorB, $this->superAdmin);
+
+        Sanctum::actingAs($this->operatorB, ['*']);
+        $this->postJson("/api/tickets/{$apiQueued->id}/status", ['status' => 'on_proses'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'on_proses');
+
+        $apiQueued->refresh();
+        $apiSla->refresh();
+        $this->assertSame('on_proses', $apiQueued->status);
+        $this->assertNull($apiQueued->assignment_queued_at);
+        $this->assertNull($apiSla->paused_at);
+        $this->assertTrue($apiSla->sla_resolution_deadline->equalTo($scheduledDeadline));
+        $this->assertSame(1, $apiQueued->logs()->where('aksi', 'work_hours_overtime_resumed')->count());
     }
 
     public function test_api_detail_exposes_work_hours_only_for_affected_tickets(): void

@@ -198,28 +198,48 @@ class TicketQueueSwapTest extends TestCase
         Notification::assertSentTo($this->requesterA, TicketWorkHoursNotification::class);
     }
 
-    public function test_swap_is_rejected_outside_working_hours_without_mutating_tickets(): void
+    public function test_swap_succeeds_outside_working_hours_and_survives_same_closed_period_cron(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-07-20 09:00:00'));
         $ticketA = $this->createTicket($this->requesterA, 'Sedang', 'on_proses', $this->operator->id);
         $ticketB = $this->createTicket($this->requesterB, 'Urgen');
         TicketWorkQueue::assign($ticketB, $this->operator, $this->coordinator);
 
-        // Di luar jam kerja (17:00).
+        // Di luar jam kerja (17:00): swap Web berhasil.
         Carbon::setTestNow(Carbon::parse('2026-07-20 17:00:00'));
         $this->actingAs($this->operator, 'admin')
             ->post(route('admin.tiket.activate-from-queue', $ticketB->id))
             ->assertRedirect()
-            ->assertSessionHas('error', 'Pertukaran tiket antrean hanya dapat dilakukan pada jam kerja.');
+            ->assertSessionHas('success', 'Tiket antrean berhasil dijadikan tiket aktif.');
 
+        $ticketA->refresh();
+        $ticketB->refresh();
+        $this->assertSame('pending', $ticketA->status);
+        $this->assertNotNull($ticketA->assignment_queued_at);
+        $this->assertSame('open', $ticketB->status);
+        $this->assertNull($ticketB->assignment_queued_at);
+        $this->assertSame(1, $ticketB->logs()->where('aksi', 'work_hours_overtime_resumed')->count());
+
+        // Cron 1 menit kemudian pada periode tutup yang sama tidak mem-pause ulang tiket hasil swap.
+        Carbon::setTestNow(Carbon::parse('2026-07-20 17:01:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('open', $ticketB->fresh()->status);
+
+        // Swap balik via API di luar jam kerja juga berhasil.
+        Carbon::setTestNow(Carbon::parse('2026-07-20 17:05:00'));
         Sanctum::actingAs($this->operator, ['*']);
-        $this->postJson("/api/tickets/{$ticketB->id}/activate-from-queue")
-            ->assertStatus(422)
-            ->assertJsonPath('message', 'Pertukaran tiket antrean hanya dapat dilakukan pada jam kerja.');
+        $this->postJson("/api/tickets/{$ticketA->id}/activate-from-queue")
+            ->assertOk()
+            ->assertJsonPath('message', 'Tiket antrean berhasil dijadikan tiket aktif.');
 
         $this->assertSame('on_proses', $ticketA->fresh()->status);
         $this->assertSame('pending', $ticketB->fresh()->status);
         $this->assertNotNull($ticketB->fresh()->assignment_queued_at);
+        $this->assertSame(1, $ticketA->logs()->where('aksi', 'work_hours_overtime_resumed')->count());
+
+        Carbon::setTestNow(Carbon::parse('2026-07-20 17:06:00'));
+        $this->artisan('tickets:work-hours')->assertExitCode(0);
+        $this->assertSame('on_proses', $ticketA->fresh()->status);
     }
 
     public function test_unauthorized_admin_cannot_swap_another_operators_queue(): void

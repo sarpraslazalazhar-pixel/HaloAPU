@@ -18,6 +18,8 @@ const JENIS_LABELS = {
   sla: 'Peringatan SLA Breach (100%)',
   pending_lama: 'Tiket Pending Lama',
   csat: 'CSAT Belum Diisi',
+  ai_briefing_daily: 'Briefing AI Harian',
+  ai_briefing_weekly: 'Briefing AI Mingguan',
 } satisfies Record<string, string>;
 
 const LEAD_TIME_UNITS = {
@@ -26,6 +28,15 @@ const LEAD_TIME_UNITS = {
   sla: 'otomatis (100% SLA)',
   pending_lama: 'hari pending',
   csat: 'hari setelah solve',
+  ai_briefing_daily: 'otomatis (Hari kerja 08:05)',
+  ai_briefing_weekly: 'otomatis (Senin 08:15)',
+} satisfies Record<string, string>;
+
+const AUTO_SCHEDULE_LABELS = {
+  sla_half: 'Otomatis (50% dari SLA)',
+  sla: 'Otomatis (100% SLA Breach)',
+  ai_briefing_daily: 'Otomatis (Hari kerja 08:05)',
+  ai_briefing_weekly: 'Otomatis (Senin 08:15)',
 } satisfies Record<string, string>;
 
 export default function ReminderConfigIndex({ configs }: Props) {
@@ -113,9 +124,12 @@ export default function ReminderConfigIndex({ configs }: Props) {
 									}
 								</TableCell>
 								<TableCell>
-									{config.jenis_reminder === 'sla' || config.jenis_reminder === 'sla_half' ? (
+									{config.jenis_reminder in AUTO_SCHEDULE_LABELS ? (
 										<span className="text-sm text-muted-foreground italic">
-											{config.jenis_reminder === 'sla_half' ? 'Otomatis (50% dari SLA)' : 'Otomatis (100% SLA Breach)'}
+											{
+												// SAFETY: Narrowed by `in AUTO_SCHEDULE_LABELS` check above.
+												AUTO_SCHEDULE_LABELS[config.jenis_reminder as keyof typeof AUTO_SCHEDULE_LABELS]
+											}
 										</span>
 									) : (
 										<div className="flex items-center gap-2">

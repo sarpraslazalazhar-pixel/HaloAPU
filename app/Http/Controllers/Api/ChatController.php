@@ -10,6 +10,8 @@ use App\Models\Message;
 use App\Models\MessageRead;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\TicketChatBridgeService;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\DB;
@@ -201,6 +203,30 @@ class ChatController extends Controller
         ], 201);
     }
 
+    /** Edit a chat message owned by the authenticated actor. */
+    public function update(Request $request, Message $message)
+    {
+        $validated = $request->validate([
+            'body' => ['required', 'string', 'max:5000'],
+        ]);
+
+        try {
+            $updated = TicketChatBridgeService::editChatMessage($message, $request->user(), $validated['body']);
+        } catch (AuthorizationException) {
+            return response()->json(['message' => 'Anda tidak berhak mengedit pesan ini.'], 403);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'message' => $e->getMessage(),
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $this->presentMessage($updated->load(['sender', 'attachments', 'ticket', 'replyTo', 'reads'])),
+        ], 200);
+    }
+
     /** Read receipts for a conversation. */
     public function read(Request $request, Conversation $conversation)
     {
@@ -279,6 +305,7 @@ class ChatController extends Controller
             ] : null,
             'body' => $msg->body,
             'is_edited' => (bool) $msg->is_edited,
+            'edited_at' => $msg->edited_at?->toIso8601String(),
             'attachments' => $msg->attachments->map(fn ($att) => [
                 'id' => $att->id,
                 'file_name' => $att->file_name,

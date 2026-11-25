@@ -123,6 +123,7 @@ class Ticket extends Model
     protected $casts = [
         'form_data' => 'array',
         'user_id' => 'integer',
+        'assigned_admin_id' => 'integer',
         'divisi_id' => 'integer',
         'org_unit_id' => 'integer',
         'jabatan_id' => 'integer',

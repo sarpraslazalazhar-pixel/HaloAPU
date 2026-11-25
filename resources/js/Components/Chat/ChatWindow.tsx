@@ -240,6 +240,19 @@ export function ChatWindow({
     setSelectedTicket(conversation?.ticket_id ? null : initialTicket);
   }, [initialTicket, conversation?.ticket_id]);
 
+  const isTicketRoom = conversation?.type === 'ticket';
+  const normalizedTicketStatus = (conversation?.ticket?.status || '').toLowerCase();
+
+  const isTicketClosed =
+    isTicketRoom &&
+    ['solve', 'selesai', 'reject', 'dibatalkan'].includes(normalizedTicketStatus);
+
+  useEffect(() => {
+    if (isTicketClosed) {
+      setEditingMessage(null);
+    }
+  }, [isTicketClosed]);
+
   // Handle Realtime Echo Listener
   useEffect(() => {
     if (!conversation?.id) return;
@@ -463,17 +476,33 @@ export function ChatWindow({
     if (!conversation?.id || isSending) return;
 
     if (editingMessage) {
+      if (isTicketClosed) {
+        toast.error('Tiket sudah ditutup, pesan tidak dapat diedit.');
+
+        return;
+      }
+
+      const trimmedEdit = inputText.trim();
+
+      if (!trimmedEdit) {
+        toast.error('Pesan tidak boleh kosong.');
+
+        return;
+      }
+
       // Edit existing message
+      setIsSending(true);
+
       try {
         const updateUrl = isAdmin
           ? route('admin.chat.messages.update', { message: editingMessage.id })
           : route('chat.messages.update', { message: editingMessage.id });
 
-        await axios.put(updateUrl, { body: inputText });
+        await axios.put(updateUrl, { body: trimmedEdit });
 
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === editingMessage.id ? { ...m, body: inputText, is_edited: true } : m
+            m.id === editingMessage.id ? { ...m, body: trimmedEdit, is_edited: true } : m
           )
         );
 
@@ -481,7 +510,9 @@ export function ChatWindow({
         setInputText('');
         toast.success('Pesan diperbarui');
       } catch (err: any) {
-        toast.error(err.response?.data?.error || 'Gagal memperbarui pesan');
+        toast.error(err.response?.data?.error || err.response?.data?.message || 'Gagal memperbarui pesan');
+      } finally {
+        setIsSending(false);
       }
 
       return;
@@ -600,12 +631,6 @@ export function ChatWindow({
       </div>
     );
   }
-
-  const normalizedTicketStatus = (conversation.ticket?.status || '').toLowerCase();
-
-  const isTicketClosed =
-    conversation.type === 'ticket' &&
-    ['solve', 'selesai', 'reject', 'dibatalkan'].includes(normalizedTicketStatus);
 
   const currentTicketStatusMeta = conversation.ticket?.status
     ? ticketStatusLabel(conversation.ticket.status)
@@ -1053,7 +1078,7 @@ export function ChatWindow({
                         <Copy className="h-3.5 w-3.5" />
                       </button>
                     )}
-                    {isSelf && !isReadByOthers && msg.body && (
+                    {isSelf && !isTicketClosed && (isTicketRoom || !isReadByOthers) && msg.body && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1525,7 +1550,24 @@ export function ChatWindow({
       )}
 
       {/* Right-Click Context Menu Popup */}
-      {contextMenu && (
+      {contextMenu && (() => {
+        const isContextSelf =
+          contextMenu.message.sender_id === currentUser.id &&
+          ((currentUser.type === 'user' && contextMenu.message.sender_type.includes('User')) ||
+            (currentUser.type === 'admin' && contextMenu.message.sender_type.includes('Admin')));
+
+        const isContextReadByOthers = Boolean(
+          contextMenu.message.reads?.some((r) => {
+            const isSender =
+              r.user_id === contextMenu.message.sender_id &&
+              ((contextMenu.message.sender_type?.includes('User') && r.user_type?.includes('User')) ||
+                (contextMenu.message.sender_type?.includes('Admin') && r.user_type?.includes('Admin')));
+
+            return !isSender;
+          })
+        );
+
+        return (
         <div
           style={{
             top: Math.min(contextMenu.y, (typeof window !== 'undefined' ? window.innerHeight : 600) - 180),
@@ -1559,7 +1601,7 @@ export function ChatWindow({
             </button>
           )}
 
-          {contextMenu.message.sender_id === currentUser.id && contextMenu.message.body && (
+          {isContextSelf && !isTicketClosed && (isTicketRoom || !isContextReadByOthers) && contextMenu.message.body && (
             <button
               onClick={() => {
                 setEditingMessage(contextMenu.message);
@@ -1573,7 +1615,7 @@ export function ChatWindow({
             </button>
           )}
 
-          {(contextMenu.message.sender_id === currentUser.id || isAdmin) && (
+          {(isContextSelf || isAdmin) && (
             <button
               onClick={() => {
                 handleDeleteMessage(contextMenu.message.id);
@@ -1585,7 +1627,8 @@ export function ChatWindow({
             </button>
           )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

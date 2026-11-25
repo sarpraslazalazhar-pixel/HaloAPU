@@ -31,6 +31,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
@@ -85,6 +86,19 @@ class TicketController extends Controller
                     ->orWhereHas('user', fn ($u) => $u->where('username', 'like', "%{$search}%")->orWhere('name', 'like', "%{$search}%"))
                     ->orWhereHas('subUnit', fn ($s) => $s->where('nama_layanan', 'like', "%{$search}%"));
             });
+        }
+
+        $assignedToMeCount = (clone $query)
+            ->where('tickets.assigned_admin_id', $admin->id)
+            ->count();
+
+        $assignment = $request->input('assignment');
+        if ($assignment === 'me') {
+            $query->where('tickets.assigned_admin_id', $admin->id);
+        } elseif ($assignment === 'unassigned') {
+            $query->whereNull('tickets.assigned_admin_id');
+        } elseif (is_scalar($assignment) && ctype_digit((string) $assignment) && (int) $assignment > 0) {
+            $query->where('tickets.assigned_admin_id', (int) $assignment);
         }
 
         $tickets = $query->latest()->paginate(10)->withQueryString();
@@ -180,15 +194,61 @@ class TicketController extends Controller
             ->sortBy('name')
             ->values();
 
+        $isSuperAdmin = $admin->hasRole(['superadmin', 'Super Admin', 'super_admin', 'Superadmin'])
+            || str_contains(strtolower($admin->username ?? ''), 'superadmin');
+
+        if ($isSuperAdmin) {
+            $operators = Admin::query()->get(['id', 'name', 'username']);
+        } else {
+            $adminUnitIds = $admin->units()->pluck('units.id')->filter()->all();
+            $adminSubUnits = $admin->subUnits()->get(['sub_units.id', 'sub_units.unit_id']);
+            $subUnitIds = $adminSubUnits->pluck('id')->filter()->all();
+            $unitIds = array_values(array_unique(array_merge(
+                $adminUnitIds,
+                $adminSubUnits->pluck('unit_id')->filter()->all(),
+            )));
+
+            $assignedIds = Ticket::query()
+                ->where(function ($q) use ($admin) {
+                    $q->accessibleBy($admin)->orWhere(fn ($sub) => $sub->submittedBy($admin));
+                })
+                ->whereNotNull('assigned_admin_id')
+                ->distinct()
+                ->pluck('assigned_admin_id')
+                ->filter()
+                ->all();
+
+            $operators = Admin::query()
+                ->where(function ($q) use ($admin, $unitIds, $subUnitIds, $assignedIds) {
+                    $q->where('id', $admin->id);
+                    if (! empty($unitIds)) {
+                        $q->orWhereHas('units', fn ($u) => $u->whereIn('units.id', $unitIds));
+                    }
+                    if (! empty($subUnitIds)) {
+                        $q->orWhereHas('subUnits', fn ($su) => $su->whereIn('sub_units.id', $subUnitIds));
+                    }
+                    if (! empty($assignedIds)) {
+                        $q->orWhereIn('id', $assignedIds);
+                    }
+                })
+                ->get(['id', 'name', 'username']);
+        }
+
+        $operators = $operators
+            ->sortBy(fn (Admin $op) => strtolower($op->name ?: $op->username))
+            ->values();
+
         return Inertia::render('Admin/Tiketing/Index', [
             'tickets' => $tickets,
-            'filters' => $request->only(['unit_id', 'sub_unit_id', 'status', 'date_from', 'date_to', 'divisi_id', 'org_unit_id', 'search']),
+            'filters' => $request->only(['unit_id', 'sub_unit_id', 'status', 'date_from', 'date_to', 'divisi_id', 'org_unit_id', 'search', 'assignment']),
             'units' => $units,
             'divisiList' => $divisiList,
             'orgUnitList' => $orgUnitList,
+            'operators' => $operators,
             'currentTab' => $tab,
             'canBulkCreate' => $admin->hasRole(['Admin', 'superadmin', 'Super Admin']),
             'operatorLoads' => $operatorLoads,
+            'assignedToMeCount' => $assignedToMeCount,
             'tabCounts' => [
                 'masuk' => $activeCount('accessibleBy'),
                 'saya_ajukan' => $activeCount('submittedBy'),
@@ -289,7 +349,7 @@ class TicketController extends Controller
         $ticket = TicketWorkQueue::syncTicketIfWorkHoursOpen($ticket);
 
         $ticket->load([
-            'user', 'user.divisi', 'user.orgUnit', 'user.jabatan', 'createdByAdmin',
+            'user', 'user.divisi', 'user.orgUnit', 'user.jabatan', 'createdByAdmin', 'assignedAdmin:id,name,username',
             'unit', 'subUnit', 'orgDivisi', 'orgUnit', 'jabatan',
             'attachments.field', 'attachments.log', 'attachments.log.admin', 'slaTracking',
             'booking', 'csat',
@@ -312,6 +372,7 @@ class TicketController extends Controller
             'formFields' => $formFields,
             'operators' => $operators,
             'isSubmittedByMe' => $ticket->isSubmittedBy($admin),
+            'isAssignedToMe' => $ticket->assigned_admin_id !== null && (int) $ticket->assigned_admin_id === (int) $admin->id,
             'canManage' => $canManage,
             'canCancelTicket' => $ticket->canBeCancelledByAdmin($admin),
             'canEditForm' => $canManage && in_array(strtolower((string) $ticket->status), TicketFormEditor::EDITABLE_STATUSES, true),
@@ -974,5 +1035,76 @@ class TicketController extends Controller
         app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.replied');
 
         return redirect()->back()->with('success', 'Balasan berhasil dikirim.');
+    }
+
+    public function updateReply(Request $request, Ticket $ticket, TicketLog $log, TicketChatBridgeService $bridge)
+    {
+        if ((int) $log->ticket_id !== (int) $ticket->id) {
+            abort(404);
+        }
+
+        $admin = auth('admin')->user();
+        if (! $ticket->isAccessibleBy($admin)) {
+            abort(403, 'Kamu tidak berhak mengedit komentar pada tiket ini.');
+        }
+
+        if (strtolower((string) $log->aksi) !== 'balasan') {
+            $msg = 'Log sistem tidak dapat diedit.';
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 422)
+                : redirect()->back()->with('error', $msg);
+        }
+
+        if ($log->admin_id === null || (int) $log->admin_id !== (int) $admin->id) {
+            abort(403, 'Kamu hanya dapat mengedit komentarmu sendiri.');
+        }
+
+        if (TicketChatBridgeService::isTicketClosed($ticket)) {
+            $msg = 'Tiket sudah ditutup, komentar tidak dapat diedit.';
+
+            return $request->expectsJson()
+                ? response()->json(['message' => $msg], 422)
+                : redirect()->back()->with('error', $msg);
+        }
+
+        $validator = Validator::make($request->all(), [
+            'catatan' => ['required', 'string', 'max:5000'],
+        ]);
+
+        if ($validator->fails()) {
+            return $request->expectsJson()
+                ? response()->json([
+                    'message' => $validator->errors()->first('catatan'),
+                    'errors' => $validator->errors()->toArray(),
+                ], 422)
+                : redirect()->back()->withErrors($validator);
+        }
+
+        $validated = $validator->validated();
+
+        if (trim($validated['catatan']) === '') {
+            return $request->expectsJson()
+                ? response()->json(['message' => 'Komentar tidak boleh kosong.', 'errors' => ['catatan' => ['Komentar tidak boleh kosong.']]], 422)
+                : redirect()->back()->withErrors(['catatan' => 'Komentar tidak boleh kosong.']);
+        }
+
+        try {
+            $updated = $bridge->editTicketLog($ticket, $log, $validated['catatan']);
+        } catch (\InvalidArgumentException $e) {
+            return $request->expectsJson()
+                ? response()->json(['message' => $e->getMessage()], 422)
+                : redirect()->back()->with('error', $e->getMessage());
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Komentar berhasil diperbarui.',
+                'log' => $updated,
+            ]);
+        }
+
+        return redirect()->back()->with('success', 'Komentar berhasil diperbarui.');
     }
 }

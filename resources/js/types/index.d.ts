@@ -63,9 +63,10 @@ export interface FormField {
 export type FormFieldValue = string | number | boolean | string[] | null | undefined;
 
 export interface EquipmentLoanSummary {
- status_peminjaman: 'Menunggu Persetujuan' | 'Menunggu Diserahkan' | 'Sedang Dipinjam' | 'Belum Dikembalikan' | 'Dikembalikan';
+ status_peminjaman: 'Menunggu Persetujuan' | 'Menunggu Diserahkan' | 'Sedang Dipinjam' | 'Belum Dikembalikan' | 'Menunggu Konfirmasi Kembali' | 'Dikembalikan';
  is_overdue_schedule: boolean;
  is_due_today: boolean;
+ is_return_reported?: boolean;
  alat_list: string[];
  alat_text: string;
  rentang_waktu: string;
@@ -99,11 +100,14 @@ export interface Ticket {
  penerima_alat?: string | null;
  kondisi_serah?: string | null;
  catatan_serah?: string | null;
+ pengembalian_diajukan_at?: string | null;
+ catatan_pengajuan_kembali?: string | null;
  dikembalikan_at?: string | null;
  diterima_kembali_oleh_admin_id?: number | null;
  kondisi_kembali?: string | null;
  catatan_kembali?: string | null;
  lampiran_serah_count?: number;
+ lampiran_pengajuan_kembali_count?: number;
  lampiran_kembali_count?: number;
  diserahkan_oleh_admin?: TicketAdminActor | null;
  diterima_kembali_oleh_admin?: TicketAdminActor | null;

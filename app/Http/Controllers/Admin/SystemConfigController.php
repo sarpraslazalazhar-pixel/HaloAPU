@@ -67,6 +67,7 @@ class SystemConfigController extends Controller
                 'id' => $release->id,
                 'platform' => $release->platform,
                 'channel' => $release->channel,
+                'target_audience' => AppRelease::normalizeTargetAudience($release->target_audience),
                 'version_name' => $release->version_name,
                 'build_number' => (int) $release->build_number,
                 'min_supported_build_number' => (int) $release->min_supported_build_number,

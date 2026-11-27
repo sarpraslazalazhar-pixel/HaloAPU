@@ -290,9 +290,10 @@ class MonitorController extends Controller
                 'diserahkanOlehAdmin:id,name,username',
                 'penerimaAlatUser:id,name,username',
                 'diterimaKembaliOlehAdmin:id,name,username',
-                'logs' => fn ($q) => $q->whereIn('aksi', ['alat_diserahkan', 'alat_dikembalikan'])->with('attachments'),
+                'logs' => fn ($q) => $q->whereIn('aksi', ['alat_diserahkan', 'pengajuan_kembali_alat', 'alat_dikembalikan'])->with('attachments'),
             ])
             ->orderByRaw('CASE WHEN dikembalikan_at IS NULL THEN 0 ELSE 1 END ASC')
+            ->orderByRaw('CASE WHEN dikembalikan_at IS NULL AND pengembalian_diajukan_at IS NOT NULL THEN 0 ELSE 1 END ASC')
             ->orderBy('created_at', 'desc')
             ->limit(100)
             ->get();
@@ -329,6 +330,7 @@ class MonitorController extends Controller
         }
 
         $statusPriority = [
+            EquipmentLoanService::STATUS_MENUNGGU_KONFIRMASI_KEMBALI => 5,
             EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN => 4,
             EquipmentLoanService::STATUS_SEDANG_DIPINJAM => 3,
             EquipmentLoanService::STATUS_MENUNGGU_DISERAHKAN => 2,
@@ -401,11 +403,14 @@ class MonitorController extends Controller
                 'penerima_alat' => $t->penerima_alat,
                 'kondisi_serah' => $t->kondisi_serah,
                 'catatan_serah' => $t->catatan_serah,
+                'pengembalian_diajukan_at' => $t->pengembalian_diajukan_at ? $t->pengembalian_diajukan_at->format('d M Y H:i') : null,
+                'catatan_pengajuan_kembali' => $t->catatan_pengajuan_kembali,
                 'dikembalikan_at' => $t->dikembalikan_at ? $t->dikembalikan_at->format('d M Y H:i') : null,
                 'diterima_kembali_oleh' => $t->diterimaKembaliOlehAdmin ? ($t->diterimaKembaliOlehAdmin->name ?: $t->diterimaKembaliOlehAdmin->username) : null,
                 'kondisi_kembali' => $t->kondisi_kembali,
                 'catatan_kembali' => $t->catatan_kembali,
                 'lampiran_serah_count' => count($loanAttachments['serah']),
+                'lampiran_pengajuan_kembali_count' => count($loanAttachments['pengajuan_kembali']),
                 'lampiran_kembali_count' => count($loanAttachments['kembali']),
                 'is_overdue_schedule' => $summary['is_overdue_schedule'],
                 'can_serahkan' => $canManage && $isFinished && $t->diserahkan_at === null && $t->dikembalikan_at === null,

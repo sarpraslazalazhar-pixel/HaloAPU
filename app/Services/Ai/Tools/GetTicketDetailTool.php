@@ -7,6 +7,7 @@ use App\Models\Conversation;
 use App\Models\FormField;
 use App\Models\Ticket;
 use App\Services\Ai\AiAccessScope;
+use App\Services\DocumentContentService;
 
 class GetTicketDetailTool implements AiToolInterface
 {
@@ -61,6 +62,7 @@ class GetTicketDetailTool implements AiToolInterface
             'slaTracking',
             'booking',
             'csat',
+            'attachments:id,ticket_id,field_id,ticket_log_id,original_name,file_path,mime_type,file_size',
         ])->find((int) $cleanId);
 
         if (! $ticket || ! $ticket->isAccessibleBy($admin)) {
@@ -162,6 +164,21 @@ class GetTicketDetailTool implements AiToolInterface
                 ->all();
         }
 
+        $attachments = $ticket->attachments
+            ->map(function ($att): array {
+                $name = (string) ($att->original_name ?: basename((string) $att->file_path));
+
+                return [
+                    'id' => (int) $att->id,
+                    'original_name' => $name,
+                    'mime_type' => $att->mime_type,
+                    'file_size' => (int) ($att->file_size ?? 0),
+                    'readable' => DocumentContentService::isReadableByAi($name, $att->mime_type),
+                ];
+            })
+            ->values()
+            ->all();
+
         return new AiToolResult([
             'ticket_id' => (int) $ticket->id,
             'formatted_id' => $ticket->formatted_id,
@@ -178,6 +195,7 @@ class GetTicketDetailTool implements AiToolInterface
             'created_at' => $ticket->created_at?->copy()->timezone('Asia/Jakarta')->format('Y-m-d H:i'),
             'updated_at' => $ticket->updated_at?->copy()->timezone('Asia/Jakarta')->format('Y-m-d H:i'),
             'form_fields' => $mappedForm,
+            'attachments' => $attachments,
             'sla' => $slaData,
             'booking' => $bookingData,
             'csat' => $csatData,

@@ -130,14 +130,17 @@ Route::middleware('auth')->group(function () {
     // Ticket History
     Route::get('/tiket/riwayat', [TicketHistoryController::class, 'index'])->name('tiket.riwayat');
     Route::get('/tiket/{ticket}', [TicketHistoryController::class, 'show'])->name('tiket.show');
+    Route::get('/tiket/{ticket}/logs/poll', [TicketHistoryController::class, 'pollLogs'])->name('tiket.logs.poll');
     Route::post('/tiket/{ticket}/reply', [TicketHistoryController::class, 'reply'])->name('tiket.reply');
     Route::patch('/tiket/{ticket}/balas/{log}', [TicketHistoryController::class, 'updateReply'])->name('tiket.reply.update');
     Route::post('/tiket/{ticket}/accept-result', [TicketHistoryController::class, 'acceptResult'])->name('tiket.accept-result');
     Route::post('/tiket/{ticket}/request-revision', [TicketHistoryController::class, 'requestRevision'])->name('tiket.request-revision');
+    Route::post('/tiket/{ticket}/lapor-kembali-alat', [TicketHistoryController::class, 'laporKembaliAlat'])->name('tiket.lapor-kembali-alat');
     Route::post('/tiket/{ticket}/kembalikan-alat', [TicketHistoryController::class, 'kembalikanAlat'])->name('tiket.kembalikan-alat');
     Route::patch('/tiket/{ticket}/batal', [TicketHistoryController::class, 'cancel'])->name('tiket.batal');
     Route::get('/tiket/download/{attachment}', [TicketHistoryController::class, 'download'])->name('tiket.download');
     Route::get('/tiket/view/{attachment}', [TicketHistoryController::class, 'viewAttachment'])->name('tiket.view');
+    Route::get('/tiket/lampiran/{attachment}/preview', [TicketHistoryController::class, 'previewAttachment'])->name('tiket.preview');
 
     // Profil User
     Route::put('/profil', [ProfileController::class, 'update'])->name('profil.update');
@@ -163,6 +166,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/conversations/{conversation}/typing', [ChatController::class, 'typing'])->name('typing');
         Route::get('/download/{attachment}', [ChatController::class, 'downloadAttachment'])->name('download');
         Route::get('/view/{attachment}', [ChatController::class, 'viewAttachment'])->name('view');
+        Route::get('/attachments/{attachment}/preview', [ChatController::class, 'previewAttachment'])->name('preview');
     });
 
     // Notifications User
@@ -366,9 +370,11 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/', [TicketController::class, 'store'])->name('store');
             Route::get('/download/{attachment}', [TicketController::class, 'downloadAttachment'])->name('download');
             Route::get('/view/{attachment}', [TicketController::class, 'viewAttachment'])->name('view');
+            Route::get('/lampiran/{attachment}/preview', [TicketController::class, 'previewAttachment'])->name('preview');
             Route::get('/aktif', [TicketController::class, 'activeAssigned'])->name('aktif');
             Route::get('/penerima-alat-options', [TicketController::class, 'loanRecipientOptions'])->name('penerima-alat-options');
             Route::get('/{ticket}', [TicketController::class, 'show'])->name('show');
+            Route::get('/{ticket}/logs/poll', [TicketController::class, 'pollLogs'])->name('logs.poll');
             Route::post('/{ticket}/reply', [TicketController::class, 'reply'])->name('reply');
             Route::patch('/{ticket}/balas/{log}', [TicketController::class, 'updateReply'])->name('reply.update');
             Route::patch('/{ticket}/assign', [TicketController::class, 'assignOperator'])->name('assign');
@@ -383,6 +389,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::patch('/{ticket}/cancel-booking', [TicketController::class, 'cancelBooking'])->name('cancel-booking');
             Route::patch('/{ticket}/batal', [TicketController::class, 'cancel'])->name('cancel');
             Route::patch('/{ticket}/serahkan-alat', [TicketController::class, 'serahkanAlat'])->name('serahkan-alat');
+            Route::post('/{ticket}/lapor-kembali-alat', [TicketController::class, 'laporKembaliAlat'])->name('lapor-kembali-alat');
             Route::patch('/{ticket}/kembalikan-alat', [TicketController::class, 'kembalikanAlat'])->name('kembalikan-alat');
         });
 
@@ -398,6 +405,7 @@ Route::prefix('admin')->name('admin.')->group(function () {
             Route::post('/conversations/{conversation}/typing', [App\Http\Controllers\Admin\ChatController::class, 'typing'])->name('typing');
             Route::get('/download/{attachment}', [App\Http\Controllers\Admin\ChatController::class, 'downloadAttachment'])->name('download');
             Route::get('/view/{attachment}', [App\Http\Controllers\Admin\ChatController::class, 'viewAttachment'])->name('view');
+            Route::get('/attachments/{attachment}/preview', [App\Http\Controllers\Admin\ChatController::class, 'previewAttachment'])->name('preview');
         });
 
         // HaloAPU AI (Admin)

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useForm, usePage } from '@inertiajs/react';
 import {
   Send, Paperclip, MessageSquare, Clock, Pencil,
-  ExternalLink, X, Loader2, Image as ImageIcon, FileText
+  ExternalLink, X, Loader2, FileSpreadsheet, FileText
 } from 'lucide-react';
 import { Button } from '@/Components/ui/button';
 import { formatDateId } from '@/lib/utils';
@@ -52,9 +52,15 @@ interface TicketChatBoxProps {
   editReplyRoute?: string;
   downloadRoute?: string;
   viewRoute?: string;
+  previewRoute?: string;
   canReply?: boolean;
   chatUrl?: string;
+  includeSystemLogs?: boolean;
+  managedRealtime?: boolean;
+  onLogEdited?: (log: TicketLogItem) => void;
 }
+
+const isChatReplyLog = (log: TicketLogItem): boolean => (log.aksi || '').toLowerCase() === 'balasan';
 
 export function TicketChatBox({
   ticket,
@@ -64,9 +70,14 @@ export function TicketChatBox({
   editReplyRoute,
   downloadRoute = 'admin.tiket.download',
   viewRoute = 'admin.tiket.view',
+  previewRoute,
   canReply = true,
   chatUrl,
+  includeSystemLogs = false,
+  managedRealtime = false,
+  onLogEdited,
 }: TicketChatBoxProps) {
+  const resolvedPreviewRoute = previewRoute ?? downloadRoute.replace('.download', '.preview');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true);
@@ -86,16 +97,23 @@ export function TicketChatBox({
     _method: 'post',
   });
 
-  // Local timeline state synced with server props and updated via inline edits / Echo.
-  const [localLogs, setLocalLogs] = useState<TicketLogItem[]>(ticket.logs || []);
+  // Local feed state synced with server props and updated via inline edits / Echo.
+  const [localLogs, setLocalLogs] = useState<TicketLogItem[]>(() => {
+    const base = ticket.logs || [];
+
+    return includeSystemLogs ? base : base.filter(isChatReplyLog);
+  });
+
   const [editingLogId, setEditingLogId] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [editError, setEditError] = useState('');
 
   useEffect(() => {
-    setLocalLogs(ticket.logs || []);
-  }, [ticket.logs]);
+    const base = ticket.logs || [];
+
+    setLocalLogs(includeSystemLogs ? base : base.filter(isChatReplyLog));
+  }, [ticket.logs, includeSystemLogs]);
 
   useEffect(() => {
     setEditingLogId(null);
@@ -105,10 +123,12 @@ export function TicketChatBox({
 
   // Urutkan kronologis dari paling awal ke paling baru (chat style: paling baru di bawah)
   const sortedLogs = useMemo(() => {
-    return [...localLogs].sort(
+    const filtered = includeSystemLogs ? localLogs : localLogs.filter(isChatReplyLog);
+
+    return [...filtered].sort(
       (a: TicketLogItem, b: TicketLogItem) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
     );
-  }, [localLogs]);
+  }, [localLogs, includeSystemLogs]);
 
   const scrollToBottom = (smooth = true) => {
     if (messagesEndRef.current) {
@@ -122,20 +142,21 @@ export function TicketChatBox({
     }
   }, [sortedLogs.length]);
 
-  // Realtime: every timeline entry (reply, status change, mobile/SPARC reply) and
-  // comment edit is broadcast on the ticket channel.
+  // Realtime: when not managed by parent `useTicketRealtime`, listen directly on ticket channel.
   useEffect(() => {
-    if (!ticket?.id) return;
+    if (managedRealtime || !ticket?.id) return;
 
     return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
       '.TicketMessagePosted': ({ log }) => {
+        if (!includeSystemLogs && !isChatReplyLog(log)) return;
+
         setLocalLogs((prev) => (prev.some((l) => l.id === log.id) ? prev : [...prev, log]));
       },
       '.TicketMessageEdited': ({ log }) => {
         setLocalLogs((prev) => prev.map((l) => (l.id === log.id ? { ...l, ...log } : l)));
       },
     });
-  }, [ticket?.id]);
+  }, [managedRealtime, ticket?.id, includeSystemLogs]);
 
   const handleSaveEdit = async (log: TicketLogItem) => {
     if (!editReplyRoute || savingEdit) return;
@@ -159,19 +180,16 @@ export function TicketChatBox({
 
       const updatedLog = response.data?.log;
 
-      setLocalLogs((prev) =>
-        prev.map((item) =>
-          item.id === log.id
-            ? {
-                ...item,
-                ...updatedLog,
-                catatan: updatedLog?.catatan ?? trimmed,
-                is_edited: true,
-                edited_at: updatedLog?.edited_at ?? new Date().toISOString(),
-              }
-            : item
-        )
-      );
+      const mergedLog: TicketLogItem = {
+        ...log,
+        ...updatedLog,
+        catatan: updatedLog?.catatan ?? trimmed,
+        is_edited: true,
+        edited_at: updatedLog?.edited_at ?? new Date().toISOString(),
+      };
+
+      setLocalLogs((prev) => prev.map((item) => (item.id === log.id ? mergedLog : item)));
+      onLogEdited?.(mergedLog);
       setEditingLogId(null);
       setEditText('');
     } catch (err: unknown) {
@@ -282,6 +300,10 @@ export function TicketChatBox({
 
     if (act === 'accepted') return `Hasil tiket diterima oleh pengguna`;
 
+    if (act === 'alat_diserahkan') return `Alat telah diserahkan`;
+
+    if (act === 'pengajuan_kembali_alat') return `Pemohon melaporkan alat sudah dikembalikan`;
+
     if (act === 'alat_dikembalikan') return `Alat telah ditandai dikembalikan`;
 
     if (act === 'work_hours_paused') return 'Tiket ditunda karena jam kerja berakhir';
@@ -353,16 +375,16 @@ export function TicketChatBox({
         className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/40"
       >
         {sortedLogs.length === 0 ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-12">
+          <div className="h-full flex flex-col items-center justify-center text-slate-400 text-xs py-12 text-center">
             <MessageSquare className="w-8 h-8 text-slate-300 mb-2 stroke-1" />
-            <p>Belum ada percakapan pada tiket ini.</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Kirim pesan pertama Anda di bawah.</p>
+            <p className="font-medium text-slate-500">Belum ada percakapan.</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Kirim pesan untuk memulai diskusi.</p>
           </div>
         ) : (
           sortedLogs.map((log: TicketLogItem) => {
-            const isBalasan = (log.aksi || '').toLowerCase() === 'balasan';
+            const isBalasan = isChatReplyLog(log);
 
-            // Jika bukan balasan (misal status diubah, tiket dibuat), tampilkan sebagai System Event Pill di tengah
+            // Jika includeSystemLogs aktif dan bukan balasan, tampilkan sebagai System Event Pill di tengah
             if (!isBalasan) {
               return (
                 <div key={log.id} className="flex flex-col items-center justify-center my-3">
@@ -375,28 +397,65 @@ export function TicketChatBox({
               );
             }
 
-            // Balasan pesan
-            const fromAdmin = log.admin_id !== null;
-            const isAdminSubmittedTicket = Boolean(ticket.created_by_admin_id || ticket.created_by_admin?.id);
+            // Balasan pesan: pisahkan Anda (kanan, biru), Admin/Petugas lain (kiri, indigo), & Pengaju (kiri, putih)
+            const fromAdmin = log.admin_id !== null && log.admin_id !== undefined;
+
+            const creatorAdminId = ticket.created_by_admin_id ?? ticket.created_by_admin?.id ?? null;
+
+            const isRequesterAdmin = Boolean(
+              fromAdmin &&
+              creatorAdminId !== null &&
+              creatorAdminId !== undefined &&
+              Number(log.admin_id) === Number(creatorAdminId)
+            );
 
             const isMe = isAdmin
-              ? isAdminSubmittedTicket && currentAdminId !== null
-                ? Number(log.admin_id) === Number(currentAdminId)
-                : fromAdmin
+              ? Boolean(
+                  fromAdmin &&
+                  currentAdminId !== null &&
+                  currentAdminId !== undefined &&
+                  Number(log.admin_id) === Number(currentAdminId)
+                )
               : !fromAdmin;
+
+            const isOtherAdmin = isAdmin && fromAdmin && !isMe && !isRequesterAdmin;
 
             const senderDisplayName = fromAdmin
               ? (log.admin?.name || log.admin?.username || 'Admin')
               : requesterLabel;
 
+            const roleBadgeLabel = isOtherAdmin
+              ? 'Admin'
+              : !isMe
+                ? (isAdmin
+                    ? (isRequesterAdmin ? 'Pengaju (Admin)' : 'Pengaju')
+                    : (isRequesterAdmin ? 'Pengaju' : 'Petugas'))
+                : null;
+
             const canEditLog =
               !isClosed &&
               Boolean(editReplyRoute) &&
               (isAdmin
-                ? log.admin_id !== null && currentAdminId !== null && Number(log.admin_id) === Number(currentAdminId)
-                : log.admin_id === null);
+                ? Boolean(fromAdmin && currentAdminId !== null && currentAdminId !== undefined && Number(log.admin_id) === Number(currentAdminId))
+                : !fromAdmin);
 
             const isEditingThis = editingLogId === log.id;
+
+            const avatarToneClass = isOtherAdmin
+              ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
+              : 'bg-slate-200 text-slate-700 border-slate-300';
+
+            const roleBadgeToneClass = isOtherAdmin
+              ? 'bg-indigo-100 text-indigo-700 border-indigo-200'
+              : (isAdmin || isRequesterAdmin)
+                ? 'bg-slate-100 text-slate-600 border-slate-200'
+                : 'bg-sky-100 text-sky-700 border-sky-200';
+
+            const bubbleToneClass = isMe
+              ? 'bg-blue-600 text-white rounded-br-xs'
+              : isOtherAdmin
+                ? 'bg-indigo-50 text-slate-800 border border-indigo-200 rounded-bl-xs'
+                : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs';
 
             return (
               <div
@@ -404,7 +463,7 @@ export function TicketChatBox({
                 className={`flex gap-2.5 items-end ${isMe ? 'justify-end' : 'justify-start'}`}
               >
                 {!isMe && (
-                  <div className="w-7 h-7 rounded-full bg-slate-200 text-slate-700 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-300">
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border ${avatarToneClass}`}>
                     {senderDisplayName.charAt(0).toUpperCase()}
                   </div>
                 )}
@@ -412,6 +471,11 @@ export function TicketChatBox({
                 <div className="max-w-[82%] sm:max-w-[70%] space-y-1">
                   <div className={`flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 px-1 ${isMe ? 'justify-end' : 'justify-start'}`}>
                     <span className="font-semibold text-slate-600">{isMe ? 'Anda' : senderDisplayName}</span>
+                    {roleBadgeLabel && (
+                      <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-[10px] font-semibold leading-none ${roleBadgeToneClass}`}>
+                        {roleBadgeLabel}
+                      </span>
+                    )}
                     <span>•</span>
                     <span>{formatDateId(log.timestamp)}</span>
                     {log.is_edited && <span className="italic text-slate-400">(diedit)</span>}
@@ -434,11 +498,7 @@ export function TicketChatBox({
                   </div>
 
                   <div
-                    className={`rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-xs whitespace-pre-wrap ${
-                      isMe
-                        ? 'bg-sky-600 text-white rounded-br-xs'
-                        : 'bg-white text-slate-800 border border-slate-200 rounded-bl-xs'
-                    }`}
+                    className={`rounded-2xl px-4 py-2.5 text-xs sm:text-sm leading-relaxed shadow-xs whitespace-pre-wrap ${bubbleToneClass}`}
                   >
                     {isEditingThis ? (
                       <div className="space-y-2 min-w-[220px] sm:min-w-[280px]">
@@ -494,8 +554,8 @@ export function TicketChatBox({
 
                     {/* Lampiran Pesan */}
                     {log.attachments && log.attachments.length > 0 && (
-                      <div className="mt-2.5 pt-2 border-t border-white/20 space-y-1.5">
-                        <p className={`text-[10px] font-semibold flex items-center gap-1 ${isMe ? 'text-sky-100' : 'text-slate-500'}`}>
+                      <div className={`mt-2.5 pt-2 border-t space-y-1.5 ${isMe ? 'border-white/20' : isOtherAdmin ? 'border-indigo-200/80' : 'border-slate-200'}`}>
+                        <p className={`text-[10px] font-semibold flex items-center gap-1 ${isMe ? 'text-blue-100' : isOtherAdmin ? 'text-indigo-700' : 'text-slate-500'}`}>
                           <Paperclip className="w-3 h-3" />
                           <span>{log.attachments.length} Berkas Lampiran</span>
                         </p>
@@ -534,10 +594,16 @@ export function TicketChatBox({
                             const name = att.original_name || att.file_name || 'Lampiran';
                             const isImg = att.mime_type?.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(name);
 
+                            const isSpreadsheet = att.mime_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                              || att.mime_type === 'application/vnd.ms-excel'
+                              || att.mime_type === 'text/csv'
+                              || att.mime_type === 'application/csv'
+                              || /\.(xls|xlsx|csv)$/i.test(name);
+
                             // Non-image files keep a compact row carrying the name.
                             if (isImg) return null;
 
-                            // Review in place: the viewer previews images/PDF/DOCX
+                            // Review in place: the viewer previews images/PDF/DOCX/spreadsheets
                             // instead of forcing a download.
                             return (
                               <AttachmentViewer
@@ -546,20 +612,28 @@ export function TicketChatBox({
                                   id: att.id,
                                   original_name: name,
                                   file_path: att.file_path,
+                                  mime_type: att.mime_type,
                                 }}
                                 viewRoute={viewRoute}
                                 downloadRoute={downloadRoute}
+                                previewRoute={resolvedPreviewRoute}
                               >
                                 <button
                                   type="button"
                                   title="Lihat lampiran"
                                   className={`w-full flex items-center gap-1.5 p-1.5 rounded-lg text-xs text-left transition-colors ${
                                     isMe
-                                      ? 'bg-sky-700/60 text-white hover:bg-sky-700/80'
-                                      : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
+                                      ? 'bg-blue-700/60 text-white hover:bg-blue-700/80'
+                                      : isOtherAdmin
+                                        ? 'bg-white text-slate-700 border border-indigo-200 hover:bg-indigo-100/70'
+                                        : 'bg-slate-50 text-slate-700 border border-slate-200 hover:bg-slate-100'
                                   }`}
                                 >
-                                  {isImg ? <ImageIcon className="w-3.5 h-3.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0" />}
+                                  {isSpreadsheet ? (
+                                    <FileSpreadsheet className={`w-3.5 h-3.5 shrink-0 ${isMe ? 'text-emerald-200' : 'text-emerald-600'}`} />
+                                  ) : (
+                                    <FileText className="w-3.5 h-3.5 shrink-0" />
+                                  )}
                                   <span className="truncate max-w-[170px] sm:max-w-[240px] text-[11px]">{name}</span>
                                 </button>
                               </AttachmentViewer>
@@ -670,7 +744,7 @@ export function TicketChatBox({
                 <input
                   type="file"
                   multiple
-                  accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                  accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv"
                   className="hidden"
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);

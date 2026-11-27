@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Head, router, useForm } from '@inertiajs/react';
 import UserLayout from '@/Layouts/UserLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -18,7 +18,7 @@ import { ConfirmDialog } from '@/Components/ConfirmDialog';
 import { EquipmentLoanCard } from '@/Components/EquipmentLoanCard';
 import ImageEditorModal from '@/Components/FormBuilder/ImageEditorModal';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/Components/ui/tabs';
-import { subscribe, type TicketEvents } from '@/lib/realtime';
+import { useTicketRealtime } from '@/hooks/useTicketRealtime';
 import type { EquipmentLoanSummary } from '@/types';
 
 
@@ -28,13 +28,14 @@ interface DetailProps {
  maxRevisions: number;
  work_hours?: WorkHoursInfo | null;
  isEquipmentLoan?: boolean;
+ canReportReturn?: boolean;
  loanSummary?: EquipmentLoanSummary | null;
- loanAttachments?: { serah: Attachment[]; kembali: Attachment[] } | null;
+ loanAttachments?: { serah: Attachment[]; pengajuan_kembali?: Attachment[]; kembali: Attachment[] } | null;
 }
 
 type AttachmentSelection = { file: File; index: number; form: 'reply' | 'rev' };
 
-export default function Detail({ ticket, formFields, maxRevisions, work_hours, isEquipmentLoan = false, loanSummary = null, loanAttachments = null }: DetailProps) {
+export default function Detail({ ticket, formFields, maxRevisions, work_hours, isEquipmentLoan = false, canReportReturn = false, loanSummary = null, loanAttachments = null }: DetailProps) {
 
  // SAFETY: general_attachments holds uploaded File instances for replies.
  const { data: replyData, setData: setReplyData, post: postReply, processing: processingReply, errors: errorsReply, reset: resetReply } = useForm({ catatan: '', general_attachments: [] as File[], _method: 'post' });
@@ -67,22 +68,26 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
    return () => window.clearInterval(timer);
  }, [work_hours]);
 
- useEffect(() => {
-   if (!ticket?.id) return;
-
-   return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
-     '.TicketMessagePosted': ({ log }) => {
-       const reloadActions = ['open', 'on_proses', 'pending', 'need_revision', 'solve', 'selesai', 'dibatalkan', 'reject', 'alat_diserahkan', 'alat_dikembalikan'];
-
-       if (log?.aksi && (log.aksi.startsWith('work_hours') || reloadActions.includes(log.aksi))) {
-         router.reload({ only: ['ticket', 'work_hours', 'loanSummary', 'loanAttachments'] });
-       }
-     },
-     '.TicketMessageEdited': () => {
-       router.reload({ only: ['ticket'] });
-     },
+ const handleMetaChanged = useCallback(() => {
+   router.reload({
+     only: ['ticket', 'work_hours', 'loanSummary', 'loanAttachments'],
    });
- }, [ticket?.id]);
+ }, []);
+
+ const { liveLogs, applyEditedLog } = useTicketRealtime({
+   ticketId: ticket?.id ?? null,
+   initialLogs: ticket?.logs ?? [],
+   initialStatus: ticket?.status ?? null,
+   initialAssignedAdminId: ticket?.assigned_admin_id ?? null,
+   pollUrl: ticket?.id ? route('tiket.logs.poll', ticket.id) : null,
+   enabled: Boolean(ticket?.id),
+   onMetaChanged: handleMetaChanged,
+ });
+
+ const ticketWithLiveLogs = useMemo(
+   () => ({ ...ticket, logs: liveLogs }),
+   [ticket, liveLogs]
+ );
 
  const focusChat = () => {
    setTab('chat');
@@ -236,8 +241,8 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
 
      return fieldAttachments && fieldAttachments.length > 0 ? (
        <div className="flex flex-col gap-2 mt-1">
-         {fieldAttachments.map((attachment: any, idx: number) => (
-           <AttachmentViewer key={idx} attachment={attachment} viewRoute="tiket.view" downloadRoute="tiket.download">
+         {fieldAttachments.map((attachment: any) => (
+           <AttachmentViewer key={attachment.id} attachment={attachment} viewRoute="tiket.view" downloadRoute="tiket.download" previewRoute="tiket.preview">
              <button type="button" className="text-blue-600 hover:underline flex items-center gap-1 text-sm text-left">
                <Eye className="w-4 h-4 flex-shrink-0" /> <span className="truncate">{attachment.original_name}</span>
              </button>
@@ -292,6 +297,16 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
       router.visit(route('tiket.riwayat'));
     }
   };
+
+  const chatReplyCount = useMemo(
+    () => liveLogs.filter((l) => String(l.aksi || '').toLowerCase() === 'balasan').length,
+    [liveLogs]
+  );
+
+  const systemLogCount = useMemo(
+    () => liveLogs.filter((l) => String(l.aksi || '').toLowerCase() !== 'balasan').length,
+    [liveLogs]
+  );
 
   return (
    <UserLayout title={`Tiket #TKT-${formatTicketId(ticket.id)}`}>
@@ -387,7 +402,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
                        <input
                          type="file"
                          multiple
-                         accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                         accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv"
                          className="hidden"
                          onChange={e => {
                            const files = Array.from(e.target.files || []);
@@ -443,6 +458,8 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
              loanAttachments={loanAttachments}
              downloadRoute="tiket.download"
              canManage={false}
+             canReportReturn={Boolean(canReportReturn)}
+             reportReturnRoute="tiket.lapor-kembali-alat"
            />
          </div>
        )}
@@ -453,6 +470,11 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
            <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
              <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
              <span>Pesan Chat</span>
+             {chatReplyCount > 0 && (
+               <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold leading-none text-sky-700">
+                 {chatReplyCount}
+               </span>
+             )}
            </TabsTrigger>
            <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Info className="h-3.5 w-3.5" />
@@ -461,6 +483,11 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
            <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Clock className="h-3.5 w-3.5" />
              <span>Jejak Tiket</span>
+             {systemLogCount > 0 && (
+               <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold leading-none text-slate-700">
+                 {systemLogCount}
+               </span>
+             )}
            </TabsTrigger>
            <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
              <Paperclip className="h-3.5 w-3.5" />
@@ -471,14 +498,17 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
          {/* TAB 0: CHAT & DISKUSI */}
          <TabsContent value="chat" id="chat-tiket" className="space-y-6" ref={chatPanelRef} tabIndex={-1}>
            <TicketChatBox
-             ticket={ticket}
+             ticket={ticketWithLiveLogs}
              isAdmin={false}
              replyRoute="tiket.reply"
              editReplyRoute="tiket.reply.update"
              downloadRoute="tiket.download"
              viewRoute="tiket.view"
+             previewRoute="tiket.preview"
              canReply={['solve', 'reject', 'dibatalkan', 'waiting_approval'].indexOf(ticket.status) === -1}
              chatUrl={`/chat?ticket=${ticket.id}`}
+             managedRealtime
+             onLogEdited={applyEditedLog}
            />
          </TabsContent>
 
@@ -566,7 +596,7 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
                            <input
                              type="file"
                              multiple
-                             accept=".jpg,.jpeg,.png,.pdf,.doc,.docx"
+                             accept=".jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv"
                              className="hidden"
                              onChange={e => {
                                const files = Array.from(e.target.files || []);
@@ -619,8 +649,8 @@ export default function Detail({ ticket, formFields, maxRevisions, work_hours, i
                </CardTitle>
              </CardHeader>
              <CardContent>
-               {ticket.logs?.length > 0 ? (
-                 <TicketTimeline logs={ticket.logs} />
+               {liveLogs.length > 0 ? (
+                 <TicketTimeline logs={liveLogs} excludeChatReplies />
                ) : (
                  <p className="text-xs text-slate-500">Belum ada aktivitas timeline.</p>
                )}

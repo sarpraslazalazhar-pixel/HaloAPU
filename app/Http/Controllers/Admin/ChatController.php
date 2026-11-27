@@ -13,6 +13,7 @@ use App\Models\Message;
 use App\Models\MessageRead;
 use App\Models\Ticket;
 use App\Services\ChatInboxService;
+use App\Services\DocumentContentService;
 use App\Services\TicketChatBridgeService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Http\Request;
@@ -228,7 +229,7 @@ class ChatController extends Controller
             'body' => 'nullable|string',
             'ticket_id' => 'nullable|exists:tickets,id',
             'reply_to_message_id' => 'nullable|exists:messages,id',
-            'attachment' => 'nullable|file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,zip',
+            'attachment' => 'nullable|file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,zip|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt,zip',
         ], [
             'attachment.max' => 'Ukuran file lampiran maksimal 3 MB.',
             'attachment.mimes' => 'Format file lampiran tidak diizinkan.',
@@ -291,7 +292,7 @@ class ChatController extends Controller
                     'message_id' => $message->id,
                     'file_name' => $file->getClientOriginalName(),
                     'file_path' => $path,
-                    'file_type' => $file->getClientMimeType(),
+                    'file_type' => $file->getMimeType() ?: 'application/octet-stream',
                     'file_size' => $file->getSize(),
                 ]);
             }
@@ -466,14 +467,28 @@ class ChatController extends Controller
 
         Gate::forUser($admin)->authorize('view', $message->conversation);
 
-        if (!Storage::disk('public')->exists($attachment->file_path)) {
+        return DocumentContentService::streamInlineOrDownload(
+            (string) $attachment->file_path,
+            (string) ($attachment->file_name ?: basename((string) $attachment->file_path)),
+            $attachment->file_type,
+        );
+    }
+
+    public function previewAttachment(ChatAttachment $attachment)
+    {
+        $admin = Auth::guard('admin')->user();
+        $message = $attachment->message;
+        if (! $message || ! $message->conversation) {
             abort(404, 'File tidak ditemukan');
         }
 
-        return response()->file(Storage::disk('public')->path($attachment->file_path), [
-            'Content-Type' => $attachment->file_type ?: Storage::disk('public')->mimeType($attachment->file_path),
-            'Content-Disposition' => 'inline; filename="'.$attachment->file_name.'"',
-        ]);
+        Gate::forUser($admin)->authorize('view', $message->conversation);
+
+        return DocumentContentService::previewSpreadsheetResponse(
+            (string) $attachment->file_path,
+            (string) ($attachment->file_name ?: basename((string) $attachment->file_path)),
+            $attachment->file_type,
+        );
     }
 
     protected function markConversationRead(Conversation $conversation, Admin $admin): int

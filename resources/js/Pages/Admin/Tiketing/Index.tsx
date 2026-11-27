@@ -48,10 +48,13 @@ interface Ticket {
  kondisi_serah?: string | null;
  catatan_serah?: string | null;
  diserahkan_oleh_admin?: TicketAdminActor | null;
+ pengembalian_diajukan_at?: string | null;
+ catatan_pengajuan_kembali?: string | null;
  dikembalikan_at?: string | null;
  kondisi_kembali?: string | null;
  catatan_kembali?: string | null;
  lampiran_serah_count?: number;
+ lampiran_pengajuan_kembali_count?: number;
  lampiran_kembali_count?: number;
  diterima_kembali_oleh_admin?: TicketAdminActor | null;
  loan_summary?: EquipmentLoanSummary | null;
@@ -104,6 +107,7 @@ const TABS = [
 
 const LOAN_STAGES = [
  { key: 'aktif', label: 'Perlu Tindakan' },
+ { key: 'menunggu_konfirmasi', label: 'Dilaporkan Kembali' },
  { key: 'menunggu_diserahkan', label: 'Menunggu Dikasih' },
  { key: 'sedang_dipinjam', label: 'Sedang Dipinjam' },
  { key: 'dikembalikan', label: 'Sudah Dikembalikan' },
@@ -458,6 +462,8 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
     const badgeStyle =
      statusPinjam === 'Dikembalikan'
       ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+      : statusPinjam === 'Menunggu Konfirmasi Kembali'
+      ? 'bg-indigo-100 text-indigo-800 border-indigo-200'
       : statusPinjam === 'Belum Dikembalikan'
       ? 'bg-rose-100 text-rose-800 border-rose-200'
       : statusPinjam === 'Sedang Dipinjam'
@@ -501,6 +507,24 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
         {t.catatan_serah && <div className="italic text-slate-500">&ldquo;{t.catatan_serah}&rdquo;</div>}
        </div>
       )}
+      {t.pengembalian_diajukan_at && !t.dikembalikan_at && (
+       <div className="text-indigo-900 bg-indigo-50/70 border border-indigo-200 rounded-md p-2 space-y-0.5">
+        <div className="font-semibold">
+         Dilaporkan kembali: {formatDateId(t.pengembalian_diajukan_at)}
+        </div>
+        {t.catatan_pengajuan_kembali && (
+         <div className="italic text-indigo-800">&ldquo;{t.catatan_pengajuan_kembali}&rdquo;</div>
+        )}
+        {(t.lampiran_pengajuan_kembali_count ?? 0) > 0 && (
+         <div className="pt-0.5">
+          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-medium">
+           <Paperclip className="w-2.5 h-2.5" />
+           {t.lampiran_pengajuan_kembali_count} lampiran pemohon
+          </span>
+         </div>
+        )}
+       </div>
+      )}
       {t.dikembalikan_at && (
        <div className="text-slate-600 space-y-0.5 pt-1 border-t border-slate-100">
         <div>
@@ -535,7 +559,7 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
    className: 'w-[280px]',
    render: (t: Ticket) => (
     <div className="flex flex-wrap items-center gap-1.5">
-     {t.can_serahkan && (
+     {t.can_serahkan && !t.pengembalian_diajukan_at && (
       <Button
        type="button"
        size="sm"
@@ -549,15 +573,16 @@ export default function TicketIndex({ tickets, filters, units, divisiList, orgUn
       <Button
        type="button"
        size="sm"
-       variant={t.can_serahkan ? 'outline' : 'default'}
+       variant={t.can_serahkan && !t.pengembalian_diajukan_at ? 'outline' : 'default'}
        className={
-        t.can_serahkan
+        t.can_serahkan && !t.pengembalian_diajukan_at
          ? 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
          : 'bg-emerald-600 hover:bg-emerald-700 text-white'
        }
        onClick={() => setReturnModalTicket(buildLoanModalTarget(t))}
       >
-       <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Kembalikan
+       <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+       {t.pengembalian_diajukan_at ? 'Konfirmasi Pengembalian' : 'Kembalikan'}
       </Button>
      )}
      <Button variant="outline" size="sm" onClick={() => router.get(route('admin.tiket.show', t.id))}>

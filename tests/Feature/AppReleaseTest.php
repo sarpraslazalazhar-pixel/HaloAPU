@@ -502,4 +502,339 @@ class AppReleaseTest extends TestCase
             @unlink($tempCredsPath);
         }
     }
+
+    public function test_smart_active_track_and_bearer_token_audience_resolution(): void
+    {
+        $admin = Admin::factory()->create();
+        $activeUser = User::factory()->create(['is_active' => true]);
+        $inactiveUser = User::factory()->create(['is_active' => false]);
+
+        $adminToken = $admin->createToken('mobile-admin')->plainTextToken;
+        $activeUserToken = $activeUser->createToken('mobile-user')->plainTextToken;
+        $inactiveUserToken = $inactiveUser->createToken('mobile-inactive')->plainTextToken;
+
+        $baseAttributes = [
+            'platform' => 'android',
+            'channel' => 'production',
+            'download_url' => 'https://github.com/org/repo/releases/download/v1.0.0/app.apk',
+            'sha256' => self::VALID_SHA256,
+            'is_active' => false,
+        ];
+
+        $release14All = AppRelease::create(array_merge($baseAttributes, [
+            'target_audience' => AppRelease::TARGET_ALL,
+            'version_name' => '1.0.4',
+            'build_number' => 14,
+        ]))->activate();
+
+        $release15Admins = AppRelease::create(array_merge($baseAttributes, [
+            'target_audience' => AppRelease::TARGET_ADMINS,
+            'version_name' => '1.0.5-admin',
+            'build_number' => 15,
+        ]))->activate();
+
+        // Both #14 ('all') and #15 ('admins') remain active concurrently
+        $this->assertTrue($release14All->fresh()->is_active);
+        $this->assertTrue($release15Admins->fresh()->is_active);
+
+        // Admin Bearer token receives #15 ('admins')
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$adminToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 15)
+            ->assertJsonPath('data.target_audience', 'admins');
+
+        // Active User Bearer token receives #14 ('all')
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$activeUserToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 14)
+            ->assertJsonPath('data.target_audience', 'all');
+
+        // Guest (no token / legacy APK) receives #14 ('all'), never #15 ('admins')
+        $this->getJson('/api/app-version')
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 14)
+            ->assertJsonPath('data.target_audience', 'all');
+
+        // Inactive User Bearer token falls back to guest -> #14 ('all')
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$inactiveUserToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 14)
+            ->assertJsonPath('data.target_audience', 'all');
+
+        // Invalid Bearer token never returns 401; falls back cleanly to guest -> #14 ('all')
+        $this->getJson('/api/app-version', ['Authorization' => 'Bearer invalid-or-revoked-token'])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 14)
+            ->assertJsonPath('data.target_audience', 'all');
+
+        // Activating #16 ('users') keeps #14 ('all') and #15 ('admins') active
+        $release16Users = AppRelease::create(array_merge($baseAttributes, [
+            'target_audience' => AppRelease::TARGET_USERS,
+            'version_name' => '1.0.6-user',
+            'build_number' => 16,
+        ]))->activate();
+
+        $this->assertTrue($release14All->fresh()->is_active);
+        $this->assertTrue($release15Admins->fresh()->is_active);
+        $this->assertTrue($release16Users->fresh()->is_active);
+
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$adminToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 15);
+
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$activeUserToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 16)
+            ->assertJsonPath('data.target_audience', 'users');
+
+        $this->getJson('/api/app-version')
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 14);
+
+        // Activating #17 ('all') supersedes & deactivates #14, #15, and #16
+        $release17All = AppRelease::create(array_merge($baseAttributes, [
+            'target_audience' => AppRelease::TARGET_ALL,
+            'version_name' => '1.0.7',
+            'build_number' => 17,
+        ]))->activate();
+
+        $this->assertFalse($release14All->fresh()->is_active);
+        $this->assertFalse($release15Admins->fresh()->is_active);
+        $this->assertFalse($release16Users->fresh()->is_active);
+        $this->assertTrue($release17All->fresh()->is_active);
+
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$adminToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 17);
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$activeUserToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 17);
+        $this->getJson('/api/app-version')
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 17);
+    }
+
+    public function test_admin_only_release_with_no_all_release_active_hides_update_from_users_and_guests(): void
+    {
+        $admin = Admin::factory()->create();
+        $user = User::factory()->create(['is_active' => true]);
+
+        $adminToken = $admin->createToken('mobile-admin')->plainTextToken;
+        $userToken = $user->createToken('mobile-user')->plainTextToken;
+
+        AppRelease::create([
+            'platform' => 'android',
+            'channel' => 'production',
+            'target_audience' => AppRelease::TARGET_ADMINS,
+            'version_name' => '1.2.0-admin',
+            'build_number' => 20,
+            'download_url' => 'https://github.com/org/repo/releases/download/v1.2.0/admin.apk',
+            'sha256' => self::VALID_SHA256,
+            'is_active' => false,
+        ])->activate();
+
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$adminToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 20)
+            ->assertJsonPath('data.target_audience', 'admins');
+
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$userToken}"])
+            ->assertOk()
+            ->assertJson(['data' => null]);
+
+        $this->getJson('/api/app-version')
+            ->assertOk()
+            ->assertJson(['data' => null]);
+    }
+
+    public function test_updating_active_release_target_audience_to_all_deactivates_siblings_and_clears_cache(): void
+    {
+        $this->withoutMiddleware([PreventRequestForgery::class]);
+        $configAdmin = $this->adminWithConfigPermission();
+
+        $userRelease = AppRelease::create([
+            'platform' => 'android',
+            'channel' => 'production',
+            'target_audience' => AppRelease::TARGET_USERS,
+            'version_name' => '1.1.0-user',
+            'build_number' => 19,
+            'download_url' => 'https://github.com/org/repo/releases/download/v1.1.0/user.apk',
+            'sha256' => self::VALID_SHA256,
+            'is_active' => false,
+        ])->activate();
+
+        $adminRelease = AppRelease::create([
+            'platform' => 'android',
+            'channel' => 'production',
+            'target_audience' => AppRelease::TARGET_ADMINS,
+            'version_name' => '1.2.1',
+            'build_number' => 21,
+            'download_url' => 'https://github.com/org/repo/releases/download/v1.2.1/app.apk',
+            'sha256' => self::VALID_SHA256,
+            'is_active' => false,
+        ])->activate();
+
+        // Warm user & guest caches
+        $user = User::factory()->create(['is_active' => true]);
+        $userToken = $user->createToken('mobile-user')->plainTextToken;
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$userToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 19);
+        $this->getJson('/api/app-version')->assertOk()->assertJson(['data' => null]);
+
+        // Change active #21 from 'admins' to 'all'
+        $this->actingAs($configAdmin, 'admin')
+            ->put("/admin/app-releases/{$adminRelease->id}", [
+                'target_audience' => AppRelease::TARGET_ALL,
+                'version_name' => '1.2.1',
+                'build_number' => 21,
+                'download_url' => 'https://github.com/org/repo/releases/download/v1.2.1/app.apk',
+                'sha256' => self::VALID_SHA256,
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertFalse($userRelease->fresh()->is_active);
+        $this->assertTrue($adminRelease->fresh()->is_active);
+        $this->assertSame(AppRelease::TARGET_ALL, $adminRelease->fresh()->target_audience);
+
+        // Cache refreshed for both user and guest
+        $this->getJson('/api/app-version', ['Authorization' => "Bearer {$userToken}"])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 21)
+            ->assertJsonPath('data.target_audience', 'all');
+        $this->getJson('/api/app-version')
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 21);
+    }
+
+    public function test_notification_target_is_locked_to_release_target_audience(): void
+    {
+        $this->withoutMiddleware([PreventRequestForgery::class]);
+        $configAdmin = $this->adminWithConfigPermission();
+        $otherAdmin = Admin::factory()->create();
+        $activeUser = User::factory()->create(['is_active' => true]);
+
+        Http::fake();
+
+        $adminOnlyRelease = AppRelease::create([
+            'platform' => 'android',
+            'channel' => 'production',
+            'target_audience' => AppRelease::TARGET_ADMINS,
+            'version_name' => '1.3.0-admin',
+            'build_number' => 30,
+            'download_url' => 'https://github.com/org/repo/releases/download/v1.3.0/admin.apk',
+            'sha256' => self::VALID_SHA256,
+            'is_active' => false,
+        ])->activate();
+
+        // Reject 'all' and 'users' when release is 'admins'
+        foreach ([AppRelease::TARGET_ALL, AppRelease::TARGET_USERS] as $invalidTarget) {
+            $this->actingAs($configAdmin, 'admin')
+                ->post("/admin/app-releases/{$adminOnlyRelease->id}/notify", [
+                    'target' => $invalidTarget,
+                    'notification_title' => 'Update Admin',
+                    'notification_body' => 'Khusus operator.',
+                ])
+                ->assertSessionHasErrors('target');
+        }
+
+        $this->assertSame(0, $activeUser->notifications()->count());
+        $this->assertSame(0, $configAdmin->notifications()->count());
+
+        // Succeeds with 'admins' and only notifies admins
+        $this->actingAs($configAdmin, 'admin')
+            ->post("/admin/app-releases/{$adminOnlyRelease->id}/notify", [
+                'target' => AppRelease::TARGET_ADMINS,
+                'notification_title' => 'Update Admin',
+                'notification_body' => 'Khusus operator.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(0, $activeUser->notifications()->count());
+        $this->assertSame(1, $configAdmin->notifications()->count());
+        $this->assertSame(1, $otherAdmin->notifications()->count());
+
+        // User-only release rejects 'admins' and succeeds with 'users'
+        $userOnlyRelease = AppRelease::create([
+            'platform' => 'android',
+            'channel' => 'production',
+            'target_audience' => AppRelease::TARGET_USERS,
+            'version_name' => '1.3.1-user',
+            'build_number' => 31,
+            'download_url' => 'https://github.com/org/repo/releases/download/v1.3.1/user.apk',
+            'sha256' => self::VALID_SHA256,
+            'is_active' => false,
+        ])->activate();
+
+        $this->actingAs($configAdmin, 'admin')
+            ->post("/admin/app-releases/{$userOnlyRelease->id}/notify", [
+                'target' => AppRelease::TARGET_ADMINS,
+                'notification_title' => 'Update Pengaju',
+                'notification_body' => 'Khusus pengaju.',
+            ])
+            ->assertSessionHasErrors('target');
+
+        $this->actingAs($configAdmin, 'admin')
+            ->post("/admin/app-releases/{$userOnlyRelease->id}/notify", [
+                'target' => AppRelease::TARGET_USERS,
+                'notification_title' => 'Update Pengaju',
+                'notification_body' => 'Khusus pengaju.',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, $activeUser->notifications()->count());
+        $this->assertSame(1, $configAdmin->notifications()->count());
+    }
+
+    public function test_internal_webhook_supports_optional_target_audience_and_defaults_to_all(): void
+    {
+        config(['services.app_release.webhook_secret' => 'super-secret-release-token']);
+
+        // Omitted target_audience defaults to 'all'
+        $this->withHeader('X-Release-Token', 'super-secret-release-token')
+            ->postJson('/api/internal/app-releases', [
+                'platform' => 'android',
+                'channel' => 'staging',
+                'version_name' => '1.4.0',
+                'build_number' => 40,
+                'download_url' => 'https://github.com/org/repo/releases/download/v1.4.0/app.apk',
+                'sha256' => self::VALID_SHA256,
+                'is_active' => false,
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.target_audience', 'all');
+
+        // Explicit target_audience: 'admins'
+        $this->withHeader('X-Release-Token', 'super-secret-release-token')
+            ->postJson('/api/internal/app-releases', [
+                'platform' => 'android',
+                'channel' => 'staging',
+                'target_audience' => 'admins',
+                'version_name' => '1.4.1-admin',
+                'build_number' => 41,
+                'download_url' => 'https://github.com/org/repo/releases/download/v1.4.1/admin.apk',
+                'sha256' => self::VALID_SHA256,
+                'is_active' => true,
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.target_audience', 'admins');
+
+        $admin = Admin::factory()->create();
+        $adminToken = $admin->createToken('mobile-admin')->plainTextToken;
+
+        $this->getJson('/api/app-version?platform=android&channel=staging', [
+            'Authorization' => "Bearer {$adminToken}",
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.build_number', 41)
+            ->assertJsonPath('data.target_audience', 'admins');
+
+        // Without token, guest does not see admins release
+        $this->getJson('/api/app-version?platform=android&channel=staging')
+            ->assertOk()
+            ->assertJson(['data' => null]);
+    }
 }

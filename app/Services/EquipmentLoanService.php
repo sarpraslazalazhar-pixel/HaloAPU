@@ -8,10 +8,13 @@ use App\Models\Ticket;
 use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\User;
+use App\Notifications\EquipmentReturnReportedNotification;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use InvalidArgumentException;
 
@@ -21,6 +24,7 @@ class EquipmentLoanService
     public const STATUS_MENUNGGU_DISERAHKAN = 'Menunggu Diserahkan';
     public const STATUS_SEDANG_DIPINJAM = 'Sedang Dipinjam';
     public const STATUS_BELUM_DIKEMBALIKAN = 'Belum Dikembalikan';
+    public const STATUS_MENUNGGU_KONFIRMASI_KEMBALI = 'Menunggu Konfirmasi Kembali';
     public const STATUS_DIKEMBALIKAN = 'Dikembalikan';
 
     public static function isLoanTicket(Ticket $ticket): bool
@@ -203,6 +207,8 @@ class EquipmentLoanService
             $statusPeminjaman = self::STATUS_DIKEMBALIKAN;
         } elseif (! self::isFinishedStatus($ticket->status)) {
             $statusPeminjaman = self::STATUS_MENUNGGU_PERSETUJUAN;
+        } elseif ($ticket->pengembalian_diajukan_at !== null) {
+            $statusPeminjaman = self::STATUS_MENUNGGU_KONFIRMASI_KEMBALI;
         } elseif ($ticket->diserahkan_at !== null) {
             $statusPeminjaman = $now->gt($endDT)
                 ? self::STATUS_BELUM_DIKEMBALIKAN
@@ -251,6 +257,7 @@ class EquipmentLoanService
             'status_peminjaman' => $statusPeminjaman,
             'is_overdue_schedule' => $isAwaitingHandover && $now->gt($endDT),
             'is_due_today' => $isAwaitingHandover && $now->between($startDT, $endDT),
+            'is_return_reported' => $ticket->pengembalian_diajukan_at !== null && $ticket->dikembalikan_at === null,
             'alat_list' => $resolvedAlat,
             'alat_text' => $alatText,
             'custom_alat' => $customAlat,
@@ -344,7 +351,7 @@ class EquipmentLoanService
     }
 
     /**
-     * @return array{serah: array<int, array<string, mixed>>, kembali: array<int, array<string, mixed>>}
+     * @return array{serah: array<int, array<string, mixed>>, pengajuan_kembali: array<int, array<string, mixed>>, kembali: array<int, array<string, mixed>>}
      */
     public static function extractLoanAttachments(Ticket $ticket): array
     {
@@ -385,8 +392,168 @@ class EquipmentLoanService
 
         return [
             'serah' => $formatAttachments('alat_diserahkan'),
+            'pengajuan_kembali' => $formatAttachments('pengajuan_kembali_alat'),
             'kembali' => $formatAttachments('alat_dikembalikan'),
         ];
+    }
+
+    public static function canReportReturn(Ticket $ticket, User|Admin $actor): bool
+    {
+        if (! self::isLoanTicket($ticket)
+            || ! self::isFinishedStatus($ticket->status)
+            || $ticket->dikembalikan_at !== null
+            || $ticket->pengembalian_diajukan_at !== null) {
+            return false;
+        }
+
+        if ($actor instanceof User) {
+            return $ticket->isOwnedByUser($actor);
+        }
+
+        return $ticket->isSubmittedBy($actor) && ! self::canManageLoanTicket($ticket, $actor);
+    }
+
+    /**
+     * @param  array<int, UploadedFile|mixed>  $attachments
+     */
+    public static function reportReturnByRequester(
+        Ticket $ticket,
+        User|Admin $actor,
+        ?string $catatanPengajuan = null,
+        array $attachments = []
+    ): Ticket {
+        if (! self::isLoanTicket($ticket)) {
+            throw new InvalidArgumentException('Jenis layanan ini tidak memerlukan pengembalian alat.');
+        }
+
+        if (! self::isFinishedStatus($ticket->status)) {
+            throw new InvalidArgumentException('Tiket harus berstatus selesai terlebih dahulu sebelum dapat melaporkan pengembalian alat.');
+        }
+
+        if ($ticket->dikembalikan_at !== null) {
+            throw new InvalidArgumentException('Alat pada tiket ini sudah ditandai dikembalikan.');
+        }
+
+        if ($ticket->pengembalian_diajukan_at !== null) {
+            throw new InvalidArgumentException('Laporan pengembalian alat sudah dikirim dan sedang menunggu konfirmasi operator.');
+        }
+
+        $storedPaths = [];
+        $reporterName = $actor->name ?: $actor->username;
+        $catatan = filled($catatanPengajuan) ? trim((string) $catatanPengajuan) : null;
+
+        try {
+            $updated = DB::transaction(function () use ($ticket, $actor, $reporterName, $catatan, $attachments, &$storedPaths): Ticket {
+                $locked = Ticket::query()->lockForUpdate()->with('subUnit')->findOrFail($ticket->id);
+
+                if (! self::isLoanTicket($locked)) {
+                    throw new InvalidArgumentException('Jenis layanan ini tidak memerlukan pengembalian alat.');
+                }
+                if (! self::isFinishedStatus($locked->status)) {
+                    throw new InvalidArgumentException('Tiket harus berstatus selesai terlebih dahulu sebelum dapat melaporkan pengembalian alat.');
+                }
+                if ($locked->dikembalikan_at !== null) {
+                    throw new InvalidArgumentException('Alat pada tiket ini sudah ditandai dikembalikan.');
+                }
+                if ($locked->pengembalian_diajukan_at !== null) {
+                    throw new InvalidArgumentException('Laporan pengembalian alat sudah dikirim dan sedang menunggu konfirmasi operator.');
+                }
+
+                $now = Carbon::now();
+
+                $locked->update([
+                    'pengembalian_diajukan_at' => $now,
+                    'catatan_pengajuan_kembali' => $catatan,
+                ]);
+
+                $logCatatan = "Pemohon {$reporterName} melaporkan alat sudah dikembalikan (menunggu konfirmasi operator)";
+                if ($catatan !== null) {
+                    $logCatatan .= " — Catatan: {$catatan}";
+                }
+
+                $log = TicketLog::create([
+                    'ticket_id' => $locked->id,
+                    'admin_id' => $actor instanceof Admin ? $actor->id : null,
+                    'aksi' => 'pengajuan_kembali_alat',
+                    'catatan' => $logCatatan,
+                    'timestamp' => $now,
+                ]);
+
+                self::storeLoanAttachments($locked, $log, $attachments, $storedPaths);
+
+                return $locked->fresh([
+                    'subUnit.formFields',
+                    'user:id,name,username',
+                    'createdByAdmin:id,name,username',
+                    'diserahkanOlehAdmin:id,name,username',
+                    'penerimaAlatUser:id,name,username',
+                    'diterimaKembaliOlehAdmin:id,name,username',
+                    'logs.attachments',
+                    'logs.admin:id,name,username',
+                    'booking',
+                ]);
+            });
+        } catch (\Throwable $e) {
+            if ($storedPaths !== []) {
+                Storage::disk('public')->delete($storedPaths);
+            }
+
+            throw $e;
+        }
+
+        $ticket->setRawAttributes($updated->getAttributes(), true);
+        $ticket->setRelations($updated->getRelations());
+
+        try {
+            $unitId = $updated->unit_id ?? $updated->subUnit?->unit_id;
+            $subUnitId = $updated->sub_unit_id;
+            $assignedAdminId = $updated->assigned_admin_id;
+
+            $recipients = Admin::query()
+                ->where(function (Builder $q) use ($assignedAdminId, $unitId, $subUnitId): void {
+                    $hasCondition = false;
+                    if ($assignedAdminId !== null) {
+                        $q->where('id', $assignedAdminId);
+                        $hasCondition = true;
+                    }
+                    if ($unitId !== null) {
+                        $method = $hasCondition ? 'orWhereHas' : 'whereHas';
+                        $q->{$method}('units', fn (Builder $uq) => $uq->where('units.id', $unitId));
+                        $hasCondition = true;
+                    }
+                    if ($subUnitId !== null) {
+                        $method = $hasCondition ? 'orWhereHas' : 'whereHas';
+                        $q->{$method}('subUnits', fn (Builder $sq) => $sq->where('sub_units.id', $subUnitId));
+                        $hasCondition = true;
+                    }
+                    if (! $hasCondition) {
+                        $q->whereRaw('1 = 0');
+                    }
+                })
+                ->when($actor instanceof Admin, fn (Builder $q) => $q->where('id', '!=', $actor->id))
+                ->get();
+
+            if ($recipients->isEmpty()) {
+                $recipients = Admin::query()
+                    ->where(function (Builder $q): void {
+                        $q->whereHas('roles', fn (Builder $rq) => $rq->whereIn('name', ['superadmin', 'Super Admin', 'super_admin', 'Superadmin']))
+                            ->orWhereRaw('LOWER(username) LIKE ?', ['%superadmin%']);
+                    })
+                    ->when($actor instanceof Admin, fn (Builder $q) => $q->where('id', '!=', $actor->id))
+                    ->get();
+            }
+
+            if ($recipients->isNotEmpty()) {
+                Notification::send(
+                    $recipients,
+                    new EquipmentReturnReportedNotification($updated, $reporterName, $catatan)
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Gagal mengirim notifikasi laporan pengembalian alat: '.$e->getMessage());
+        }
+
+        return $updated;
     }
 
     /**
@@ -623,7 +790,7 @@ class EquipmentLoanService
                 'ticket_log_id' => $log->id,
                 'file_path' => $path,
                 'original_name' => $file->getClientOriginalName(),
-                'mime_type' => $file->getMimeType() ?: $file->getClientMimeType(),
+                'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
                 'file_size' => $file->getSize(),
                 'wajib' => false,
             ]);

@@ -299,8 +299,8 @@ export default function Wizard({ unitList }: WizardProps) {
   const renderFilePreview = (fieldId: number, field: FormFieldType) => {
     const files = data.attachments[String(fieldId)] || [];
     const isImage = field.tipe_field === 'upload_gambar';
-    const acceptedFormatText = isImage ? 'Format: JPG, JPEG, PNG.' : 'Format: JPG, PNG, PDF, DOC, DOCX.';
-    const acceptFormats = isImage ? '.jpg,.jpeg,.png' : '.jpg,.jpeg,.png,.pdf,.doc,.docx';
+    const acceptedFormatText = isImage ? 'Format: JPG, JPEG, PNG.' : 'Format: JPG, PNG, PDF, DOC, DOCX, XLS, XLSX, CSV.';
+    const acceptFormats = isImage ? '.jpg,.jpeg,.png' : '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv';
 
     return (
       <div className="mt-1 space-y-3">

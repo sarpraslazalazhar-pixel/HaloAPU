@@ -51,9 +51,9 @@ class TicketWizardController extends Controller
             'form_data' => 'required|array',
             'attachments' => 'nullable|array',
             'attachments.*' => 'nullable|array|max:3',
-            'attachments.*.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx', // max 3MB per file
+            'attachments.*.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt', // max 3MB per file
             'general_attachments' => 'nullable|array|max:3',
-            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'general_attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         // Validasi form_data berdasarkan form_fields yang wajib (hanya yg visible)

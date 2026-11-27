@@ -14,13 +14,14 @@ interface TimelineLog {
   is_edited?: boolean;
   edited_at?: string | null;
   timestamp: string;
-  admin?: { username: string; name?: string } | null;
+  admin?: { id?: number; username: string; name?: string | null } | null;
   attachments?: any[];
 }
 
 interface TicketTimelineProps {
   logs: TimelineLog[];
   downloadRoute?: string;
+  excludeChatReplies?: boolean;
 }
 
 interface ActionConfig {
@@ -133,6 +134,12 @@ const actionConfigMap = {
     badgeClass: 'bg-sky-100 text-sky-800 border-sky-200',
     nodeBg: 'bg-sky-500',
   },
+  pengajuan_kembali_alat: {
+    label: 'Laporan Pengembalian Alat',
+    icon: Clock,
+    badgeClass: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    nodeBg: 'bg-indigo-500',
+  },
   alat_dikembalikan: {
     label: 'Alat Dikembalikan',
     icon: CheckCheck,
@@ -158,12 +165,32 @@ const getActionConfig = (aksi: string): ActionConfig => {
   };
 };
 
-export function TicketTimeline({ logs, downloadRoute = 'tiket.download' }: TicketTimelineProps) {
-  if (!logs?.length) return null;
+export function TicketTimeline({
+  logs,
+  downloadRoute = 'tiket.download',
+  excludeChatReplies = false,
+}: TicketTimelineProps) {
+  const visibleLogs = (() => {
+    const filtered = excludeChatReplies
+      ? (logs || []).filter((log) => (log.aksi || '').toLowerCase() !== 'balasan')
+      : [...(logs || [])];
+
+    return [...filtered].sort(
+      (a, b) => (new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()) || (b.id - a.id)
+    );
+  })();
+
+  if (!visibleLogs.length) {
+    return (
+      <p className="text-xs text-slate-500">
+        {excludeChatReplies ? 'Belum ada aktivitas riwayat status pada tiket ini.' : 'Belum ada aktivitas timeline.'}
+      </p>
+    );
+  }
 
   return (
     <div className="relative pl-6 sm:pl-8 space-y-6 before:absolute before:left-3 sm:before:left-4 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-      {logs.map((log) => {
+      {visibleLogs.map((log) => {
         const config = getActionConfig(log.aksi);
         const Icon = config.icon;
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import AdminLayout from '@/Layouts/AdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
@@ -8,7 +8,8 @@ import { TicketTimeline } from '@/Components/TicketTimeline';
 import { TicketWorkHoursNotice, type WorkHoursInfo } from '@/Components/TicketWorkHoursNotice';
 import { TicketAttachmentList, type Attachment } from '@/Components/TicketAttachmentList';
 import { formatDateId, formatTicketId } from '@/lib/utils';
-import { subscribe, type TicketEvents } from '@/lib/realtime';
+import { type TicketLogEntry } from '@/lib/realtime';
+import { useTicketRealtime } from '@/hooks/useTicketRealtime';
 import type { EquipmentLoanSummary, FormField, TicketAdminActor } from '@/types';
 import { AttachmentViewer } from '@/Components/AttachmentViewer';
 import { FileText, ArrowLeft, Timer, AlertTriangle, PauseCircle, Play, CheckCircle2, XCircle, Shield, Eye, Clock, Edit2, Paperclip, Info, MessageSquare, UserCheck } from 'lucide-react';
@@ -69,7 +70,7 @@ interface TicketDetailData {
   } | null;
   attachments?: Attachment[];
   edit_histories?: EditHistoryEntry[];
-  logs?: Array<{ id: number; ticket_id: number; admin_id: number | null; aksi: string; catatan: string | null; timestamp: string }>;
+  logs?: TicketLogEntry[];
   sla_tracking?: {
     sla_response_deadline?: string | null;
     sla_resolution_deadline?: string | null;
@@ -96,8 +97,9 @@ interface TicketDetailProps {
   work_hours?: WorkHoursInfo | null;
   isEquipmentLoan?: boolean;
   canManageEquipmentLoan?: boolean;
+  canReportEquipmentReturn?: boolean;
   loanSummary?: EquipmentLoanSummary | null;
-  loanAttachments?: { serah: Attachment[]; kembali: Attachment[] } | null;
+  loanAttachments?: { serah: Attachment[]; pengajuan_kembali?: Attachment[]; kembali: Attachment[] } | null;
 }
 
 interface AdminDetailPageProps {
@@ -105,7 +107,7 @@ interface AdminDetailPageProps {
   errors?: Record<string, string>;
 }
 
-export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, isAssignedToMe: isAssignedToMeProp, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, canActivateFromQueue = false, work_hours, isEquipmentLoan = false, canManageEquipmentLoan, loanSummary = null, loanAttachments = null }: TicketDetailProps) {
+export default function TicketDetail({ ticket, formFields, operators, isSubmittedByMe, isAssignedToMe: isAssignedToMeProp, canManage = false, canCancelTicket: canCancelTicketProp, canEditForm, canActivateFromQueue = false, work_hours, isEquipmentLoan = false, canManageEquipmentLoan, canReportEquipmentReturn = false, loanSummary = null, loanAttachments = null }: TicketDetailProps) {
   // SAFETY: Inertia page props contain auth user and validation errors.
   const { auth, errors: pageErrors } = usePage().props as AdminDetailPageProps;
 
@@ -158,22 +160,27 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
     return () => window.clearInterval(timer);
   }, [canManage, work_hours]);
 
-  useEffect(() => {
-    if (!canManage || !ticket?.id) return;
-
-    return subscribe<TicketEvents>(`ticket.${ticket.id}`, {
-      '.TicketMessagePosted': ({ log }) => {
-        const reloadActions = ['open', 'on_proses', 'pending', 'need_revision', 'solve', 'selesai', 'dibatalkan', 'reject', 'alat_diserahkan', 'alat_dikembalikan'];
-
-        if (log?.aksi && (log.aksi.startsWith('work_hours') || reloadActions.includes(log.aksi))) {
-          router.reload({ only: ['ticket', 'work_hours', 'loanSummary', 'loanAttachments'] });
-        }
-      },
-      '.TicketMessageEdited': () => {
-        router.reload({ only: ['ticket'] });
-      },
+  const handleMetaChanged = useCallback(() => {
+    router.reload({
+      only: ['ticket', 'work_hours', 'loanSummary', 'loanAttachments'],
     });
-  }, [canManage, ticket?.id]);
+  }, []);
+
+  const { liveLogs, applyEditedLog } = useTicketRealtime({
+    ticketId: ticket?.id ?? null,
+    initialLogs: ticket?.logs ?? [],
+    initialStatus: ticket?.status ?? null,
+    initialAssignedAdminId: ticket?.assigned_admin_id ?? null,
+    pollUrl: ticket?.id ? route('admin.tiket.logs.poll', ticket.id) : null,
+    enabled: Boolean(ticket?.id),
+    subscribeChannel: canManage,
+    onMetaChanged: handleMetaChanged,
+  });
+
+  const ticketWithLiveLogs = useMemo(
+    () => ({ ...ticket, logs: liveLogs }),
+    [ticket, liveLogs]
+  );
 
   const bookingServiceTitle = (() => {
     const rawName = ticket.sub_unit?.nama_layanan || ticket.booking?.tipe || 'Aset';
@@ -389,8 +396,8 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
 
      return fieldAttachments && fieldAttachments.length > 0 ? (
        <div className="flex flex-col gap-2 mt-1">
-         {fieldAttachments.map((attachment: any, idx: number) => (
-           <AttachmentViewer key={idx} attachment={attachment} viewRoute="admin.tiket.view" downloadRoute="admin.tiket.download">
+         {fieldAttachments.map((attachment: any) => (
+           <AttachmentViewer key={attachment.id} attachment={attachment} viewRoute="admin.tiket.view" downloadRoute="admin.tiket.download" previewRoute="admin.tiket.preview">
              <button type="button" className="text-blue-600 hover:underline flex items-center gap-1 text-sm text-left">
                <Eye className="w-4 h-4 flex-shrink-0" /> <span className="truncate">{attachment.original_name}</span>
              </button>
@@ -470,8 +477,18 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
    </div>
  );
 
- return (
-   <AdminLayout title={`Detail Tiket #TKT-${formatTicketId(ticket.id)}`}>
+  const chatReplyCount = useMemo(
+    () => liveLogs.filter((l) => String(l.aksi || '').toLowerCase() === 'balasan').length,
+    [liveLogs]
+  );
+
+  const systemLogCount = useMemo(
+    () => liveLogs.filter((l) => String(l.aksi || '').toLowerCase() !== 'balasan').length,
+    [liveLogs]
+  );
+
+  return (
+    <AdminLayout title={`Detail Tiket #TKT-${formatTicketId(ticket.id)}`}>
      <Head title={`Tiket #TKT-${formatTicketId(ticket.id)}`} />
 
      <div className="flex flex-wrap items-center gap-3 mb-6">
@@ -545,6 +562,11 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
               <TabsTrigger value="chat" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white data-[state=active]:text-sky-700 shadow-2xs">
                 <MessageSquare className="h-3.5 w-3.5 text-sky-600" />
                 <span>Pesan Tiket</span>
+                {chatReplyCount > 0 && (
+                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold leading-none text-sky-700">
+                    {chatReplyCount}
+                  </span>
+                )}
               </TabsTrigger>
             )}
             <TabsTrigger value="informasi" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
@@ -554,6 +576,11 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
             <TabsTrigger value="timeline" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
               <Clock className="h-3.5 w-3.5" />
               <span>Riwayat</span>
+              {systemLogCount > 0 && (
+                <span className="rounded-full bg-slate-200 px-1.5 py-0.5 text-[10px] font-bold leading-none text-slate-700">
+                  {systemLogCount}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="lampiran" className="text-xs font-semibold gap-1.5 rounded-lg data-[state=active]:bg-white shadow-2xs">
               <Paperclip className="h-3.5 w-3.5" />
@@ -564,15 +591,18 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
           {/* TAB 0: CHAT & DISKUSI INTERAKTIF */}
           {canManage && <TabsContent value="chat" id="chat-tiket" className="space-y-6 mt-0" ref={chatPanelRef} tabIndex={-1}>
             <TicketChatBox
-              ticket={ticket}
+              ticket={ticketWithLiveLogs}
               isAdmin={true}
               currentAdminId={auth?.admin?.id ?? null}
               replyRoute="admin.tiket.reply"
               editReplyRoute="admin.tiket.reply.update"
               downloadRoute="admin.tiket.download"
               viewRoute="admin.tiket.view"
+              previewRoute="admin.tiket.preview"
               canReply={canReply}
               chatUrl={`/admin/chat?ticket_id=${ticket.id}`}
+              managedRealtime
+              onLogEdited={applyEditedLog}
             />
           </TabsContent>}
 
@@ -670,8 +700,8 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
              <Card>
                <CardHeader><CardTitle className="flex items-center gap-2"><FileText className="w-5 h-5" /> Timeline</CardTitle></CardHeader>
                <CardContent>
-                {ticket.logs && ticket.logs.length > 0 ? (
-                  <TicketTimeline logs={ticket.logs} downloadRoute="admin.tiket.download" />
+                {liveLogs.length > 0 ? (
+                  <TicketTimeline logs={liveLogs} downloadRoute="admin.tiket.download" excludeChatReplies />
                 ) : (
                    <p className="text-xs text-slate-500">Belum ada aktivitas timeline.</p>
                  )}
@@ -792,6 +822,8 @@ export default function TicketDetail({ ticket, formFields, operators, isSubmitte
                   loanAttachments={loanAttachments}
                   downloadRoute="admin.tiket.download"
                   canManage={Boolean(canManageEquipmentLoan ?? false)}
+                  canReportReturn={Boolean(canReportEquipmentReturn)}
+                  reportReturnRoute="admin.tiket.lapor-kembali-alat"
                 />
               )}
 

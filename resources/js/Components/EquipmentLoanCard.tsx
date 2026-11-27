@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, Clock, PackageCheck, Paperclip, UserCheck } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Clock, PackageCheck, Paperclip, Send, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/Components/ui/card';
 import { Button } from '@/Components/ui/button';
 import { TicketAttachmentList, type Attachment } from '@/Components/TicketAttachmentList';
@@ -7,6 +7,7 @@ import { formatDateId } from '@/lib/utils';
 import type { EquipmentLoanSummary, TicketAdminActor } from '@/types';
 import {
   HandoverEquipmentModal,
+  ReportReturnEquipmentModal,
   ReturnEquipmentModal,
   resolveConditionMeta,
   type EquipmentLoanModalTarget,
@@ -21,6 +22,8 @@ export interface EquipmentLoanCardTicket {
   penerima_alat?: string | null;
   kondisi_serah?: string | null;
   catatan_serah?: string | null;
+  pengembalian_diajukan_at?: string | null;
+  catatan_pengajuan_kembali?: string | null;
   dikembalikan_at?: string | null;
   kondisi_kembali?: string | null;
   catatan_kembali?: string | null;
@@ -35,10 +38,13 @@ interface EquipmentLoanCardProps {
   loanSummary?: EquipmentLoanSummary | null;
   loanAttachments?: {
     serah: Attachment[];
+    pengajuan_kembali?: Attachment[];
     kembali: Attachment[];
   } | null;
   downloadRoute?: string;
   canManage?: boolean;
+  canReportReturn?: boolean;
+  reportReturnRoute?: string;
 }
 
 function resolveActorName(actor: TicketAdminActor | null | undefined): string | null {
@@ -53,13 +59,17 @@ export function EquipmentLoanCard({
   loanAttachments = null,
   downloadRoute = 'tiket.download',
   canManage = false,
+  canReportReturn = false,
+  reportReturnRoute = 'tiket.lapor-kembali-alat',
 }: EquipmentLoanCardProps) {
   const [handoverModalOpen, setHandoverModalOpen] = useState(false);
   const [returnModalOpen, setReturnModalOpen] = useState(false);
+  const [reportReturnModalOpen, setReportReturnModalOpen] = useState(false);
 
   const normalizedStatus = String(ticket.status || '').toLowerCase();
   const isSolved = normalizedStatus === 'solve' || normalizedStatus === 'selesai';
   const hasHandedOver = Boolean(ticket.diserahkan_at);
+  const isReturnReported = Boolean(ticket.pengembalian_diajukan_at);
   const isReturned = Boolean(ticket.dikembalikan_at);
   const skippedHandover = !hasHandedOver && isReturned;
 
@@ -84,6 +94,7 @@ export function EquipmentLoanCard({
   const handoverConditionBadge = ticket.kondisi_serah ? resolveConditionMeta(ticket.kondisi_serah) : null;
   const conditionBadge = ticket.kondisi_kembali ? resolveConditionMeta(ticket.kondisi_kembali) : null;
   const serahAttachments = loanAttachments?.serah ?? [];
+  const pengajuanKembaliAttachments = loanAttachments?.pengajuan_kembali ?? [];
   const kembaliAttachments = loanAttachments?.kembali ?? [];
 
   const statusPill = (() => {
@@ -100,6 +111,13 @@ export function EquipmentLoanCard({
       return {
         label: 'Menunggu Persetujuan',
         className: 'bg-purple-100 text-purple-800 border-purple-200',
+      };
+    }
+
+    if (isReturnReported || statusLabel === 'Menunggu Konfirmasi Kembali') {
+      return {
+        label: 'Menunggu Konfirmasi Kembali',
+        className: 'bg-indigo-100 text-indigo-800 border-indigo-200',
       };
     }
 
@@ -267,6 +285,8 @@ export function EquipmentLoanCard({
               className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
                 isReturned
                   ? 'bg-emerald-100 text-emerald-700'
+                  : isReturnReported
+                  ? 'bg-indigo-100 text-indigo-700'
                   : loanSummary?.status_peminjaman === 'Belum Dikembalikan'
                   ? 'bg-rose-100 text-rose-700'
                   : 'bg-slate-100 text-slate-400'
@@ -274,14 +294,48 @@ export function EquipmentLoanCard({
             >
               {isReturned ? (
                 <CheckCircle2 className="w-3.5 h-3.5" />
+              ) : isReturnReported ? (
+                <Clock className="w-3.5 h-3.5" />
               ) : loanSummary?.status_peminjaman === 'Belum Dikembalikan' ? (
                 <AlertTriangle className="w-3.5 h-3.5" />
               ) : (
                 <Clock className="w-3.5 h-3.5" />
               )}
             </div>
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-1.5">
               <p className="font-semibold text-slate-800">3. Alat Dikembalikan</p>
+
+              {isReturnReported && !isReturned && (
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 space-y-1.5 text-indigo-950">
+                  <div className="flex flex-wrap items-center justify-between gap-1.5">
+                    <span className="font-semibold text-indigo-900">
+                      Pemohon melaporkan alat sudah dikembalikan
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 text-[10px] font-semibold">
+                      Menunggu Konfirmasi Operator
+                    </span>
+                  </div>
+                  <p className="text-indigo-800">
+                    Dilaporkan pada <span className="font-semibold">{formatDateId(ticket.pengembalian_diajukan_at)}</span>.
+                  </p>
+                  {ticket.catatan_pengajuan_kembali && (
+                    <p className="italic text-indigo-900">&ldquo;{ticket.catatan_pengajuan_kembali}&rdquo;</p>
+                  )}
+                  {pengajuanKembaliAttachments.length > 0 && (
+                    <div className="pt-1.5 border-t border-indigo-200/70 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-indigo-800 flex items-center gap-1">
+                        <Paperclip className="w-3 h-3 text-indigo-600" />
+                        <span>Lampiran Laporan Pemohon ({pengajuanKembaliAttachments.length})</span>
+                      </p>
+                      <TicketAttachmentList
+                        attachments={pengajuanKembaliAttachments}
+                        downloadRoute={downloadRoute}
+                        grouped={false}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {isReturned ? (
                 <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 p-2.5 space-y-1.5 text-slate-700">
@@ -300,6 +354,19 @@ export function EquipmentLoanCard({
                   {ticket.catatan_kembali && (
                     <p className="italic text-slate-600">&ldquo;{ticket.catatan_kembali}&rdquo;</p>
                   )}
+                  {pengajuanKembaliAttachments.length > 0 && (
+                    <div className="pt-1.5 border-t border-emerald-200/60 space-y-1.5">
+                      <p className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
+                        <Paperclip className="w-3 h-3 text-indigo-600" />
+                        <span>Lampiran Laporan Pemohon ({pengajuanKembaliAttachments.length})</span>
+                      </p>
+                      <TicketAttachmentList
+                        attachments={pengajuanKembaliAttachments}
+                        downloadRoute={downloadRoute}
+                        grouped={false}
+                      />
+                    </div>
+                  )}
                   {kembaliAttachments.length > 0 && (
                     <div className="pt-1.5 border-t border-emerald-200/60 space-y-1.5">
                       <p className="text-[11px] font-semibold text-slate-600 flex items-center gap-1">
@@ -314,19 +381,33 @@ export function EquipmentLoanCard({
                     </div>
                   )}
                 </div>
-              ) : (
+              ) : !isReturnReported ? (
                 <p className={loanSummary?.status_peminjaman === 'Belum Dikembalikan' ? 'text-rose-700 font-medium' : 'text-slate-500'}>
                   {loanSummary?.status_peminjaman === 'Belum Dikembalikan'
                     ? 'Batas jadwal peminjaman telah lewat dan alat belum ditandai kembali.'
                     : 'Menunggu konfirmasi pengembalian oleh operator/admin.'}
                 </p>
-              )}
+              ) : null}
             </div>
           </div>
 
+          {canReportReturn && isSolved && !isReturned && !isReturnReported && (
+            <div className="pt-3 border-t border-slate-100">
+              <Button
+                type="button"
+                size="sm"
+                className="w-full bg-indigo-600 hover:bg-indigo-700 text-white text-xs"
+                onClick={() => setReportReturnModalOpen(true)}
+              >
+                <Send className="w-3.5 h-3.5 mr-1.5" />
+                Lapor Sudah Kembalikan
+              </Button>
+            </div>
+          )}
+
           {canManage && isSolved && !isReturned && (
             <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
-              {!hasHandedOver ? (
+              {!hasHandedOver && !isReturnReported ? (
                 <>
                   <Button
                     type="button"
@@ -356,13 +437,22 @@ export function EquipmentLoanCard({
                   onClick={() => setReturnModalOpen(true)}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" />
-                  Tandai Sudah Dikembalikan
+                  {isReturnReported ? 'Konfirmasi Pengembalian Alat' : 'Tandai Sudah Dikembalikan'}
                 </Button>
               )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {canReportReturn && (
+        <ReportReturnEquipmentModal
+          open={reportReturnModalOpen}
+          onOpenChange={setReportReturnModalOpen}
+          ticket={modalTarget}
+          submitRouteName={reportReturnRoute}
+        />
+      )}
 
       {canManage && (
         <>

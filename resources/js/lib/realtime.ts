@@ -136,6 +136,8 @@ export interface TicketMessageEditedPayload {
 export interface TicketEvents {
   '.TicketMessagePosted': TicketMessagePostedPayload;
   '.TicketMessageEdited': TicketMessageEditedPayload;
+  '.pusher:subscription_succeeded': void;
+  '.pusher:subscription_error': unknown;
 }
 
 /** Events published on `chat.conversation.{id}` and the per-user channels. */

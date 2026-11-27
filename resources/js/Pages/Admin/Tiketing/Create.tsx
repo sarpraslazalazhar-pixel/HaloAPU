@@ -79,19 +79,27 @@ export default function Create({ unitList }: WizardProps) {
           const ordered: FormFieldType[] = [];
           const roots = list.filter(f => !f.parent_field_id);
           const childMap = new Map<number, FormFieldType[]>();
+
           list.forEach(f => {
             if (f.parent_field_id) {
               const pid = Number(f.parent_field_id);
+
               if (!childMap.has(pid)) childMap.set(pid, []);
+
               childMap.get(pid)!.push(f);
             }
           });
+
           const append = (item: FormFieldType) => {
             ordered.push(item);
+
             (childMap.get(Number(item.id)) ?? []).forEach(append);
           };
+
           roots.forEach(append);
+
           const added = new Set(ordered.map(f => Number(f.id)));
+
           list.forEach(f => { if (!added.has(Number(f.id))) ordered.push(f); });
 
           setFormFields(ordered);
@@ -175,12 +183,18 @@ export default function Create({ unitList }: WizardProps) {
 
   const isFieldVisible = (field: FormFieldType) => {
     if (!field.parent_field_id) return true;
+
     const parentVal = data.form_data[String(field.parent_field_id)];
+
     if (parentVal === undefined || parentVal === null) return false;
+
     const trigger = normalizeOption(field.trigger_value);
+
     if (Array.isArray(parentVal)) {
+      // SAFETY: parentVal is checked via Array.isArray; multi-select field entries are string options.
       return (parentVal as string[]).some(v => normalizeOption(v) === trigger);
     }
+
     return normalizeOption(parentVal) === trigger;
   };
 
@@ -290,8 +304,8 @@ export default function Create({ unitList }: WizardProps) {
   const renderFilePreview = (fieldId: number, field: FormFieldType) => {
     const files = data.attachments[String(fieldId)] || [];
     const isImage = field.tipe_field === 'upload_gambar';
-    const acceptedFormatText = isImage ? 'Format: JPG, JPEG, PNG.' : 'Format: JPG, PNG, PDF, DOC, DOCX.';
-    const acceptFormats = isImage ? '.jpg,.jpeg,.png' : '.jpg,.jpeg,.png,.pdf,.doc,.docx';
+    const acceptedFormatText = isImage ? 'Format: JPG, JPEG, PNG.' : 'Format: JPG, PNG, PDF, DOC, DOCX, XLS, XLSX, CSV.';
+    const acceptFormats = isImage ? '.jpg,.jpeg,.png' : '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv';
 
     return (
       <div className="mt-1 space-y-3">

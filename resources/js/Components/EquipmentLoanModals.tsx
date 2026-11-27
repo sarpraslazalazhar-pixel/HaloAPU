@@ -225,13 +225,13 @@ function LoanAttachmentUploader({
         <span>
           {files.length >= MAX_LOAN_FILES
             ? 'Batas maksimal 3 file tercapai'
-            : 'Pilih foto kondisi atau dokumen (.jpg, .png, .webp, .pdf, .doc, .docx)'}
+            : 'Pilih foto kondisi atau dokumen (.jpg, .png, .webp, .pdf, .doc, .docx, .xls, .xlsx, .csv)'}
         </span>
         <input
           id={inputId}
           type="file"
           multiple
-          accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx"
+          accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv"
           disabled={files.length >= MAX_LOAN_FILES}
           onChange={handleFilePick}
           className="hidden"
@@ -757,6 +757,164 @@ export function ReturnEquipmentModal({
                 disabled={isSubmitting}
               >
                 {isSubmitting ? 'Menyimpan...' : 'Simpan Pengembalian'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ReportReturnEquipmentModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticket: EquipmentLoanModalTarget | null;
+  submitRouteName?: string;
+  onSuccess?: () => void;
+}
+
+export function ReportReturnEquipmentModal({
+  open,
+  onOpenChange,
+  ticket,
+  submitRouteName = 'tiket.lapor-kembali-alat',
+  onSuccess,
+}: ReportReturnEquipmentModalProps) {
+  const [catatanPengajuanKembali, setCatatanPengajuanKembali] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    setCatatanPengajuanKembali('');
+    setFiles([]);
+    setIsSubmitting(false);
+  }, [open, ticket?.id]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!ticket || isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    router.post(
+      route(submitRouteName, ticket.id),
+      {
+        catatan_pengajuan_kembali: catatanPengajuanKembali,
+        lampiran: files,
+      },
+      {
+        forceFormData: true,
+        preserveScroll: true,
+        onSuccess: (page) => {
+          setIsSubmitting(false);
+          // SAFETY: Inertia response props carry Laravel flash messages.
+          const flashError = (page as FlashResponsePage)?.props?.flash?.error;
+
+          if (flashError) {
+            Swal.fire({
+              title: 'Gagal Mengirim Laporan',
+              text: flashError,
+              icon: 'error',
+              confirmButtonColor: '#ef4444',
+            });
+
+            return;
+          }
+
+          onOpenChange(false);
+          onSuccess?.();
+          Swal.fire({
+            title: 'Laporan Terkirim!',
+            text: 'Laporan pengembalian alat sudah diterima. Operator akan mengecek fisik & mengonfirmasi pengembalian.',
+            icon: 'success',
+            confirmButtonColor: '#4f46e5',
+            timer: 2400,
+            showConfirmButton: false,
+          });
+        },
+        onError: (errs) => {
+          setIsSubmitting(false);
+          const firstMsg = Object.values(errs)[0] || 'Gagal mengirim laporan pengembalian alat.';
+
+          Swal.fire({
+            title: 'Gagal Mengirim Laporan',
+            text: String(firstMsg),
+            icon: 'error',
+            confirmButtonColor: '#ef4444',
+          });
+        },
+        onFinish: () => {
+          setIsSubmitting(false);
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base font-semibold">
+            <PackageCheck className="w-5 h-5 text-indigo-600" />
+            Lapor Sudah Mengembalikan Alat
+          </DialogTitle>
+        </DialogHeader>
+
+        {ticket && (
+          <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+            <TicketLoanSummaryBox ticket={ticket} />
+
+            <div className="flex items-start gap-2 rounded-lg border border-indigo-200 bg-indigo-50/70 p-2.5 text-xs text-indigo-900">
+              <Info className="w-4 h-4 shrink-0 mt-0.5 text-indigo-600" />
+              <span>
+                Status alat akan berubah menjadi <strong>Menunggu Konfirmasi Kembali</strong>. Operator penangan akan memverifikasi fisik alat sebelum status resmi menjadi Dikembalikan.
+              </span>
+            </div>
+
+            <div>
+              <label
+                htmlFor="report-return-catatan"
+                className="text-xs font-semibold text-slate-700 block mb-1"
+              >
+                Catatan Pengembalian{' '}
+                <span className="text-slate-400 font-normal">(Opsional)</span>
+              </label>
+              <textarea
+                id="report-return-catatan"
+                rows={3}
+                maxLength={1000}
+                value={catatanPengajuanKembali}
+                onChange={(e) => setCatatanPengajuanKembali(e.target.value)}
+                placeholder="Contoh: Alat sudah diletakkan di meja piket GA lengkap dengan tas & kabel HDMI..."
+                className="w-full text-xs rounded-lg border border-slate-200 p-2.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
+            <LoanAttachmentUploader
+              files={files}
+              onChange={setFiles}
+              inputId="report-return-lampiran-input"
+            />
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenChange(false)}
+                disabled={isSubmitting}
+              >
+                Batal
+              </Button>
+              <Button
+                type="submit"
+                size="sm"
+                className="bg-indigo-600 hover:bg-indigo-700 text-white"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? 'Mengirim...' : 'Kirim Laporan Pengembalian'}
               </Button>
             </div>
           </form>

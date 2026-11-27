@@ -375,16 +375,19 @@ class BulkStoreTicketRequest extends FormRequest
 
         $type = $field ? 'field' : 'general';
 
-        $mime = match (true) {
-            $type === 'general' => 'mimes:jpg,jpeg,png,pdf',
-            $field->tipe_field === 'upload_gambar' => 'mimes:jpg,jpeg,png',
-            default => 'mimes:jpg,jpeg,png,pdf,doc,docx',
+        $rules = match (true) {
+            $type === 'general' => ['file', 'extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt'],
+            $field->tipe_field === 'upload_gambar' => ['file', 'mimes:jpg,jpeg,png'],
+            default => ['file', 'extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv', 'mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt'],
         };
 
         $probe = ValidatorFacade::make(
             ['file' => $file],
-            ['file' => ['file', $mime]],
-            ['file.mimes' => 'Tipe lampiran tidak diizinkan.']
+            ['file' => $rules],
+            [
+                'file.mimes' => 'Tipe lampiran tidak diizinkan.',
+                'file.extensions' => 'Tipe lampiran tidak diizinkan.',
+            ]
         );
 
         if ($probe->fails()) {

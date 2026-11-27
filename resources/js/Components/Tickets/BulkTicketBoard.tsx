@@ -1031,8 +1031,8 @@ export function BulkTicketBoard({
                       accept={openTargetField?.tipe_field === 'upload_gambar'
                         ? 'image/*'
                         : openTargetField
-                          ? undefined
-                          : 'image/*,.pdf'}
+                          ? '.jpg,.jpeg,.png,.pdf,.doc,.docx,.xls,.xlsx,.csv'
+                          : 'image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv'}
                       aria-invalid={dialogAttempted && !!openRowErrors.attachment}
                       onChange={event => {
                         const file = event.target.files?.[0] ?? null;

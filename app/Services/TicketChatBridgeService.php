@@ -656,18 +656,112 @@ class TicketChatBridgeService
         return $freshMessage;
     }
 
+    /**
+     * Serialize a single ticket log in the shared realtime/poll contract (`TicketLogEntry`).
+     *
+     * @return array<string, mixed>
+     */
+    public static function serializeTicketLog(TicketLog $log): array
+    {
+        $log->loadMissing(['admin:id,name,username', 'attachments']);
+
+        return [
+            'id' => (int) $log->id,
+            'ticket_id' => (int) $log->ticket_id,
+            'admin_id' => $log->admin_id !== null ? (int) $log->admin_id : null,
+            'aksi' => (string) $log->aksi,
+            'catatan' => $log->catatan,
+            'is_edited' => (bool) $log->is_edited,
+            'edited_at' => $log->edited_at?->toIso8601String(),
+            'timestamp' => $log->timestamp?->toIso8601String(),
+            'admin' => $log->admin ? [
+                'id' => (int) $log->admin->id,
+                'name' => $log->admin->name,
+                'username' => (string) $log->admin->username,
+            ] : null,
+            'attachments' => $log->attachments->map(static fn ($att): array => [
+                'id' => (int) $att->id,
+                'original_name' => $att->original_name,
+                'file_name' => $att->original_name ?: basename((string) $att->file_path),
+                'file_path' => (string) $att->file_path,
+                'mime_type' => $att->mime_type,
+                'file_size' => $att->file_size !== null ? (int) $att->file_size : null,
+            ])->values()->all(),
+        ];
+    }
+
+    /**
+     * Lightweight read-only JSON payload for fallback ticket polling.
+     *
+     * @return array<string, mixed>
+     */
+    public static function buildTicketPollPayload(Ticket $ticket, bool $includeChatReplies = true): array
+    {
+        $query = $ticket->logs()
+            ->with(['admin:id,name,username', 'attachments:id,ticket_id,ticket_log_id,original_name,file_path,mime_type,file_size']);
+
+        if (! $includeChatReplies) {
+            $query->whereRaw("LOWER(COALESCE(aksi, '')) != 'balasan'");
+        }
+
+        $logs = $query
+            ->orderByDesc('timestamp')
+            ->orderByDesc('id')
+            ->get();
+
+        return [
+            'status' => (string) $ticket->status,
+            'assigned_admin_id' => $ticket->assigned_admin_id !== null ? (int) $ticket->assigned_admin_id : null,
+            'updated_at' => $ticket->updated_at?->toIso8601String(),
+            'logs' => $logs->map(static fn (TicketLog $log): array => self::serializeTicketLog($log))->values()->all(),
+        ];
+    }
+
+    public static function shouldSkipBroadcast(): bool
+    {
+        if (app()->bound('events') && app('events') instanceof \Illuminate\Support\Testing\Fakes\EventFake) {
+            return false;
+        }
+
+        return in_array(config('broadcasting.default'), [null, 'null', 'log'], true);
+    }
+
     public static function emitChatMessage(Message $message): void
     {
-        broadcast(new ChatMessageSent($message))->toOthers();
+        if (self::shouldSkipBroadcast()) {
+            return;
+        }
+
+        try {
+            broadcast(new ChatMessageSent($message))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('Chat realtime broadcast failed: '.$e->getMessage());
+        }
     }
 
     public static function emitChatMessageEdited(Message $message): void
     {
-        broadcast(new ChatMessageEdited($message))->toOthers();
+        if (self::shouldSkipBroadcast()) {
+            return;
+        }
+
+        try {
+            broadcast(new ChatMessageEdited($message))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('Chat edit broadcast failed: '.$e->getMessage());
+        }
     }
 
     public static function emitTicketMessageEdited(TicketLog $log): void
     {
-        broadcast(new TicketMessageEdited($log));
+        if (self::shouldSkipBroadcast()) {
+            return;
+        }
+
+        try {
+            broadcast(new TicketMessageEdited($log));
+        } catch (\Throwable $e) {
+            Log::warning('Ticket edit broadcast failed: '.$e->getMessage());
+        }
     }
 }

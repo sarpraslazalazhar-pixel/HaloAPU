@@ -12,6 +12,7 @@ use App\Models\TicketLog;
 use App\Notifications\BrowserNotification;
 use App\Notifications\RevisionRequestedNotification;
 use App\Notifications\TicketCommentPushNotification;
+use App\Services\DocumentContentService;
 use App\Services\EquipmentLoanService;
 use App\Services\SparcIntegrationService;
 use App\Services\TicketChatBridgeService;
@@ -72,7 +73,7 @@ class TicketHistoryController extends Controller
     public function download(TicketAttachment $attachment)
     {
         $ticket = $attachment->ticket;
-        if ($ticket->user_id !== auth()->id()) {
+        if (! $ticket || ! $ticket->isOwnedByUser(auth()->user())) {
             abort(403);
         }
 
@@ -86,20 +87,29 @@ class TicketHistoryController extends Controller
     public function viewAttachment(TicketAttachment $attachment)
     {
         $ticket = $attachment->ticket;
-        if ($ticket->user_id !== auth()->id()) {
+        if (! $ticket || ! $ticket->isOwnedByUser(auth()->user())) {
             abort(403);
         }
 
-        if (! Storage::disk('public')->exists($attachment->file_path)) {
-            abort(404, 'File tidak ditemukan.');
+        return DocumentContentService::streamInlineOrDownload(
+            (string) $attachment->file_path,
+            (string) ($attachment->original_name ?: basename((string) $attachment->file_path)),
+            $attachment->mime_type,
+        );
+    }
+
+    public function previewAttachment(TicketAttachment $attachment)
+    {
+        $ticket = $attachment->ticket;
+        if (! $ticket || ! $ticket->isOwnedByUser(auth()->user())) {
+            abort(403);
         }
 
-        $headers = [
-            'Content-Type' => $attachment->mime_type,
-            'Content-Disposition' => 'inline; filename="'.$attachment->original_name.'"',
-        ];
-
-        return response()->file(Storage::disk('public')->path($attachment->file_path), $headers);
+        return DocumentContentService::previewSpreadsheetResponse(
+            (string) $attachment->file_path,
+            (string) ($attachment->original_name ?: basename((string) $attachment->file_path)),
+            $attachment->mime_type,
+        );
     }
 
     public function show(Ticket $ticket)
@@ -118,6 +128,7 @@ class TicketHistoryController extends Controller
             'orgUnit',
             'jabatan',
             'booking',
+            'createdByAdmin:id,name,username',
             'diserahkanOlehAdmin:id,name,username',
             'penerimaAlatUser:id,name,username',
             'diterimaKembaliOlehAdmin:id,name,username',
@@ -147,11 +158,22 @@ class TicketHistoryController extends Controller
             'maxRevisions' => $maxRevisions,
             'work_hours' => TicketWorkQueue::workHoursFor($ticket, auth()->user()),
             'isEquipmentLoan' => $isEquipmentLoan,
+            'canReportReturn' => $isEquipmentLoan && EquipmentLoanService::canReportReturn($ticket, auth()->user()),
             'loanSummary' => $isEquipmentLoan ? EquipmentLoanService::extractLoanSummary($ticket) : null,
             'loanAttachments' => $isEquipmentLoan
                 ? EquipmentLoanService::extractLoanAttachments($ticket)
-                : ['serah' => [], 'kembali' => []],
+                : ['serah' => [], 'pengajuan_kembali' => [], 'kembali' => []],
         ]);
+    }
+
+    public function pollLogs(Ticket $ticket)
+    {
+        $user = auth()->user();
+        if (! $user || ! $ticket->isOwnedByUser($user)) {
+            abort(403, 'Kamu tidak memiliki akses ke tiket ini.');
+        }
+
+        return response()->json(TicketChatBridgeService::buildTicketPollPayload($ticket));
     }
 
     public function cancel(Ticket $ticket)
@@ -221,7 +243,7 @@ class TicketHistoryController extends Controller
         $request->validate([
             'catatan' => 'required_without:general_attachments|nullable|string|max:1000',
             'general_attachments' => 'nullable|array|max:3',
-            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'general_attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         $storedPaths = [];
@@ -402,7 +424,7 @@ class TicketHistoryController extends Controller
         $request->validate([
             'catatan' => 'required|string|max:1000',
             'general_attachments' => 'nullable|array|max:3',
-            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'general_attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         try {
@@ -440,7 +462,7 @@ class TicketHistoryController extends Controller
                         'ticket_log_id' => $log->id,
                         'file_path' => $path,
                         'original_name' => $file->getClientOriginalName(),
-                        'mime_type' => $file->getClientMimeType(),
+                        'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
                         'file_size' => $file->getSize(),
                         'wajib' => false,
                     ]);
@@ -463,6 +485,40 @@ class TicketHistoryController extends Controller
         app(SparcIntegrationService::class)->notifyIfEligible($ticket, 'ticket.revision_requested');
 
         return redirect()->back()->with('success', 'Permintaan revisi berhasil dikirim.');
+    }
+
+    public function laporKembaliAlat(Request $request, Ticket $ticket)
+    {
+        $user = auth()->user();
+        if (! $ticket->isOwnedByUser($user)) {
+            abort(403, 'Kamu tidak memiliki akses untuk melaporkan pengembalian alat tiket ini.');
+        }
+
+        $validated = $request->validate([
+            'catatan_pengajuan_kembali' => 'nullable|string|max:1000',
+            'lampiran' => 'nullable|array|max:3',
+            'lampiran.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
+        ]);
+
+        $files = $request->file('lampiran', []);
+        $files = is_array($files) ? $files : ($files ? [$files] : []);
+
+        try {
+            EquipmentLoanService::reportReturnByRequester(
+                $ticket,
+                $user,
+                $validated['catatan_pengajuan_kembali'] ?? null,
+                $files
+            );
+        } catch (\InvalidArgumentException|\DomainException $e) {
+            return $request->expectsJson()
+                ? response()->json(['message' => $e->getMessage()], 422)
+                : redirect()->back()->with('error', $e->getMessage());
+        }
+
+        return $request->expectsJson()
+            ? response()->json(['success' => true, 'message' => 'Laporan pengembalian alat berhasil dikirim. Menunggu konfirmasi operator.'])
+            : redirect()->back()->with('success', 'Laporan pengembalian alat berhasil dikirim. Menunggu konfirmasi operator.');
     }
 
     public function kembalikanAlat(Request $request, Ticket $ticket)

@@ -87,6 +87,7 @@ class Ticket extends Model
         'source',
         'revision_count', 'waiting_approval_at', 'is_result_accepted',
         'diserahkan_at', 'diserahkan_oleh_admin_id', 'penerima_alat_user_id', 'penerima_alat', 'kondisi_serah', 'catatan_serah',
+        'pengembalian_diajukan_at', 'catatan_pengajuan_kembali',
         'dikembalikan_at', 'diterima_kembali_oleh_admin_id', 'kondisi_kembali', 'catatan_kembali'
     ];
 
@@ -134,6 +135,7 @@ class Ticket extends Model
         'diserahkan_at' => 'datetime',
         'diserahkan_oleh_admin_id' => 'integer',
         'penerima_alat_user_id' => 'integer',
+        'pengembalian_diajukan_at' => 'datetime',
         'dikembalikan_at' => 'datetime',
         'diterima_kembali_oleh_admin_id' => 'integer',
         'assignment_queued_at' => 'datetime',

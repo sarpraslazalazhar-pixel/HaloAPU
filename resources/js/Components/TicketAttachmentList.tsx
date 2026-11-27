@@ -1,6 +1,6 @@
 import React from 'react';
 import { 
-  FileText, Download, Eye, Image as ImageIcon,
+  FileSpreadsheet, FileText, Download, Eye, Image as ImageIcon,
   FileArchive, ShieldCheck, MessageSquare, Layers, Paperclip, PackageCheck 
 } from 'lucide-react';
 import { Button } from './ui/button';
@@ -66,6 +66,10 @@ const getFileIcon = (filename: string, mime?: string | null) => {
     return <FileText className="h-4 w-4 text-blue-500 shrink-0" />;
   }
 
+  if (['xls', 'xlsx', 'csv'].includes(ext)) {
+    return <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />;
+  }
+
   return <FileText className="h-4 w-4 text-slate-400 shrink-0" />;
 };
 
@@ -79,6 +83,7 @@ const statusNameMap = {
   revisi: 'Revisi',
   balasan: 'Balasan',
   alat_diserahkan: 'Serah-Terima Alat',
+  pengajuan_kembali_alat: 'Laporan Pengembalian Alat',
   alat_dikembalikan: 'Pengembalian Alat',
 } satisfies Record<string, string>;
 
@@ -86,6 +91,7 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
   if (!attachments?.length) return null;
 
   const viewRoute = downloadRoute.replace('.download', '.view');
+  const previewRoute = downloadRoute.replace('.download', '.preview');
 
   const renderAttachmentRow = (att: Attachment, showOriginBadge: boolean = true) => {
     const filename = att.original_name || att.file_path?.split('/').pop() || 'Berkas Lampiran';
@@ -132,7 +138,7 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
         </div>
 
         <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
-          <AttachmentViewer attachment={att} viewRoute={viewRoute} downloadRoute={downloadRoute}>
+          <AttachmentViewer attachment={att} viewRoute={viewRoute} downloadRoute={downloadRoute} previewRoute={previewRoute}>
             <Button type="button" variant="outline" size="sm" className="h-8 text-blue-600 hover:text-blue-800 flex items-center gap-1.5 hover:bg-blue-50 border-blue-200">
               <Eye className="h-3.5 w-3.5" />
               <span>Lihat</span>
@@ -175,7 +181,7 @@ export function TicketAttachmentList({ attachments, downloadRoute, grouped = fal
         adminAttachments.push(att);
       } else if (['revisi', 'balasan', 'need_revision'].includes(att.log.aksi)) {
         revisionAttachments.push(att);
-      } else if (['alat_diserahkan', 'alat_dikembalikan'].includes(att.log.aksi)) {
+      } else if (['alat_diserahkan', 'pengajuan_kembali_alat', 'alat_dikembalikan'].includes(att.log.aksi)) {
         loanAttachments.push(att);
       } else {
         otherAttachments.push(att);

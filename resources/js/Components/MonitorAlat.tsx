@@ -35,6 +35,7 @@ export interface AlatPinjamItem {
     | 'Sedang Dipinjam'
     | 'Menunggu Diserahkan'
     | 'Menunggu Persetujuan'
+    | 'Menunggu Konfirmasi Kembali'
     | 'Belum Dikembalikan'
     | 'Dikembalikan';
   diserahkan_at?: string | null;
@@ -43,11 +44,14 @@ export interface AlatPinjamItem {
   penerima_alat?: string | null;
   kondisi_serah?: string | null;
   catatan_serah?: string | null;
+  pengembalian_diajukan_at?: string | null;
+  catatan_pengajuan_kembali?: string | null;
   dikembalikan_at: string | null;
   diterima_kembali_oleh?: string | null;
   kondisi_kembali?: string | null;
   catatan_kembali?: string | null;
   lampiran_serah_count?: number;
+  lampiran_pengajuan_kembali_count?: number;
   lampiran_kembali_count?: number;
   is_overdue_schedule?: boolean;
   can_serahkan?: boolean;
@@ -61,6 +65,7 @@ export interface KetersediaanAlatItem {
     | 'Sedang Dipinjam'
     | 'Menunggu Diserahkan'
     | 'Menunggu Persetujuan'
+    | 'Menunggu Konfirmasi Kembali'
     | 'Belum Dikembalikan';
   user: string | null;
   waktu: string | null;
@@ -198,6 +203,8 @@ export default function MonitorAlat({
                         ? 'bg-emerald-50/20 border-emerald-200/80 hover:border-emerald-300'
                         : tool.status === 'Sedang Dipinjam'
                         ? 'bg-sky-50/30 border-sky-200/80 hover:border-sky-300'
+                        : tool.status === 'Menunggu Konfirmasi Kembali'
+                        ? 'bg-indigo-50/40 border-indigo-200/90 hover:border-indigo-300'
                         : tool.status === 'Belum Dikembalikan'
                         ? 'bg-rose-50/30 border-rose-200/80 hover:border-rose-300'
                         : tool.status === 'Menunggu Persetujuan'
@@ -215,6 +222,10 @@ export default function MonitorAlat({
                       {isAvailable ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
                           <CheckCircle2 className="w-3 h-3" /> Tersedia
+                        </span>
+                      ) : tool.status === 'Menunggu Konfirmasi Kembali' ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200 shrink-0">
+                          <Clock className="w-3 h-3" /> Konfirmasi Kembali
                         </span>
                       ) : tool.status === 'Sedang Dipinjam' ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-sky-100 text-sky-800 border border-sky-200 shrink-0">
@@ -304,6 +315,7 @@ export default function MonitorAlat({
                 <option value="Menunggu Persetujuan">Menunggu Persetujuan</option>
                 <option value="Menunggu Diserahkan">Menunggu Diserahkan</option>
                 <option value="Sedang Dipinjam">Sedang Dipinjam</option>
+                <option value="Menunggu Konfirmasi Kembali">Menunggu Konfirmasi Kembali</option>
                 <option value="Belum Dikembalikan">Belum Dikembalikan</option>
                 <option value="Dikembalikan">Sudah Dikembalikan</option>
               </select>
@@ -360,6 +372,10 @@ export default function MonitorAlat({
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
                                 <CheckCircle2 className="w-3 h-3" /> Dikembalikan
                               </span>
+                            ) : item.status_pengembalian === 'Menunggu Konfirmasi Kembali' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                                <Clock className="w-3 h-3" /> Menunggu Konfirmasi Kembali
+                              </span>
                             ) : item.status_pengembalian === 'Belum Dikembalikan' ? (
                               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">
                                 <AlertTriangle className="w-3 h-3" /> Belum Dikembalikan
@@ -413,6 +429,25 @@ export default function MonitorAlat({
                             </div>
                           )}
 
+                          {item.pengembalian_diajukan_at && !item.dikembalikan_at && (
+                            <div className="text-[11px] text-indigo-900 bg-indigo-50/70 border border-indigo-200 rounded-md p-2 space-y-0.5">
+                              <div className="font-semibold">
+                                Dilaporkan kembali: {item.pengembalian_diajukan_at}
+                              </div>
+                              {item.catatan_pengajuan_kembali && (
+                                <div className="italic text-indigo-800">&ldquo;{item.catatan_pengajuan_kembali}&rdquo;</div>
+                              )}
+                              {(item.lampiran_pengajuan_kembali_count ?? 0) > 0 && (
+                                <div className="pt-0.5">
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 border border-indigo-200 text-[10px] font-medium">
+                                    <Paperclip className="w-2.5 h-2.5" />
+                                    {item.lampiran_pengajuan_kembali_count} lampiran pemohon
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {item.dikembalikan_at && (
                             <div className="text-[11px] text-slate-600 space-y-0.5 pt-0.5 border-t border-slate-100">
                               <div>
@@ -446,7 +481,7 @@ export default function MonitorAlat({
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex flex-wrap items-center justify-end gap-1.5">
-                            {canQuickAction && item.can_serahkan && (
+                            {canQuickAction && item.can_serahkan && !item.pengembalian_diajukan_at && (
                               <Button
                                 type="button"
                                 size="sm"
@@ -461,16 +496,16 @@ export default function MonitorAlat({
                               <Button
                                 type="button"
                                 size="sm"
-                                variant={item.can_serahkan ? 'outline' : 'default'}
+                                variant={item.can_serahkan && !item.pengembalian_diajukan_at ? 'outline' : 'default'}
                                 className={
-                                  item.can_serahkan
+                                  item.can_serahkan && !item.pengembalian_diajukan_at
                                     ? 'h-7 px-2.5 text-[11px] border-emerald-300 text-emerald-700 hover:bg-emerald-50'
                                     : 'h-7 px-2.5 text-[11px] bg-emerald-600 hover:bg-emerald-700 text-white'
                                 }
                                 onClick={() => setReturnTarget(toModalTarget(item))}
                               >
                                 <CheckCircle2 className="w-3 h-3 mr-1" />
-                                Kembalikan
+                                {item.pengembalian_diajukan_at ? 'Konfirmasi' : 'Kembalikan'}
                               </Button>
                             )}
                             {detailUrl && (

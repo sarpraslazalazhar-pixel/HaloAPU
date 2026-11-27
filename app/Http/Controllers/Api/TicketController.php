@@ -59,7 +59,7 @@ class TicketController extends Controller
             'diserahkanOlehAdmin:id,name,username',
             'penerimaAlatUser:id,name,username',
             'diterimaKembaliOlehAdmin:id,name,username',
-            'logs' => fn ($q) => $q->whereIn('aksi', ['alat_diserahkan', 'alat_dikembalikan'])->with('attachments'),
+            'logs' => fn ($q) => $q->whereIn('aksi', ['alat_diserahkan', 'pengajuan_kembali_alat', 'alat_dikembalikan'])->with('attachments'),
         ];
 
         $isAdmin = $user instanceof Admin;
@@ -97,6 +97,7 @@ class TicketController extends Controller
 
             $loanStageCounts = [
                 'aktif' => $finishedFilter(clone $loanBaseQuery)->whereNull('dikembalikan_at')->count(),
+                'menunggu_konfirmasi' => $finishedFilter(clone $loanBaseQuery)->whereNotNull('pengembalian_diajukan_at')->whereNull('dikembalikan_at')->count(),
                 'menunggu_diserahkan' => $finishedFilter(clone $loanBaseQuery)->whereNull('diserahkan_at')->whereNull('dikembalikan_at')->count(),
                 'sedang_dipinjam' => $finishedFilter(clone $loanBaseQuery)->whereNotNull('diserahkan_at')->whereNull('dikembalikan_at')->count(),
                 'dikembalikan' => (clone $loanBaseQuery)->whereNotNull('dikembalikan_at')->count(),
@@ -104,7 +105,7 @@ class TicketController extends Controller
             ];
 
             $requestedStage = $request->query('loan_stage');
-            $loanStage = in_array($requestedStage, ['aktif', 'menunggu_diserahkan', 'sedang_dipinjam', 'dikembalikan', 'semua'], true)
+            $loanStage = in_array($requestedStage, ['aktif', 'menunggu_konfirmasi', 'menunggu_diserahkan', 'sedang_dipinjam', 'dikembalikan', 'semua'], true)
                 ? $requestedStage
                 : 'aktif';
 
@@ -112,6 +113,8 @@ class TicketController extends Controller
 
             if ($loanStage === 'aktif') {
                 $finishedFilter($loanQuery)->whereNull('dikembalikan_at');
+            } elseif ($loanStage === 'menunggu_konfirmasi') {
+                $finishedFilter($loanQuery)->whereNotNull('pengembalian_diajukan_at')->whereNull('dikembalikan_at');
             } elseif ($loanStage === 'menunggu_diserahkan') {
                 $finishedFilter($loanQuery)->whereNull('diserahkan_at')->whereNull('dikembalikan_at');
             } elseif ($loanStage === 'sedang_dipinjam') {
@@ -127,12 +130,19 @@ class TicketController extends Controller
                 return $t;
             });
 
-            if (in_array($loanStage, ['aktif', 'menunggu_diserahkan', 'sedang_dipinjam'], true)) {
+            if (in_array($loanStage, ['aktif', 'menunggu_konfirmasi', 'menunggu_diserahkan', 'sedang_dipinjam'], true)) {
                 $sortedLoanItems = $loanItems->sort(function (Ticket $a, Ticket $b): int {
                     $aSummary = $a->getAttribute('loan_summary');
                     $bSummary = $b->getAttribute('loan_summary');
-                    $aUrgency = ($aSummary['status_peminjaman'] ?? '') === EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN ? 0 : 1;
-                    $bUrgency = ($bSummary['status_peminjaman'] ?? '') === EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN ? 0 : 1;
+                    $urgencyRank = function (?array $summary): int {
+                        return match ($summary['status_peminjaman'] ?? '') {
+                            EquipmentLoanService::STATUS_MENUNGGU_KONFIRMASI_KEMBALI => 0,
+                            EquipmentLoanService::STATUS_BELUM_DIKEMBALIKAN => 1,
+                            default => 2,
+                        };
+                    };
+                    $aUrgency = $urgencyRank($aSummary);
+                    $bUrgency = $urgencyRank($bSummary);
 
                     if ($aUrgency !== $bUrgency) {
                         return $aUrgency <=> $bUrgency;
@@ -319,7 +329,7 @@ class TicketController extends Controller
             }
             Validator::make(
                 ['files' => $flatFiles],
-                ['files.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx']
+                ['files.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt']
             )->validate();
         }
 
@@ -456,7 +466,7 @@ class TicketController extends Controller
                             'field_id' => is_numeric($fieldId) ? (int) $fieldId : null,
                             'file_path' => $path,
                             'original_name' => $originalName,
-                            'mime_type' => $file->getMimeType() ?: ($file->getClientMimeType() ?: 'image/jpeg'),
+                            'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
                             'file_size' => $file->getSize(),
                         ]);
                     }
@@ -763,7 +773,7 @@ class TicketController extends Controller
         $request->validate([
             'catatan' => 'required_without:attachments|nullable|string|max:1000',
             'attachments' => 'nullable|array|max:3',
-            'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         $storedPaths = [];
@@ -1175,7 +1185,7 @@ class TicketController extends Controller
         $request->validate([
             'catatan' => 'required|string|max:1000',
             'attachments' => 'nullable|array|max:3',
-            'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         try {
@@ -1209,7 +1219,7 @@ class TicketController extends Controller
                         'ticket_log_id' => $log->id,
                         'file_path' => $path,
                         'original_name' => $file->getClientOriginalName(),
-                        'mime_type' => $file->getClientMimeType(),
+                        'mime_type' => $file->getMimeType() ?: 'application/octet-stream',
                         'file_size' => $file->getSize(),
                         'wajib' => false,
                     ]);
@@ -1307,7 +1317,7 @@ class TicketController extends Controller
             'status' => 'required|in:open,on_proses,solve,reject,dibatalkan,pending',
             'catatan' => 'nullable|string|max:1000',
             'general_attachments' => 'nullable|array|max:3',
-            'general_attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,pdf,doc,docx',
+            'general_attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         try {
@@ -1545,7 +1555,7 @@ class TicketController extends Controller
         $loanSummary = $isLoan ? EquipmentLoanService::extractLoanSummary($ticket) : null;
         $loanAttachments = $isLoan
             ? EquipmentLoanService::extractLoanAttachments($ticket)
-            : ['serah' => [], 'kembali' => []];
+            : ['serah' => [], 'pengajuan_kembali' => [], 'kembali' => []];
         $mapLoanAttachments = fn (array $items): array => array_map(fn (array $att): array => [
             'id' => $att['id'],
             'fileName' => $att['file_name'],
@@ -1558,6 +1568,9 @@ class TicketController extends Controller
         $canManageLoan = $viewer instanceof Admin
             && $isLoan
             && EquipmentLoanService::canManageLoanTicket($ticket, $viewer);
+        $canLaporKembali = $isLoan
+            && ($viewer instanceof User || $viewer instanceof Admin)
+            && EquipmentLoanService::canReportReturn($ticket, $viewer);
         $isFinishedLoan = EquipmentLoanService::isFinishedStatus($ticket->status);
 
         $responseDeadlineStr = $sla?->sla_response_deadline
@@ -1599,6 +1612,8 @@ class TicketController extends Controller
             'penerima_alat' => $ticket->penerima_alat,
             'kondisi_serah' => $ticket->kondisi_serah,
             'catatan_serah' => $ticket->catatan_serah,
+            'pengembalian_diajukan_at' => $ticket->pengembalian_diajukan_at ? $ticket->pengembalian_diajukan_at->format('d M Y, H:i') : null,
+            'catatan_pengajuan_kembali' => $ticket->catatan_pengajuan_kembali,
             'dikembalikan_at' => $ticket->dikembalikan_at ? $ticket->dikembalikan_at->format('d M Y, H:i') : null,
             'diterima_kembali_oleh' => $ticket->diterimaKembaliOlehAdmin ? ($ticket->diterimaKembaliOlehAdmin->name ?: $ticket->diterimaKembaliOlehAdmin->username) : null,
             'kondisi_kembali' => $ticket->kondisi_kembali,
@@ -1607,8 +1622,10 @@ class TicketController extends Controller
             'alat_text' => $loanSummary['alat_text'] ?? null,
             'rentang_waktu' => $loanSummary['rentang_waktu'] ?? null,
             'can_serahkan' => $canManageLoan && $isFinishedLoan && $ticket->diserahkan_at === null && $ticket->dikembalikan_at === null,
+            'can_lapor_kembali' => $canLaporKembali,
             'can_kembalikan' => $canManageLoan && $isFinishedLoan && $ticket->dikembalikan_at === null,
             'lampiran_serah' => $mapLoanAttachments($loanAttachments['serah']),
+            'lampiran_pengajuan_kembali' => $mapLoanAttachments($loanAttachments['pengajuan_kembali']),
             'lampiran_kembali' => $mapLoanAttachments($loanAttachments['kembali']),
             'wajib_kembali' => (bool) $wajibKembali,
             'is_booking_past' => (bool) $isBookingPast,
@@ -1758,9 +1775,9 @@ class TicketController extends Controller
             'kondisi_serah' => 'nullable|string|in:baik,rusak,tidak_lengkap',
             'catatan_serah' => 'nullable|string|max:1000',
             'lampiran' => 'nullable|array|max:3',
-            'lampiran.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+            'lampiran.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
             'attachments' => 'nullable|array|max:3',
-            'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+            'attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         $files = $request->file('lampiran');
@@ -1786,6 +1803,65 @@ class TicketController extends Controller
             'success' => true,
             'message' => 'Alat berhasil ditandai sudah diserahkan',
             'data' => $this->formatTicket($updated, $admin),
+        ], 200);
+    }
+
+    /**
+     * Report equipment as returned by requester (User or non-handler Admin requester).
+     */
+    public function laporKembaliAlat(Request $request, string $id)
+    {
+        $user = $request->user();
+
+        $ticket = Ticket::with(['subUnit', 'booking'])
+            ->where('id', str_replace('-', '', $id))
+            ->orWhere('id', $id)
+            ->first();
+
+        if (! $ticket) {
+            return response()->json(['message' => 'Tiket tidak ditemukan'], 404);
+        }
+
+        $authorized = $user instanceof Admin
+            ? ($ticket->isSubmittedBy($user) && ! EquipmentLoanService::canManageLoanTicket($ticket, $user))
+            : ($user instanceof User && $ticket->isOwnedByUser($user));
+
+        if (! $authorized) {
+            return response()->json(['message' => 'Kamu tidak memiliki hak akses untuk melaporkan pengembalian alat tiket ini.'], 403);
+        }
+
+        $validated = $request->validate([
+            'catatan_pengajuan_kembali' => 'nullable|string|max:1000',
+            'catatan' => 'nullable|string|max:1000',
+            'lampiran' => 'nullable|array|max:3',
+            'lampiran.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
+            'attachments' => 'nullable|array|max:3',
+            'attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
+        ]);
+
+        $catatan = $validated['catatan_pengajuan_kembali'] ?? ($validated['catatan'] ?? null);
+
+        $files = $request->file('lampiran');
+        if (empty($files)) {
+            $files = $request->file('attachments', []);
+        }
+        $files = is_array($files) ? $files : ($files ? [$files] : []);
+
+        try {
+            $updated = EquipmentLoanService::reportReturnByRequester(
+                $ticket,
+                $user,
+                $catatan,
+                $files
+            );
+        } catch (\InvalidArgumentException|\DomainException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Laporan pengembalian alat berhasil dikirim. Menunggu konfirmasi operator.',
+            'data' => $this->formatTicket($updated, $user),
         ], 200);
     }
 
@@ -1817,9 +1893,9 @@ class TicketController extends Controller
             'kondisi_kembali' => 'nullable|string|in:baik,rusak,tidak_lengkap',
             'catatan_kembali' => 'nullable|string|max:1000',
             'lampiran' => 'nullable|array|max:3',
-            'lampiran.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+            'lampiran.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
             'attachments' => 'nullable|array|max:3',
-            'attachments.*' => 'file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx',
+            'attachments.*' => 'file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt',
         ]);
 
         $files = $request->file('lampiran');

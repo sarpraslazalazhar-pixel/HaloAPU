@@ -23,6 +23,7 @@ class AppReleaseController extends Controller
         $validated = $request->validate([
             'platform' => ['required', 'string', Rule::in(AppRelease::PLATFORMS)],
             'channel' => ['required', 'string', Rule::in(AppRelease::CHANNELS)],
+            'target_audience' => ['nullable', 'string', Rule::in(AppRelease::TARGET_AUDIENCES)],
             'version_name' => ['required', 'string', 'max:50'],
             'build_number' => [
                 'required',
@@ -47,6 +48,7 @@ class AppReleaseController extends Controller
         $release = AppRelease::create([
             'platform' => $validated['platform'],
             'channel' => $validated['channel'],
+            'target_audience' => AppRelease::normalizeTargetAudience($validated['target_audience'] ?? null),
             'version_name' => trim($validated['version_name']),
             'build_number' => (int) $validated['build_number'],
             'min_supported_build_number' => 0,
@@ -73,6 +75,7 @@ class AppReleaseController extends Controller
     public function update(Request $request, AppRelease $appRelease): RedirectResponse
     {
         $validated = $request->validate([
+            'target_audience' => ['nullable', 'string', Rule::in(AppRelease::TARGET_AUDIENCES)],
             'version_name' => ['required', 'string', 'max:50'],
             'build_number' => [
                 'sometimes',
@@ -98,6 +101,9 @@ class AppReleaseController extends Controller
         ]);
 
         $appRelease->fill([
+            'target_audience' => AppRelease::normalizeTargetAudience(
+                $validated['target_audience'] ?? $appRelease->target_audience
+            ),
             'version_name' => trim($validated['version_name']),
             'build_number' => $validated['build_number'] ?? $appRelease->build_number,
             'min_supported_build_number' => 0,
@@ -119,6 +125,9 @@ class AppReleaseController extends Controller
             }
         } else {
             $appRelease->save();
+            if ($appRelease->is_active) {
+                $appRelease->activate();
+            }
         }
 
         return back()->with(
@@ -172,10 +181,19 @@ class AppReleaseController extends Controller
             );
         }
 
+        $allowedTargets = $appRelease->allowedNotifyTargets();
+        $targetMismatchMessage = match (AppRelease::normalizeTargetAudience($appRelease->target_audience)) {
+            AppRelease::TARGET_ADMINS => 'Rilis Khusus Admin hanya dapat mengirim notifikasi ke target Hanya Admin / Operator.',
+            AppRelease::TARGET_USERS => 'Rilis Khusus Pengaju hanya dapat mengirim notifikasi ke target Hanya Pengaju (User).',
+            default => 'Target penerima notifikasi tidak valid.',
+        };
+
         $validated = $request->validate([
-            'target' => ['required', 'string', Rule::in(['all', 'users', 'admins'])],
+            'target' => ['required', 'string', Rule::in($allowedTargets)],
             'notification_title' => ['required', 'string', 'max:120'],
             'notification_body' => ['required', 'string', 'max:300'],
+        ], [
+            'target.in' => $targetMismatchMessage,
         ]);
 
         $target = $validated['target'];

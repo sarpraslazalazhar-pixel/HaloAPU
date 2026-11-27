@@ -27,6 +27,7 @@ class AiToolRegistry
             new GetCsatAnalysisTool($scope),
             new SearchTicketsTool($scope),
             new GetTicketDetailTool($scope),
+            new ReadTicketAttachmentTool(),
             new GetBookingScheduleTool($scope),
             new ComparePeriodsTool($scope),
         ] as $tool) {

@@ -130,7 +130,7 @@ class ChatController extends Controller
             'body' => 'nullable|string|max:5000',
             'ticket_id' => 'nullable|exists:tickets,id',
             'reply_to_message_id' => 'nullable|exists:messages,id',
-            'attachment' => 'nullable|file|max:3072|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,zip',
+            'attachment' => 'nullable|file|max:3072|extensions:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,zip|mimes:jpg,jpeg,png,webp,pdf,doc,docx,xls,xlsx,csv,txt,zip',
         ]);
 
         if (empty($validated['body']) && ! $request->hasFile('attachment')) {

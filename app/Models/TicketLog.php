@@ -53,8 +53,8 @@ class TicketLog extends Model
 
     public function broadcastTimeline(): void
     {
-        // No realtime driver (cPanel): skip entirely so writes stay fast.
-        if (in_array(config('broadcasting.default'), [null, 'null', 'log'], true)) {
+        // No realtime driver (cPanel): skip entirely so writes stay fast, while respecting Event::fake().
+        if (\App\Services\TicketChatBridgeService::shouldSkipBroadcast()) {
             return;
         }
 

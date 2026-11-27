@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Channels\WhatsAppChannel;
 use App\Models\Admin;
 use App\Models\FormField;
 use App\Models\RoomVehicleBooking;
@@ -11,9 +12,11 @@ use App\Models\TicketAttachment;
 use App\Models\TicketLog;
 use App\Models\Unit;
 use App\Models\User;
+use App\Notifications\EquipmentReturnReportedNotification;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
@@ -1024,6 +1027,303 @@ class EquipmentLoanHandoverTest extends TestCase
             ->assertJsonPath('meta.peminjaman_alat_count', 1)
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $assignedTicket->formatted_id);
+
+        Carbon::setTestNow();
+    }
+
+    public function test_user_can_report_equipment_return_via_web_sending_notification_without_whatsapp_and_prioritizing_monitor_and_tab(): void
+    {
+        Storage::fake('public');
+        Notification::fake();
+
+        $now = Carbon::create(2026, 11, 25, 11, 0, 0);
+        Carbon::setTestNow($now);
+
+        // Give gaOperator both fcm_token and no_wa to assert WhatsAppChannel is NEVER used
+        $this->gaOperator->update([
+            'fcm_token' => 'fake-fcm-token-ga',
+            'no_wa' => '081234567890',
+        ]);
+
+        // An overdue active ticket (Belum Dikembalikan) to verify Menunggu Konfirmasi Kembali ranks higher
+        $overdueTicket = $this->createLoanTicket(
+            status: 'solve',
+            startDate: $now->copy()->subDays(5),
+            endDate: $now->copy()->subDays(2),
+            tools: ['Kabel HDMI']
+        );
+        $overdueTicket->update([
+            'diserahkan_at' => $now->copy()->subDays(5),
+            'diserahkan_oleh_admin_id' => $this->gaOperator->id,
+            'penerima_alat' => $this->borrower->name,
+            'kondisi_serah' => 'baik',
+        ]);
+
+        $reportedTicket = $this->createLoanTicket(
+            status: 'solve',
+            startDate: $now->copy(),
+            endDate: $now->copy()->addDay(),
+            tools: ['Infokus']
+        );
+        $reportedTicket->update([
+            'diserahkan_at' => $now->copy()->subHours(2),
+            'diserahkan_oleh_admin_id' => $this->gaOperator->id,
+            'penerima_alat_user_id' => $this->borrower->id,
+            'penerima_alat' => $this->borrower->name,
+            'kondisi_serah' => 'baik',
+        ]);
+
+        // Before reporting, user detail shows canReportReturn = true
+        $this->actingAs($this->borrower, 'web')
+            ->get(route('tiket.show', $reportedTicket->id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->component('User/Tiket/Detail')
+                ->where('canReportReturn', true)
+            );
+
+        // Non-owner user receives 403
+        $stranger = User::factory()->create(['username' => 'stranger_user', 'name' => 'Stranger']);
+        $this->actingAs($stranger, 'web')
+            ->post(route('tiket.lapor-kembali-alat', $reportedTicket->id), [
+                'catatan_pengajuan_kembali' => 'Harus ditolak',
+            ])
+            ->assertForbidden();
+
+        // Owner reports return with note & photo
+        $photo = UploadedFile::fake()->image('bukti-kembali.jpg', 120, 120);
+        $this->actingAs($this->borrower, 'web')
+            ->post(route('tiket.lapor-kembali-alat', $reportedTicket->id), [
+                'catatan_pengajuan_kembali' => 'Sudah ditaruh di meja piket GA',
+                'lampiran' => [$photo],
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $reportedTicket->refresh();
+        $this->assertNotNull($reportedTicket->pengembalian_diajukan_at);
+        $this->assertNull($reportedTicket->dikembalikan_at);
+        $this->assertSame('Sudah ditaruh di meja piket GA', $reportedTicket->catatan_pengajuan_kembali);
+
+        $reportLog = TicketLog::where('ticket_id', $reportedTicket->id)
+            ->where('aksi', 'pengajuan_kembali_alat')
+            ->first();
+        $this->assertNotNull($reportLog);
+        $this->assertNull($reportLog->admin_id);
+        $reportAttachment = TicketAttachment::where('ticket_log_id', $reportLog->id)->first();
+        $this->assertNotNull($reportAttachment);
+        Storage::disk('public')->assertExists($reportAttachment->file_path);
+
+        // Notification sent to gaOperator (not otherOperator) and NEVER via WhatsAppChannel
+        Notification::assertSentTo(
+            $this->gaOperator,
+            EquipmentReturnReportedNotification::class,
+            function (EquipmentReturnReportedNotification $notification) {
+                $channels = $notification->via($this->gaOperator);
+                $db = $notification->toDatabase($this->gaOperator);
+                $fcm = $notification->toFcm($this->gaOperator);
+
+                return ! in_array(WhatsAppChannel::class, $channels, true)
+                    && in_array('database', $channels, true)
+                    && ($db['type'] ?? null) === 'equipment_return_reported'
+                    && ($fcm['type'] ?? null) === 'equipment_return_reported';
+            }
+        );
+        Notification::assertNotSentTo($this->otherOperator, EquipmentReturnReportedNotification::class);
+
+        // Duplicate report is rejected
+        $this->actingAs($this->borrower, 'web')
+            ->post(route('tiket.lapor-kembali-alat', $reportedTicket->id), [
+                'catatan_pengajuan_kembali' => 'Kirim ulang',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('error');
+
+        // User detail now shows canReportReturn = false & loanAttachments.pengajuan_kembali = 1
+        $this->actingAs($this->borrower, 'web')
+            ->get(route('tiket.show', $reportedTicket->id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('canReportReturn', false)
+                ->where('loanSummary.status_peminjaman', 'Menunggu Konfirmasi Kembali')
+                ->where('loanSummary.is_return_reported', true)
+                ->has('loanAttachments.pengajuan_kembali', 1)
+                ->where('loanAttachments.pengajuan_kembali.0.id', $reportAttachment->id)
+            );
+
+        // Admin Tab Peminjaman Alat prioritizes Menunggu Konfirmasi Kembali above Belum Dikembalikan
+        $this->actingAs($this->gaOperator, 'admin')
+            ->get(route('admin.tiket.index', ['tab' => 'peminjaman_alat']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('loanStageCounts.aktif', 2)
+                ->where('loanStageCounts.menunggu_konfirmasi', 1)
+                ->has('tickets.data', 2)
+                ->where('tickets.data.0.id', $reportedTicket->id)
+                ->where('tickets.data.0.loan_summary.status_peminjaman', 'Menunggu Konfirmasi Kembali')
+                ->where('tickets.data.0.lampiran_pengajuan_kembali_count', 1)
+                ->where('tickets.data.1.id', $overdueTicket->id)
+            );
+
+        // Admin Tab filter loan_stage=menunggu_konfirmasi
+        $this->actingAs($this->gaOperator, 'admin')
+            ->get(route('admin.tiket.index', ['tab' => 'peminjaman_alat', 'loan_stage' => 'menunggu_konfirmasi']))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('loanStage', 'menunggu_konfirmasi')
+                ->has('tickets.data', 1)
+                ->where('tickets.data.0.id', $reportedTicket->id)
+            );
+
+        // Live Monitor shows Menunggu Konfirmasi Kembali at the top of alatPinjam
+        $this->actingAs($this->gaOperator, 'admin')
+            ->get(route('admin.monitor.index'))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('alatPinjam.0.ticket_id', $reportedTicket->id)
+                ->where('alatPinjam.0.status_pengembalian', 'Menunggu Konfirmasi Kembali')
+                ->where('alatPinjam.0.catatan_pengajuan_kembali', 'Sudah ditaruh di meja piket GA')
+                ->where('alatPinjam.0.lampiran_pengajuan_kembali_count', 1)
+                ->where('alatPinjam.0.can_kembalikan', true)
+            );
+
+        // Operator confirms return -> official status becomes Dikembalikan
+        $this->actingAs($this->gaOperator, 'admin')
+            ->patch(route('admin.tiket.kembalikan-alat', $reportedTicket->id), [
+                'kondisi_kembali' => 'baik',
+                'catatan_kembali' => 'Sudah dicek lengkap',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $reportedTicket->refresh();
+        $this->assertNotNull($reportedTicket->dikembalikan_at);
+
+        $this->actingAs($this->gaOperator, 'admin')
+            ->get(route('admin.tiket.show', $reportedTicket->id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('loanSummary.status_peminjaman', 'Dikembalikan')
+                ->where('loanSummary.is_return_reported', false)
+            );
+
+        Carbon::setTestNow();
+    }
+
+    public function test_non_handler_admin_requester_and_mobile_api_can_report_equipment_return(): void
+    {
+        Storage::fake('public');
+        Notification::fake();
+
+        $now = Carbon::create(2026, 11, 25, 13, 0, 0);
+        Carbon::setTestNow($now);
+
+        // 1. Non-GA admin requester creates a loan ticket handled by GA
+        $adminTicket = Ticket::create([
+            'user_id' => null,
+            'created_by_admin_id' => $this->otherOperator->id,
+            'unit_id' => $this->gaUnit->id,
+            'sub_unit_id' => $this->loanSubUnit->id,
+            'assigned_admin_id' => $this->gaOperator->id,
+            'status' => 'solve',
+            'priority' => 'Sedang',
+            'source' => 'web',
+            'form_data' => [
+                (string) $this->alatField->id => ['Infokus'],
+                (string) $this->tglMulaiField->id => $now->format('Y-m-d'),
+                (string) $this->tglSelesaiField->id => $now->copy()->addDay()->format('Y-m-d'),
+            ],
+        ]);
+
+        $this->actingAs($this->otherOperator, 'admin')
+            ->get(route('admin.tiket.show', $adminTicket->id))
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page
+                ->where('canManageEquipmentLoan', false)
+                ->where('canReportEquipmentReturn', true)
+            );
+
+        // Handler admin cannot report return on behalf of requester via requester endpoint
+        $this->actingAs($this->gaOperator, 'admin')
+            ->post(route('admin.tiket.lapor-kembali-alat', $adminTicket->id), [
+                'catatan_pengajuan_kembali' => 'Ditolak karena penangan',
+            ])
+            ->assertForbidden();
+
+        // Non-handler admin requester reports return via Web Admin
+        $this->actingAs($this->otherOperator, 'admin')
+            ->post(route('admin.tiket.lapor-kembali-alat', $adminTicket->id), [
+                'catatan_pengajuan_kembali' => 'Dikembalikan oleh tim IT',
+            ])
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $adminTicket->refresh();
+        $this->assertNotNull($adminTicket->pengembalian_diajukan_at);
+        $this->assertSame('Dikembalikan oleh tim IT', $adminTicket->catatan_pengajuan_kembali);
+
+        $adminReportLog = TicketLog::where('ticket_id', $adminTicket->id)
+            ->where('aksi', 'pengajuan_kembali_alat')
+            ->first();
+        $this->assertNotNull($adminReportLog);
+        $this->assertSame($this->otherOperator->id, $adminReportLog->admin_id);
+
+        // 2. Mobile API flow by borrower user
+        $overdueTicket = $this->createLoanTicket(
+            status: 'solve',
+            startDate: $now->copy()->subDays(4),
+            endDate: $now->copy()->subDay(),
+            tools: ['Kabel HDMI']
+        );
+        $overdueTicket->update([
+            'diserahkan_at' => $now->copy()->subDays(4),
+            'diserahkan_oleh_admin_id' => $this->gaOperator->id,
+            'penerima_alat' => $this->borrower->name,
+        ]);
+
+        $mobileTicket = $this->createLoanTicket(
+            status: 'solve',
+            startDate: $now->copy(),
+            endDate: $now->copy()->addDays(2),
+            tools: ['Infokus']
+        );
+
+        Sanctum::actingAs($this->borrower, ['*']);
+
+        $this->getJson("/api/tickets/{$mobileTicket->id}")
+            ->assertOk()
+            ->assertJsonPath('data.can_lapor_kembali', true)
+            ->assertJsonPath('data.pengembalian_diajukan_at', null)
+            ->assertJsonCount(0, 'data.lampiran_pengajuan_kembali');
+
+        $apiPhoto = UploadedFile::fake()->image('mobile-lapor.jpg', 100, 100);
+        $apiResponse = $this->post("/api/tickets/{$mobileTicket->id}/lapor-kembali-alat", [
+            'catatan_pengajuan_kembali' => 'Sudah taruh di resepsionis',
+            'lampiran' => [$apiPhoto],
+        ], ['Accept' => 'application/json'])->assertOk();
+
+        $apiResponse
+            ->assertJsonPath('success', true)
+            ->assertJsonPath('data.status_peminjaman', 'Menunggu Konfirmasi Kembali')
+            ->assertJsonPath('data.can_lapor_kembali', false)
+            ->assertJsonPath('data.catatan_pengajuan_kembali', 'Sudah taruh di resepsionis')
+            ->assertJsonCount(1, 'data.lampiran_pengajuan_kembali');
+        $this->assertNotNull($apiResponse->json('data.pengembalian_diajukan_at'));
+
+        // Mobile API admin tab=peminjaman_alat filters & prioritizes Menunggu Konfirmasi Kembali
+        Sanctum::actingAs($this->gaOperator, ['*']);
+
+        $this->getJson('/api/tickets?tab=peminjaman_alat&loan_stage=menunggu_konfirmasi')
+            ->assertOk()
+            ->assertJsonPath('meta.loan_stage', 'menunggu_konfirmasi')
+            ->assertJsonPath('meta.loan_stage_counts.menunggu_konfirmasi', 2)
+            ->assertJsonCount(2, 'data');
+
+        $activeApiList = $this->getJson('/api/tickets?tab=peminjaman_alat&loan_stage=aktif')
+            ->assertOk();
+        $this->assertSame('Menunggu Konfirmasi Kembali', $activeApiList->json('data.0.status_peminjaman'));
+        $this->assertSame('Menunggu Konfirmasi Kembali', $activeApiList->json('data.1.status_peminjaman'));
+        $this->assertSame('Belum Dikembalikan', $activeApiList->json('data.2.status_peminjaman'));
 
         Carbon::setTestNow();
     }

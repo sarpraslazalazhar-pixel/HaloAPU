@@ -38,10 +38,13 @@ import {
 } from '@/Components/ui/table';
 import { Textarea } from '@/Components/ui/textarea';
 
+export type AppReleaseTargetAudience = 'all' | 'users' | 'admins';
+
 export interface AppReleaseItem {
   id: number;
   platform: 'android' | 'ios';
   channel: 'production' | 'staging';
+  target_audience: AppReleaseTargetAudience;
   version_name: string;
   build_number: number;
   min_supported_build_number: number;
@@ -68,6 +71,7 @@ interface AppUpdateTabProps {
 interface ReleaseFormData {
   platform: 'android' | 'ios';
   channel: 'production' | 'staging';
+  target_audience: AppReleaseTargetAudience;
   version_name: string;
   build_number: string;
   min_supported_build_number: number;
@@ -81,7 +85,7 @@ interface ReleaseFormData {
 }
 
 interface NotifyFormData {
-  target: 'all' | 'users' | 'admins';
+  target: AppReleaseTargetAudience;
   notification_title: string;
   notification_body: string;
 }
@@ -117,6 +121,16 @@ function formatDateTime(iso: string | null): string {
   });
 }
 
+function normalizeTargetAudience(value?: string | null): AppReleaseTargetAudience {
+  const normalized = (value ?? '').trim().toLowerCase();
+
+  if (normalized === 'admins' || normalized === 'users') {
+    return normalized;
+  }
+
+  return 'all';
+}
+
 function formatTargetLabel(target: string | null): string {
   if (target === 'users') {
     return 'Hanya Pengaju';
@@ -129,19 +143,70 @@ function formatTargetLabel(target: string | null): string {
   return 'Semua Pengguna & Admin';
 }
 
-function findActiveRelease(
+interface AudienceBadgeInfo {
+  label: string;
+  className: string;
+}
+
+const AUDIENCE_BADGE_MAP: Record<AppReleaseTargetAudience, AudienceBadgeInfo> = {
+  admins: {
+    label: 'Khusus Admin',
+    className: 'border-indigo-300 bg-indigo-50 text-indigo-700',
+  },
+  users: {
+    label: 'Khusus Pengaju',
+    className: 'border-teal-300 bg-teal-50 text-teal-700',
+  },
+  all: {
+    label: 'Semua (Pengaju & Admin)',
+    className: 'border-slate-300 bg-slate-50 text-slate-700',
+  },
+};
+
+function formatAudienceBadge(audience: AppReleaseTargetAudience): AudienceBadgeInfo {
+  return AUDIENCE_BADGE_MAP[audience];
+}
+
+function resolveEffectiveActiveRelease(
   releases: AppReleaseItem[],
   platform: 'android' | 'ios',
-  channel: 'production' | 'staging'
+  channel: 'production' | 'staging',
+  audience: 'admins' | 'users'
 ): AppReleaseItem | undefined {
-  return releases.find(
-    (item) => item.platform === platform && item.channel === channel && item.is_active
-  );
+  const candidates = releases.filter((item) => {
+    if (item.platform !== platform || item.channel !== channel || !item.is_active) {
+      return false;
+    }
+
+    const itemAudience = normalizeTargetAudience(item.target_audience);
+
+    return itemAudience === 'all' || itemAudience === audience;
+  });
+
+  if (candidates.length === 0) {
+    return undefined;
+  }
+
+  return [...candidates].sort((a, b) => {
+    if (b.build_number !== a.build_number) {
+      return b.build_number - a.build_number;
+    }
+
+    const aSpecific = normalizeTargetAudience(a.target_audience) !== 'all' ? 1 : 0;
+    const bSpecific = normalizeTargetAudience(b.target_audience) !== 'all' ? 1 : 0;
+
+    if (bSpecific !== aSpecific) {
+      return bSpecific - aSpecific;
+    }
+
+    return b.id - a.id;
+  })[0];
 }
 
 const INITIAL_RELEASE_FORM: ReleaseFormData = {
   platform: 'android',
   channel: 'production',
+  target_audience: 'all',
   version_name: '',
   build_number: '',
   min_supported_build_number: 0,
@@ -172,9 +237,33 @@ export default function AppUpdateTab({
     notification_body: '',
   });
 
-  const activeProdAndroid = findActiveRelease(appReleases, 'android', 'production');
+  const activeProdAdmin = resolveEffectiveActiveRelease(
+    appReleases,
+    'android',
+    'production',
+    'admins'
+  );
 
-  const activeStagingAndroid = findActiveRelease(appReleases, 'android', 'staging');
+  const activeProdUser = resolveEffectiveActiveRelease(
+    appReleases,
+    'android',
+    'production',
+    'users'
+  );
+
+  const activeStagingAdmin = resolveEffectiveActiveRelease(
+    appReleases,
+    'android',
+    'staging',
+    'admins'
+  );
+
+  const activeStagingUser = resolveEffectiveActiveRelease(
+    appReleases,
+    'android',
+    'staging',
+    'users'
+  );
 
   const resetReleaseForm = () => {
     setEditingRelease(null);
@@ -192,6 +281,7 @@ export default function AppUpdateTab({
     releaseForm.setData({
       platform: release.platform,
       channel: release.channel,
+      target_audience: normalizeTargetAudience(release.target_audience),
       version_name: release.version_name,
       build_number: String(release.build_number),
       min_supported_build_number: 0,
@@ -280,7 +370,7 @@ export default function AppUpdateTab({
     notifyForm.clearErrors();
 
     notifyForm.setData({
-      target: 'all',
+      target: normalizeTargetAudience(release.target_audience),
       notification_title:
         release.title?.trim() || `Update Halo APU v${release.version_name} Tersedia`,
       notification_body: fallbackBody.slice(0, 280),
@@ -309,6 +399,13 @@ export default function AppUpdateTab({
       ? formatFileSize(parsedSizeBytes)
       : null;
 
+  const lockedAudience =
+    notifyTargetRelease !== null
+      ? normalizeTargetAudience(notifyTargetRelease.target_audience)
+      : 'all';
+
+  const isTargetLocked = lockedAudience !== 'all';
+
   return (
     <div className="space-y-6">
       <Alert className="border-amber-300 bg-amber-50 text-amber-950">
@@ -331,6 +428,11 @@ export default function AppUpdateTab({
             2. File APK harus ditandatangani dengan <strong>keystore rilis yang sama</strong> dan
             menyertakan checksum <strong>SHA-256 (64 hex)</strong> dari GitHub Releases.
           </p>
+          <p>
+            3. Setiap rilis dapat ditujukan ke <strong>Semua (Pengaju &amp; Admin)</strong>,{' '}
+            <strong>Khusus Admin / Operator</strong>, atau <strong>Khusus Pengaju</strong>.
+            Mengaktifkan rilis khusus role tetap mempertahankan rilis aktif untuk audiens lainnya.
+          </p>
         </AlertDescription>
       </Alert>
 
@@ -338,12 +440,14 @@ export default function AppUpdateTab({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ActiveChannelSummaryCard
           label="Production (Android)"
-          release={activeProdAndroid}
+          adminRelease={activeProdAdmin}
+          userRelease={activeProdUser}
           onNotify={openNotifyModal}
         />
         <ActiveChannelSummaryCard
           label="Staging (Android)"
-          release={activeStagingAndroid}
+          adminRelease={activeStagingAdmin}
+          userRelease={activeStagingUser}
           onNotify={openNotifyModal}
         />
       </div>
@@ -444,7 +548,30 @@ export default function AppUpdateTab({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="release_target_audience">Target Rilis (Audiens)</Label>
+                <select
+                  id="release_target_audience"
+                  value={releaseForm.data.target_audience}
+                  onChange={(e) =>
+                    releaseForm.setData('target_audience', normalizeTargetAudience(e.target.value))
+                  }
+                  className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="all">Semua (Pengaju &amp; Admin)</option>
+                  <option value="admins">Khusus Admin / Operator</option>
+                  <option value="users">Khusus Pengaju (User)</option>
+                </select>
+                <p className="text-[11px] text-muted-foreground">
+                  Pilih Khusus Admin jika pembaruan hanya untuk fitur operator agar Pengaju tidak
+                  mendapat popup update. Rilis aktif Pengaju sebelumnya tetap dipertahankan.
+                </p>
+                {releaseForm.errors.target_audience && (
+                  <p className="text-xs text-destructive">{releaseForm.errors.target_audience}</p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label htmlFor="release_title">Judul Pemberitahuan Update</Label>
                 <Input
@@ -587,6 +714,8 @@ export default function AppUpdateTab({
               <TableBody>
                 {appReleases.map((release) => {
                   const isBusy = busyActionId === release.id;
+                  const audience = normalizeTargetAudience(release.target_audience);
+                  const audienceBadge = formatAudienceBadge(audience);
 
                   return (
                     <TableRow key={release.id}>
@@ -615,6 +744,9 @@ export default function AppUpdateTab({
                             className="capitalize w-fit"
                           >
                             {release.channel}
+                          </Badge>
+                          <Badge variant="outline" className={`w-fit ${audienceBadge.className}`}>
+                            {audienceBadge.label}
                           </Badge>
                         </div>
                       </TableCell>
@@ -742,21 +874,24 @@ export default function AppUpdateTab({
               <Label htmlFor="notify_target">Target Penerima</Label>
               <select
                 id="notify_target"
+                disabled={isTargetLocked}
                 value={notifyForm.data.target}
                 onChange={(e) => {
-                  const val = e.target.value;
-
-                  notifyForm.setData(
-                    'target',
-                    val === 'users' || val === 'admins' ? val : 'all'
-                  );
+                  notifyForm.setData('target', normalizeTargetAudience(e.target.value));
                 }}
-                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 <option value="all">Semua Pengguna &amp; Admin</option>
                 <option value="users">Hanya Pengaju (User)</option>
                 <option value="admins">Hanya Admin / Operator</option>
               </select>
+              {isTargetLocked && (
+                <p className="text-[11px] text-muted-foreground">
+                  {lockedAudience === 'admins'
+                    ? 'Terkunci otomatis: Rilis Khusus Admin hanya mengirim notifikasi ke Admin / Operator.'
+                    : 'Terkunci otomatis: Rilis Khusus Pengaju hanya mengirim notifikasi ke Pengaju (User).'}
+                </p>
+              )}
               {notifyForm.errors.target && (
                 <p className="text-xs text-destructive">{notifyForm.errors.target}</p>
               )}
@@ -828,15 +963,84 @@ export default function AppUpdateTab({
 
 interface ActiveChannelSummaryCardProps {
   label: string;
+  adminRelease?: AppReleaseItem;
+  userRelease?: AppReleaseItem;
+  onNotify: (release: AppReleaseItem) => void;
+}
+
+interface AudienceTrackSummaryRowProps {
+  audienceLabel: string;
+  emptyLabel: string;
   release?: AppReleaseItem;
   onNotify: (release: AppReleaseItem) => void;
 }
 
-function ActiveChannelSummaryCard({
-  label,
+function AudienceTrackSummaryRow({
+  audienceLabel,
+  emptyLabel,
   release,
   onNotify,
+}: AudienceTrackSummaryRowProps) {
+  if (!release) {
+    return (
+      <div className="rounded-md border border-dashed bg-muted/20 p-2.5 space-y-1">
+        <div className="font-semibold text-foreground/80">{audienceLabel}</div>
+        <p className="text-muted-foreground">{emptyLabel}</p>
+      </div>
+    );
+  }
+
+  const badge = formatAudienceBadge(normalizeTargetAudience(release.target_audience));
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-2.5 space-y-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <span className="font-semibold text-foreground">{audienceLabel}</span>
+        <Badge variant="outline" className={badge.className}>
+          {badge.label}
+        </Badge>
+      </div>
+      <div className="text-sm font-bold">
+        v{release.version_name}{' '}
+        <span className="font-mono text-xs font-medium text-primary">
+          (Build #{release.build_number})
+        </span>
+      </div>
+      <div className="text-muted-foreground">
+        Dipublikasikan: {formatDateTime(release.published_at)} • Ukuran:{' '}
+        {formatFileSize(release.file_size_bytes)}
+      </div>
+      <div className="text-muted-foreground">
+        Notifikasi terakhir:{' '}
+        {release.last_notified_at
+          ? `${formatDateTime(release.last_notified_at)} (${release.last_notified_count} target • ${formatTargetLabel(release.last_notified_target)})`
+          : 'Belum pernah dikirim'}
+      </div>
+      <div className="pt-0.5">
+        <Button type="button" size="sm" variant="outline" onClick={() => onNotify(release)}>
+          <Bell className="h-3.5 w-3.5 mr-1" />
+          Kirim Notif
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function ActiveChannelSummaryCard({
+  label,
+  adminRelease,
+  userRelease,
+  onNotify,
 }: ActiveChannelSummaryCardProps) {
+  const hasAnyActive = Boolean(adminRelease || userRelease);
+
+  const unifiedRelease =
+    adminRelease && userRelease && adminRelease.id === userRelease.id ? adminRelease : undefined;
+
+  const unifiedBadge = unifiedRelease
+    ? formatAudienceBadge(normalizeTargetAudience(unifiedRelease.target_audience))
+    : null;
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -845,10 +1049,10 @@ function ActiveChannelSummaryCard({
             <Smartphone className="h-4 w-4 text-primary" />
             Rilis Aktif — {label}
           </span>
-          {release ? (
+          {hasAnyActive ? (
             <Badge className="bg-emerald-600 text-white gap-1">
               <Power className="h-3 w-3" />
-              Aktif
+              {adminRelease && userRelease ? 'Aktif' : 'Aktif Sebagian'}
             </Badge>
           ) : (
             <Badge variant="outline">Belum Ada</Badge>
@@ -856,25 +1060,35 @@ function ActiveChannelSummaryCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2 text-xs">
-        {release ? (
+        {!hasAnyActive ? (
+          <p className="text-muted-foreground">
+            Belum ada rilis aktif untuk {label}. Aplikasi mobile tidak akan menampilkan popup
+            pembaruan.
+          </p>
+        ) : unifiedRelease && unifiedBadge ? (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-base font-bold">
-                v{release.version_name}{' '}
+                v{unifiedRelease.version_name}{' '}
                 <span className="font-mono text-xs font-medium text-primary">
-                  (Build #{release.build_number})
+                  (Build #{unifiedRelease.build_number})
                 </span>
               </span>
-              <Badge variant="secondary">Pemberitahuan Opsional</Badge>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge variant="outline" className={unifiedBadge.className}>
+                  {unifiedBadge.label}
+                </Badge>
+                <Badge variant="secondary">Pemberitahuan Opsional</Badge>
+              </div>
             </div>
             <div className="text-muted-foreground">
-              Dipublikasikan: {formatDateTime(release.published_at)} • Ukuran:{' '}
-              {formatFileSize(release.file_size_bytes)}
+              Dipublikasikan: {formatDateTime(unifiedRelease.published_at)} • Ukuran:{' '}
+              {formatFileSize(unifiedRelease.file_size_bytes)}
             </div>
             <div className="text-muted-foreground">
               Notifikasi terakhir:{' '}
-              {release.last_notified_at
-                ? `${formatDateTime(release.last_notified_at)} (${release.last_notified_count} target • ${formatTargetLabel(release.last_notified_target)})`
+              {unifiedRelease.last_notified_at
+                ? `${formatDateTime(unifiedRelease.last_notified_at)} (${unifiedRelease.last_notified_count} target • ${formatTargetLabel(unifiedRelease.last_notified_target)})`
                 : 'Belum pernah dikirim'}
             </div>
             <div className="pt-1">
@@ -882,7 +1096,7 @@ function ActiveChannelSummaryCard({
                 type="button"
                 size="sm"
                 variant="outline"
-                onClick={() => onNotify(release)}
+                onClick={() => onNotify(unifiedRelease)}
               >
                 <Bell className="h-3.5 w-3.5 mr-1" />
                 Kirim Notif Update
@@ -890,10 +1104,20 @@ function ActiveChannelSummaryCard({
             </div>
           </>
         ) : (
-          <p className="text-muted-foreground">
-            Belum ada rilis aktif untuk {label}. Aplikasi mobile tidak akan menampilkan popup
-            pembaruan.
-          </p>
+          <div className="grid grid-cols-1 gap-2">
+            <AudienceTrackSummaryRow
+              audienceLabel="Admin / Operator"
+              emptyLabel="Tidak ada rilis aktif untuk Admin / Operator."
+              release={adminRelease}
+              onNotify={onNotify}
+            />
+            <AudienceTrackSummaryRow
+              audienceLabel="Pengaju (User)"
+              emptyLabel="Tidak ada rilis aktif untuk Pengaju (User)."
+              release={userRelease}
+              onNotify={onNotify}
+            />
+          </div>
         )}
       </CardContent>
     </Card>

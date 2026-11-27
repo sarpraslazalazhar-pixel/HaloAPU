@@ -11,6 +11,7 @@ import {
   Check,
   CheckCheck,
   Download,
+  FileSpreadsheet,
   FileText,
   Edit2,
   Trash2,
@@ -974,7 +975,21 @@ export function ChatWindow({
                     <div className="mt-2 space-y-1.5">
                       {msg.attachments.map((att) => {
                         const isImg = att.file_type?.startsWith('image/') || /\.(jpg|jpeg|png|gif|webp)$/i.test(att.file_name);
+
                         const isPdf = att.file_type === 'application/pdf' || /\.pdf$/i.test(att.file_name);
+
+                        const isDocx = att.file_type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                          || /\.docx$/i.test(att.file_name);
+
+                        const isLegacyDoc = att.file_type === 'application/msword' || /\.doc$/i.test(att.file_name);
+
+                        const isSpreadsheet = att.file_type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                          || att.file_type === 'application/vnd.ms-excel'
+                          || att.file_type === 'text/csv'
+                          || att.file_type === 'application/csv'
+                          || /\.(xlsx|xls|csv)$/i.test(att.file_name);
+
+                        const isPreviewable = isPdf || isDocx || isLegacyDoc || isSpreadsheet;
 
                         if (isImg) {
                           return (
@@ -989,6 +1004,16 @@ export function ChatWindow({
                           );
                         }
 
+                        const iconEl = isSpreadsheet ? (
+                          <FileSpreadsheet className={`h-4 w-4 shrink-0 ${isSelf ? 'text-emerald-200' : 'text-emerald-600'}`} />
+                        ) : isDocx || isLegacyDoc ? (
+                          <FileText className={`h-4 w-4 shrink-0 ${isSelf ? 'text-blue-200' : 'text-blue-600'}`} />
+                        ) : isPdf ? (
+                          <FileText className={`h-4 w-4 shrink-0 ${isSelf ? 'text-rose-200' : 'text-rose-600'}`} />
+                        ) : (
+                          <FileText className="h-4 w-4 shrink-0 text-sky-400" />
+                        );
+
                         const row = (
                           <span
                             className={`flex items-center gap-2.5 p-2 rounded-xl text-xs transition-colors border w-full text-left ${
@@ -997,36 +1022,65 @@ export function ChatWindow({
                                 : 'bg-zinc-50 border-zinc-200 text-zinc-800 hover:bg-zinc-100'
                             }`}
                           >
-                            <FileText className="h-4 w-4 shrink-0 text-sky-400" />
+                            {iconEl}
                             <span className="min-w-0 flex-1">
                               <span className="block font-medium truncate text-xs">{att.file_name}</span>
                               <span className="block text-[10px] opacity-75">
                                 {(att.file_size / 1024).toFixed(0)} KB
                               </span>
                             </span>
-                            {isPdf ? <Eye className="h-3.5 w-3.5 shrink-0 opacity-80" /> : <Download className="h-3.5 w-3.5 shrink-0 opacity-80" />}
+                            {isPreviewable ? <Eye className="h-3.5 w-3.5 shrink-0 opacity-80" /> : <Download className="h-3.5 w-3.5 shrink-0 opacity-80" />}
                           </span>
                         );
 
-                        if (isPdf) {
+                        const downloadHref = isAdmin
+                          ? route('admin.chat.download', { attachment: att.id })
+                          : route('chat.download', { attachment: att.id });
+
+                        if (isPreviewable) {
+                          const previewTitle = isPdf
+                            ? 'Lihat PDF'
+                            : isDocx || isLegacyDoc
+                              ? 'Preview Dokumen Word'
+                              : 'Preview Spreadsheet';
+
                           return (
-                            <AttachmentViewer
-                              key={att.id}
-                              attachment={{ id: att.id, original_name: att.file_name, file_path: att.file_path }}
-                              viewRoute={isAdmin ? 'admin.chat.view' : 'chat.view'}
-                              downloadRoute={isAdmin ? 'admin.chat.download' : 'chat.download'}
-                            >
-                              <button type="button" className="w-full" title="Lihat PDF">
-                                {row}
-                              </button>
-                            </AttachmentViewer>
+                            <div key={att.id} className="flex items-center gap-1.5">
+                              <AttachmentViewer
+                                attachment={{
+                                  id: att.id,
+                                  original_name: att.file_name,
+                                  file_path: att.file_path,
+                                  mime_type: att.file_type,
+                                }}
+                                viewRoute={isAdmin ? 'admin.chat.view' : 'chat.view'}
+                                downloadRoute={isAdmin ? 'admin.chat.download' : 'chat.download'}
+                                previewRoute={isAdmin ? 'admin.chat.preview' : 'chat.preview'}
+                              >
+                                <button type="button" className="flex-1 min-w-0" title={previewTitle}>
+                                  {row}
+                                </button>
+                              </AttachmentViewer>
+                              <a
+                                href={downloadHref}
+                                download={att.file_name}
+                                title={`Unduh ${att.file_name}`}
+                                className={`p-2 rounded-xl border transition-colors shrink-0 ${
+                                  isSelf
+                                    ? 'bg-sky-700/50 border-white/20 text-white hover:bg-sky-700'
+                                    : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:bg-zinc-100'
+                                }`}
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
                           );
                         }
 
                         return (
                           <a
                             key={att.id}
-                            href={isAdmin ? route('admin.chat.download', { attachment: att.id }) : route('chat.download', { attachment: att.id })}
+                            href={downloadHref}
                             download
                           >
                             {row}
@@ -1226,7 +1280,7 @@ export function ChatWindow({
             ref={fileInputRef}
             onChange={handleFileChange}
             className="hidden"
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip"
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.zip"
           />
 
           <div className="flex items-center gap-1 shrink-0">

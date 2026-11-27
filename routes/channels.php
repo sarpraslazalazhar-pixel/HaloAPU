@@ -24,20 +24,39 @@ Broadcast::channel('chat.conversation.{conversationId}', function ($user, $conve
         return true;
     }
 
-    if ($user instanceof \App\Models\User) {
-        if ($conversation->type === 'ticket') {
-            return $conversation->ticket?->isOwnedByUser($user) ?? false;
+    if ($conversation->type === 'ticket') {
+        $ticket = $conversation->ticket;
+        if (! $ticket) {
+            return false;
         }
 
+        if ($user instanceof \App\Models\User && $ticket->isOwnedByUser($user)) {
+            return true;
+        }
+
+        if ($user instanceof \App\Models\Admin && $ticket->isAccessibleBy($user)) {
+            return true;
+        }
+
+        // Dual-guard browser session fallback (`web` + `admin` logged in simultaneously).
+        $admin = auth('admin')->user();
+        if ($admin instanceof \App\Models\Admin && $ticket->isAccessibleBy($admin)) {
+            return true;
+        }
+
+        $webUser = auth('web')->user();
+        if ($webUser instanceof \App\Models\User && $ticket->isOwnedByUser($webUser)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    if ($user instanceof \App\Models\User) {
         return (int) $conversation->user_id === (int) $user->id;
     }
 
     if ($user instanceof \App\Models\Admin) {
-        // Per-ticket rooms are only for admins who may act on that ticket.
-        if ($conversation->type === 'ticket') {
-            return $conversation->ticket?->isAccessibleBy($user) ?? false;
-        }
-
         return true;
     }
 
@@ -52,12 +71,23 @@ Broadcast::channel('ticket.{ticketId}', function ($user, $ticketId) {
         return false;
     }
 
-    if ($user instanceof \App\Models\User) {
-        return (int) $ticket->user_id === (int) $user->id;
+    if ($user instanceof \App\Models\User && $ticket->isOwnedByUser($user)) {
+        return true;
     }
 
-    if ($user instanceof \App\Models\Admin) {
-        return $ticket->isAccessibleBy($user);
+    if ($user instanceof \App\Models\Admin && $ticket->isAccessibleBy($user)) {
+        return true;
+    }
+
+    // Dual-guard browser session fallback (`web` + `admin` logged in simultaneously).
+    $admin = auth('admin')->user();
+    if ($admin instanceof \App\Models\Admin && $ticket->isAccessibleBy($admin)) {
+        return true;
+    }
+
+    $webUser = auth('web')->user();
+    if ($webUser instanceof \App\Models\User && $ticket->isOwnedByUser($webUser)) {
+        return true;
     }
 
     return false;
